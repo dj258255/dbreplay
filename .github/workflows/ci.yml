@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Test
+        run: ./gradlew test
+      # 초록불이 "돌렸다"는 뜻이 되게 한다. 테스트가 하나도 안 돌아도 Gradle은 성공으로 끝난다
+      - name: 테스트가 실제로 돌았는지 확인
+        run: |
+          count=$(grep -ho 'tests="[0-9]*"' build/test-results/test/*.xml | grep -o '[0-9]*' | paste -sd+ - | bc)
+          echo "실행된 테스트: $count"
+          test "$count" -ge 70
