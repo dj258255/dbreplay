@@ -1,0 +1,44 @@
+# 실험 01: 서버 로그만으로 재생에 필요한 정보(세션, 트랜잭션 경계, 시각)가 나오는지 확인한다.
+# 로그 파일은 컨테이너 안에 둔다. 호스트 마운트는 macOS 파일 공유 비용이 섞여 부하 측정을 흐린다.
+name: dbreplay-exp01
+
+services:
+  mysql84:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: replay
+      MYSQL_DATABASE: shop
+    command:
+      - --slow-query-log=ON
+      - --long-query-time=0
+      - --log-output=FILE
+      - --slow-query-log-file=/var/lib/mysql/slow.log
+      - --log-slow-extra=ON
+      - --log-slow-admin-statements=ON
+      # 정답지: 서버가 본 트랜잭션 소속을 performance_schema에서 꺼내 로그 복원 결과와 대조한다.
+      - --performance-schema-consumer-events-statements-history-long=ON
+      - --performance-schema-consumer-events-transactions-history-long=ON
+    ports:
+      - "127.0.0.1:33084:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-uroot", "-preplay", "--silent"]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+
+  pg16:
+    image: postgres:16
+    environment:
+      POSTGRES_PASSWORD: replay
+      POSTGRES_DB: shop
+    command:
+      - postgres
+      - -c
+      - log_min_duration_statement=0
+      - -c
+      - log_line_prefix=%m [%p] sid=%c vxid=%v xid=%x
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 2s
+      timeout: 2s
+      retries: 60

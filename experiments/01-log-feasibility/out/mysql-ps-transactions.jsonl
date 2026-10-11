@@ -1,0 +1,17 @@
+{"nest": 4, "event": 5, "state": "COMMITTED", "thread": 81, "trx_id": null, "end_event": 8, "nest_type": "STATEMENT", "autocommit": "NO"}
+{"nest": 11, "event": 12, "state": "COMMITTED", "thread": 81, "trx_id": 562948166651096, "end_event": 12, "nest_type": "STATEMENT", "autocommit": "YES"}
+{"nest": 15, "event": 16, "state": "ROLLED BACK", "thread": 81, "trx_id": null, "end_event": 18, "nest_type": "STATEMENT", "autocommit": "NO"}
+{"nest": 3, "event": 4, "state": "COMMITTED", "thread": 82, "trx_id": null, "end_event": 6, "nest_type": "STATEMENT", "autocommit": "NO"}
+{"nest": 6, "event": 7, "state": "COMMITTED", "thread": 82, "trx_id": 562948166653520, "end_event": 7, "nest_type": "STATEMENT", "autocommit": "NO"}
+{"nest": 8, "event": 9, "state": "COMMITTED", "thread": 82, "trx_id": 562948166653520, "end_event": 9, "nest_type": "STATEMENT", "autocommit": "YES"}
+{"nest": 11, "event": 12, "state": "COMMITTED", "thread": 82, "trx_id": 562948166653520, "end_event": 12, "nest_type": "STATEMENT", "autocommit": "NO"}
+{"nest": 4, "event": 5, "state": "COMMITTED", "thread": 83, "trx_id": 562948166652712, "end_event": 7, "nest_type": "STATEMENT", "autocommit": "NO"}
+{"nest": 8, "event": 9, "state": "ROLLED BACK", "thread": 83, "trx_id": 562948166652712, "end_event": 11, "nest_type": "STATEMENT", "autocommit": "NO"}
+{"nest": 13, "event": 14, "state": "COMMITTED", "thread": 83, "trx_id": 562948166652712, "end_event": 14, "nest_type": "STATEMENT", "autocommit": "YES"}
+{"nest": 3, "event": 4, "state": "COMMITTED", "thread": 84, "trx_id": null, "end_event": 8, "nest_type": "STATEMENT", "autocommit": "NO"}
+{"nest": 9, "event": 10, "state": "COMMITTED", "thread": 84, "trx_id": 562948166651904, "end_event": 10, "nest_type": "STATEMENT", "autocommit": "YES"}
+{"nest": 4, "event": 5, "state": "ROLLED BACK", "thread": 85, "trx_id": null, "end_event": 8, "nest_type": "STATEMENT", "autocommit": "NO"}
+{"nest": 3, "event": 4, "state": "COMMITTED", "thread": 86, "trx_id": 562948166651096, "end_event": 4, "nest_type": "STATEMENT", "autocommit": "YES"}
+{"nest": 5, "event": 6, "state": "COMMITTED", "thread": 86, "trx_id": 562948166651096, "end_event": 6, "nest_type": "STATEMENT", "autocommit": "YES"}
+{"nest": 7, "event": 8, "state": "COMMITTED", "thread": 86, "trx_id": 562948166651096, "end_event": 8, "nest_type": "STATEMENT", "autocommit": "YES"}
+{"nest": 9, "event": 10, "state": "COMMITTED", "thread": 86, "trx_id": 562948166651096, "end_event": 10, "nest_type": "STATEMENT", "autocommit": "YES"}

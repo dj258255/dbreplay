@@ -1,0 +1,18 @@
+2026-10-11 01:31:09.168 UTC [940] sid=6acae6dd.3ac vxid=3/0 xid=0LOG:  duration: 7.059 ms  statement: DROP TABLE IF EXISTS accounts; CREATE TABLE accounts (id INT PRIMARY KEY, balance INT NOT NULL);
+2026-10-11 01:31:09.308 UTC [953] sid=6acae6dd.3b9 vxid=3/170 xid=0LOG:  duration: 0.045 ms  statement: BEGIN /* s1.1 */;
+2026-10-11 01:31:09.310 UTC [953] sid=6acae6dd.3b9 vxid=3/170 xid=744LOG:  duration: 1.694 ms  statement: UPDATE /* s1.2 */ accounts SET balance = balance - 10 WHERE id = 1;
+2026-10-11 01:31:09.511 UTC [954] sid=6acae6dd.3ba vxid=4/0 xid=0LOG:  duration: 202.487 ms  statement: SELECT /* s2.1 */ pg_sleep(0.2);
+2026-10-11 01:31:09.511 UTC [954] sid=6acae6dd.3ba vxid=4/3 xid=0LOG:  duration: 0.020 ms  statement: BEGIN /* s2.2 */;
+2026-10-11 01:31:09.913 UTC [953] sid=6acae6dd.3b9 vxid=3/170 xid=744LOG:  duration: 602.048 ms  statement: SELECT /* s1.3 */ pg_sleep(0.6);
+2026-10-11 01:31:09.913 UTC [953] sid=6acae6dd.3b9 vxid=3/170 xid=744LOG:  duration: 0.158 ms  statement: UPDATE /* s1.4 */ accounts SET balance = balance + 10 WHERE id = 2;
+2026-10-11 01:31:09.914 UTC [953] sid=6acae6dd.3b9 vxid=3/0 xid=0LOG:  duration: 1.401 ms  statement: COMMIT /* s1.5 */;
+2026-10-11 01:31:09.914 UTC [954] sid=6acae6dd.3ba vxid=4/3 xid=745LOG:  duration: 403.354 ms  statement: UPDATE /* s2.3 */ accounts SET balance = balance - 5 WHERE id = 1;
+2026-10-11 01:31:09.915 UTC [953] sid=6acae6dd.3b9 vxid=3/0 xid=0LOG:  duration: 0.092 ms  statement: SELECT /* s1.6 */ balance FROM accounts WHERE id = 1;
+2026-10-11 01:31:09.915 UTC [954] sid=6acae6dd.3ba vxid=4/3 xid=745ERROR:  relation "no_such_table" does not exist at character 26
+2026-10-11 01:31:09.915 UTC [954] sid=6acae6dd.3ba vxid=4/3 xid=745STATEMENT:  SELECT /* s2.4 */ * FROM no_such_table;
+2026-10-11 01:31:09.915 UTC [954] sid=6acae6dd.3ba vxid=4/0 xid=745ERROR:  current transaction is aborted, commands ignored until end of transaction block
+2026-10-11 01:31:09.915 UTC [954] sid=6acae6dd.3ba vxid=4/0 xid=745STATEMENT:  UPDATE /* s2.5 */ accounts SET balance = balance - 5 WHERE id = 3;
+2026-10-11 01:31:09.915 UTC [954] sid=6acae6dd.3ba vxid=4/0 xid=0LOG:  duration: 0.027 ms  statement: ROLLBACK /* s2.6 */;
+2026-10-11 01:31:09.915 UTC [954] sid=6acae6dd.3ba vxid=4/0 xid=0LOG:  duration: 0.110 ms  statement: PREPARE st(int, int) AS UPDATE /* s2.7p */ accounts SET balance = balance + $1 WHERE id = $2;
+2026-10-11 01:31:09.917 UTC [954] sid=6acae6dd.3ba vxid=4/0 xid=0LOG:  duration: 1.740 ms  statement: EXECUTE /* s2.8 */ st(2, 3);
+2026-10-11 01:31:09.917 UTC [954] sid=6acae6dd.3ba vxid=4/0 xid=0DETAIL:  prepare: PREPARE st(int, int) AS UPDATE /* s2.7p */ accounts SET balance = balance + $1 WHERE id = $2;

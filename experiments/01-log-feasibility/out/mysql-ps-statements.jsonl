@@ -1,0 +1,67 @@
+{"sql": "TRUNCATE performance_schema.events_statements_history_long", "name": "statement/sql/truncate", "nest": null, "event": 4, "start": 60280479667000, "thread": 79, "nest_type": null}
+{"sql": "TRUNCATE performance_schema.events_transactions_history_long", "name": "statement/sql/truncate", "nest": null, "event": 5, "start": 60283787125000, "thread": 79, "nest_type": null}
+{"sql": null, "name": "statement/com/Quit", "nest": null, "event": 6, "start": 60285102750000, "thread": 79, "nest_type": null}
+{"sql": null, "name": "statement/com/Ping", "nest": null, "event": 1, "start": 60365812875000, "thread": 80, "nest_type": null}
+{"sql": null, "name": "statement/com/Quit", "nest": null, "event": 2, "start": 60365932667000, "thread": 80, "nest_type": null}
+{"sql": "select @@version_comment limit 1", "name": "statement/sql/select", "nest": null, "event": 1, "start": 60498672126000, "thread": 81, "nest_type": null}
+{"sql": "select $$", "name": "statement/sql/error", "nest": null, "event": 2, "start": 60498987876000, "thread": 81, "nest_type": null}
+{"sql": "CALL /* s6.1 */ transfer(5, 3, 7)", "name": "statement/sql/call_procedure", "nest": null, "event": 3, "start": 60499278709000, "thread": 81, "nest_type": null}
+{"sql": "START TRANSACTION", "name": "statement/sp/stmt", "nest": 3, "event": 4, "start": 60499786376000, "thread": 81, "nest_type": "STATEMENT"}
+{"sql": "UPDATE /* proc.1 */ accounts SET balance = balance - amt WHERE id = a", "name": "statement/sp/stmt", "nest": 5, "event": 6, "start": 60499804167000, "thread": 81, "nest_type": "TRANSACTION"}
+{"sql": "UPDATE /* proc.2 */ accounts SET balance = balance + amt WHERE id = b", "name": "statement/sp/stmt", "nest": 5, "event": 7, "start": 60500023584000, "thread": 81, "nest_type": "TRANSACTION"}
+{"sql": "COMMIT", "name": "statement/sp/stmt", "nest": 5, "event": 8, "start": 60500075917000, "thread": 81, "nest_type": "TRANSACTION"}
+{"sql": "PREPARE st FROM ...", "name": "statement/sql/prepare_sql", "nest": null, "event": 9, "start": 60504126626000, "thread": 81, "nest_type": null}
+{"sql": "SET /* s6.3 */ @amt = 2, @id = 5", "name": "statement/sql/set_option", "nest": null, "event": 10, "start": 60505193167000, "thread": 81, "nest_type": null}
+{"sql": "EXECUTE /* s6.4 */ st USING @amt, @id", "name": "statement/sql/execute_sql", "nest": null, "event": 11, "start": 60505363001000, "thread": 81, "nest_type": null}
+{"sql": "DEALLOCATE /* s6.5 */ PREPARE st", "name": "statement/sql/dealloc_sql", "nest": null, "event": 13, "start": 60507296751000, "thread": 81, "nest_type": null}
+{"sql": "SELECT /* s6.6 */ * FROM no_such_table", "name": "statement/sql/select", "nest": null, "event": 14, "start": 60507361751000, "thread": 81, "nest_type": null}
+{"sql": "BEGIN /* s6.7 */", "name": "statement/sql/begin", "nest": null, "event": 15, "start": 60508006209000, "thread": 81, "nest_type": null}
+{"sql": "UPDATE /* s6.8 */ accounts SET balance = balance + 1 WHERE id = 5", "name": "statement/sql/update", "nest": 16, "event": 17, "start": 60508175376000, "thread": 81, "nest_type": "TRANSACTION"}
+{"sql": null, "name": "statement/com/Quit", "nest": 16, "event": 18, "start": 60508740126000, "thread": 81, "nest_type": "TRANSACTION"}
+{"sql": "select @@version_comment limit 1", "name": "statement/sql/select", "nest": null, "event": 1, "start": 60502073376000, "thread": 82, "nest_type": null}
+{"sql": "select $$", "name": "statement/sql/error", "nest": null, "event": 2, "start": 60502732501000, "thread": 82, "nest_type": null}
+{"sql": "BEGIN /* s5.1 */", "name": "statement/sql/begin", "nest": null, "event": 3, "start": 60502868126000, "thread": 82, "nest_type": null}
+{"sql": "INSERT /* s5.2 */ INTO audit(note) VALUES ('c')", "name": "statement/sql/insert", "nest": 4, "event": 5, "start": 60502958334000, "thread": 82, "nest_type": "TRANSACTION"}
+{"sql": "CREATE /* s5.3 */ TABLE tmp_x (id INT PRIMARY KEY)", "name": "statement/sql/create_table", "nest": 4, "event": 6, "start": 60503759251000, "thread": 82, "nest_type": "TRANSACTION"}
+{"sql": "INSERT /* s5.4 */ INTO audit(note) VALUES ('d')", "name": "statement/sql/insert", "nest": null, "event": 8, "start": 60527034542000, "thread": 82, "nest_type": null}
+{"sql": "ROLLBACK /* s5.5 */", "name": "statement/sql/rollback", "nest": null, "event": 10, "start": 60529905167000, "thread": 82, "nest_type": null}
+{"sql": "DROP /* s5.6 */ TABLE tmp_x", "name": "statement/sql/drop_table", "nest": null, "event": 11, "start": 60530138417000, "thread": 82, "nest_type": null}
+{"sql": null, "name": "statement/com/Quit", "nest": null, "event": 13, "start": 60535200834000, "thread": 82, "nest_type": null}
+{"sql": "select @@version_comment limit 1", "name": "statement/sql/select", "nest": null, "event": 1, "start": 60501164376000, "thread": 83, "nest_type": null}
+{"sql": "select $$", "name": "statement/sql/error", "nest": null, "event": 2, "start": 60501479751000, "thread": 83, "nest_type": null}
+{"sql": "SET /* s4.1 */ autocommit = 0", "name": "statement/sql/set_option", "nest": null, "event": 3, "start": 60501693959000, "thread": 83, "nest_type": null}
+{"sql": "UPDATE /* s4.2 */ accounts SET balance = balance + 1 WHERE id = 4", "name": "statement/sql/update", "nest": null, "event": 4, "start": 60502232959000, "thread": 83, "nest_type": null}
+{"sql": "INSERT /* s4.3 */ INTO audit(note) VALUES ('b')", "name": "statement/sql/insert", "nest": 5, "event": 6, "start": 60502871542000, "thread": 83, "nest_type": "TRANSACTION"}
+{"sql": "COMMIT /* s4.4 */", "name": "statement/sql/commit", "nest": 5, "event": 7, "start": 60503785209000, "thread": 83, "nest_type": "TRANSACTION"}
+{"sql": "SELECT /* s4.5 */ balance FROM accounts WHERE id = 4", "name": "statement/sql/select", "nest": null, "event": 8, "start": 60506287001000, "thread": 83, "nest_type": null}
+{"sql": "UPDATE /* s4.6 */ accounts SET balance = balance + 1 WHERE id = 4", "name": "statement/sql/update", "nest": 9, "event": 10, "start": 60506502667000, "thread": 83, "nest_type": "TRANSACTION"}
+{"sql": "ROLLBACK /* s4.7 */", "name": "statement/sql/rollback", "nest": 9, "event": 11, "start": 60506716459000, "thread": 83, "nest_type": "TRANSACTION"}
+{"sql": "SET /* s4.8 */ autocommit = 1", "name": "statement/sql/set_option", "nest": null, "event": 12, "start": 60508435417000, "thread": 83, "nest_type": null}
+{"sql": "UPDATE /* s4.9 */ accounts SET balance = balance + 1 WHERE id = 4", "name": "statement/sql/update", "nest": null, "event": 13, "start": 60508638834000, "thread": 83, "nest_type": null}
+{"sql": null, "name": "statement/com/Quit", "nest": null, "event": 15, "start": 60511755501000, "thread": 83, "nest_type": null}
+{"sql": "select @@version_comment limit 1", "name": "statement/sql/select", "nest": null, "event": 1, "start": 60501061917000, "thread": 84, "nest_type": null}
+{"sql": "select $$", "name": "statement/sql/error", "nest": null, "event": 2, "start": 60501179709000, "thread": 84, "nest_type": null}
+{"sql": "BEGIN /* s1.1 */", "name": "statement/sql/begin", "nest": null, "event": 3, "start": 60501431792000, "thread": 84, "nest_type": null}
+{"sql": "UPDATE /* s1.2 */ accounts SET balance = balance - 10 WHERE id = 1", "name": "statement/sql/update", "nest": 4, "event": 5, "start": 60501576876000, "thread": 84, "nest_type": "TRANSACTION"}
+{"sql": "DO /* s1.3 */ SLEEP(0.6)", "name": "statement/sql/do", "nest": 4, "event": 6, "start": 60502611209000, "thread": 84, "nest_type": "TRANSACTION"}
+{"sql": "UPDATE /* s1.4 */ accounts SET balance = balance + 10 WHERE id = 2", "name": "statement/sql/update", "nest": 4, "event": 7, "start": 61107184959000, "thread": 84, "nest_type": "TRANSACTION"}
+{"sql": "COMMIT /* s1.5 */", "name": "statement/sql/commit", "nest": 4, "event": 8, "start": 61108667793000, "thread": 84, "nest_type": "TRANSACTION"}
+{"sql": "SELECT /* s1.6 */ balance FROM accounts WHERE id = 1", "name": "statement/sql/select", "nest": null, "event": 9, "start": 61112725959000, "thread": 84, "nest_type": null}
+{"sql": null, "name": "statement/com/Quit", "nest": null, "event": 11, "start": 61115385168000, "thread": 84, "nest_type": null}
+{"sql": "select @@version_comment limit 1", "name": "statement/sql/select", "nest": null, "event": 1, "start": 60501703667000, "thread": 85, "nest_type": null}
+{"sql": "select $$", "name": "statement/sql/error", "nest": null, "event": 2, "start": 60502744417000, "thread": 85, "nest_type": null}
+{"sql": "DO /* s2.1 */ SLEEP(0.2)", "name": "statement/sql/do", "nest": null, "event": 3, "start": 60502834876000, "thread": 85, "nest_type": null}
+{"sql": "START TRANSACTION /* s2.2 */", "name": "statement/sql/begin", "nest": null, "event": 4, "start": 60703928251000, "thread": 85, "nest_type": null}
+{"sql": "UPDATE /* s2.3 */ accounts SET balance = balance - 5 WHERE id = 1", "name": "statement/sql/update", "nest": 5, "event": 6, "start": 60704059584000, "thread": 85, "nest_type": "TRANSACTION"}
+{"sql": "SELECT /* s2.4 */ balance FROM accounts WHERE id = 1 FOR UPDATE", "name": "statement/sql/select", "nest": 5, "event": 7, "start": 61113120043000, "thread": 85, "nest_type": "TRANSACTION"}
+{"sql": "ROLLBACK /* s2.5 */", "name": "statement/sql/rollback", "nest": 5, "event": 8, "start": 61115191126000, "thread": 85, "nest_type": "TRANSACTION"}
+{"sql": null, "name": "statement/com/Quit", "nest": null, "event": 9, "start": 61116813584000, "thread": 85, "nest_type": null}
+{"sql": "select @@version_comment limit 1", "name": "statement/sql/select", "nest": null, "event": 1, "start": 60508559626000, "thread": 86, "nest_type": null}
+{"sql": "select $$", "name": "statement/sql/error", "nest": null, "event": 2, "start": 60508867626000, "thread": 86, "nest_type": null}
+{"sql": "SELECT /* s3.1 */ COUNT(*) FROM accounts", "name": "statement/sql/select", "nest": null, "event": 3, "start": 60509165751000, "thread": 86, "nest_type": null}
+{"sql": "UPDATE /* s3.2 */ accounts SET balance = balance + 1 WHERE id = 3", "name": "statement/sql/update", "nest": null, "event": 5, "start": 60510330917000, "thread": 86, "nest_type": null}
+{"sql": "INSERT /* s3.3 */ INTO audit(note) VALUES ('a')", "name": "statement/sql/insert", "nest": null, "event": 7, "start": 60515558126000, "thread": 86, "nest_type": null}
+{"sql": "SELECT /* s3.4 */ * FROM accounts WHERE id = 3", "name": "statement/sql/select", "nest": null, "event": 9, "start": 60520934084000, "thread": 86, "nest_type": null}
+{"sql": null, "name": "statement/com/Quit", "nest": null, "event": 11, "start": 60521845542000, "thread": 86, "nest_type": null}
+{"sql": "select @@version_comment limit 1", "name": "statement/sql/select", "nest": null, "event": 1, "start": 61384270543000, "thread": 91, "nest_type": null}
+{"sql": "select $$", "name": "statement/sql/error", "nest": null, "event": 2, "start": 61384463168000, "thread": 91, "nest_type": null}
