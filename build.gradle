@@ -1,0 +1,37 @@
+plugins {
+	id 'java'
+	id 'application'
+}
+
+group = 'io.dbreplay'
+version = '0.1.0-SNAPSHOT'
+
+java {
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(25)
+	}
+}
+
+repositories {
+	mavenCentral()
+}
+
+dependencies {
+	// 트래픽 파일(JSON Lines) 읽기·쓰기
+	implementation 'com.fasterxml.jackson.core:jackson-databind:2.19.2'
+	// 재생 대상 접속. 기종을 더할 때 드라이버를 여기에 더한다
+	runtimeOnly 'com.mysql:mysql-connector-j:9.4.0'
+	runtimeOnly 'org.postgresql:postgresql:42.7.7'
+
+	testImplementation platform('org.junit:junit-bom:5.13.4')
+	testImplementation 'org.junit.jupiter:junit-jupiter'
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+application {
+	mainClass = 'io.dbreplay.cli.Main'
+}
+
+tasks.named('test') {
+	useJUnitPlatform()
+}
