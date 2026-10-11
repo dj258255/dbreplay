@@ -14,6 +14,14 @@
 - `dbreplay compare`: 두 트래픽 파일을 SQL 모양별로 비교해 나빠진 SQL과 좋아진 SQL을 낸다.
 - `dbreplay explore`: 알람이 울리는 배속을 찾아 상한과 수위를 낸다. 평가를 파일로 남길 수 있다.
 - `dbreplay check`: 남긴 평가가 아직 유효한지 본다.
+- 부하 지표 수집(#2). 재생하는 동안 대상에서 실행 중인 연결 수와 기준 시간을 넘겨 실행 중인 문장 수를 뜬다.
+  CPU와 Load Average처럼 DB 접속으로 못 읽는 지표는 `--metric-command`로 받는다. `explore`가 라운드별 지표를
+  표로 내고, `--alarm-metric 이름>=값`으로 어느 지표에든 알람을 걸 수 있다.
+- `dbreplay sample`: 녹화하는 동안 운영 쪽의 부하 지표를 떠 둔다.
+
+### 바뀐 것
+
+- `--alarm-active-sessions <개수>`는 `--alarm-metric active_sessions>=<개수>`의 줄임으로 남는다.
 
 ### 알려진 한계
 

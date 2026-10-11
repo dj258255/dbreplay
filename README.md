@@ -24,7 +24,7 @@ dbreplay convert --in slow.log --out prod.trace.jsonl
 dbreplay replay  --trace prod.trace.jsonl --url jdbc:mysql://sandbox:3306/ --user root --speed 1
 dbreplay compare --before before.trace.jsonl --after after.trace.jsonl
 dbreplay explore --trace prod.trace.jsonl --url jdbc:mysql://sandbox:3306/ --user root \
-  --reset-command ./reset.sh --alarm-command ./alarm.sh
+  --reset-command ./reset.sh --alarm-command ./alarm.sh --metric-command ./metrics.sh
 ```
 
 녹화부터 용량 탐색까지 한 번에 돌리는 예는 `experiments/03-mysql-compare-explore/run.sh`와

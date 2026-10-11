@@ -19,6 +19,7 @@ Java 25와 Gradle로 만든다.
 | `io.dbreplay.postgres` | PostgreSQL csvlog 변환기 |
 | `io.dbreplay.replay` | 재생기. 트랜잭션·문장·연결 단위로 내보낸다 |
 | `io.dbreplay.report` | SQL 모양별 전후 비교 |
+| `io.dbreplay.metrics` | 재생하는 동안 대상의 부하 지표를 뜬다. DB 접속으로 읽는 것과 사용자 명령으로 받는 것 |
 | `io.dbreplay.explore` | 용량 탐색, 알람 판정, 수위, 평가의 유효성 |
 
 ```sh
@@ -29,6 +30,7 @@ dbreplay replay  --trace <트래픽 파일> --url <JDBC URL> --user <계정> --s
 dbreplay compare --before <트래픽 파일> --after <트래픽 파일>
 dbreplay explore --trace <트래픽 파일> --url <JDBC URL> --user <계정> --reset-command <명령> --alarm-command <명령>
 dbreplay check   --evaluation <평가 파일> --url <JDBC URL> --user <계정>
+dbreplay sample  --url <JDBC URL> --user <계정> --seconds <초>
 ```
 
 ## 판정과 재생 방식
