@@ -52,19 +52,40 @@ public interface Alarm {
 	}
 
 	/**
-	 * 실행 중인 연결 수가 threshold 이상인 채로 sustain번 연속으로 떠지면 울린다.
-	 * 알람 체계가 따로 없을 때 쓰는 내장 알람이다. 임계값은 사용자가 정한다.
+	 * 지표가 threshold 이상인 채로 sustain번 연속으로 떠지면 울린다. 임계값은 사용자가 정한다.
+	 * 알람 체계가 따로 없을 때 쓰는 내장 알람이다.
 	 */
-	static Alarm activeSessions(int threshold, int sustain) {
+	static Alarm metric(String name, double threshold, int sustain) {
 		return round -> {
 			int run = 0;
-			for (int v : round.activeSessions()) {
+			for (double v : round.metric(name)) {
 				run = v >= threshold ? run + 1 : 0;
 				if (run >= sustain) {
-					return "실행 중인 연결이 " + sustain + "번 연속 " + threshold + " 이상 (최대 " + round.maxActiveSessions() + ")";
+					return String.format("%s이(가) %d번 연속 %s 이상 (최대 %s)", name, sustain, plain(threshold), plain(round.max(name)));
 				}
 			}
 			return null;
 		};
+	}
+
+	/**
+	 * {@code active_sessions>=32,load1>=8}처럼 쉼표로 이은 조건을 알람들로 바꾼다.
+	 *
+	 * @throws IllegalArgumentException 조건의 모양이 틀렸을 때
+	 */
+	static java.util.List<Alarm> metrics(String spec, int sustain) {
+		java.util.List<Alarm> alarms = new java.util.ArrayList<>();
+		for (String condition : spec.split(",")) {
+			String[] parts = condition.strip().split(">=", 2);
+			if (parts.length != 2 || parts[0].isBlank()) {
+				throw new IllegalArgumentException("알람 조건은 '이름>=값'으로 적는다: " + condition);
+			}
+			alarms.add(metric(parts[0].strip(), Double.parseDouble(parts[1].strip()), sustain));
+		}
+		return alarms;
+	}
+
+	private static String plain(double value) {
+		return value == Math.rint(value) ? Long.toString((long) value) : Double.toString(value);
 	}
 }
