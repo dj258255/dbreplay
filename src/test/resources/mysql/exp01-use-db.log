@@ -1,0 +1,108 @@
+# Time: 2026-10-11T02:02:57.486990Z
+# User@Host: root[root] @  [127.0.0.1]  Id:    27
+# Query_time: 0.000074  Lock_time: 0.000000 Rows_sent: 1  Rows_examined: 1 Thread_id: 27 Errno: 0 Killed: 0 Bytes_received: 39 Bytes_sent: 92 Read_first: 0 Read_last: 0 Read_key: 0 Read_next: 0 Read_prev: 0 Read_rnd: 0 Read_rnd_next: 0 Sort_merge_passes: 0 Sort_range_count: 0 Sort_rows: 0 Sort_scan_count: 0 Created_tmp_disk_tables: 0 Created_tmp_tables: 0 Start: 2026-10-11T02:02:57.486916Z End: 2026-10-11T02:02:57.486990Z
+SET timestamp=1791684177;
+select @@version_comment limit 1;
+/usr/sbin/mysqld, Version: 8.4.11 (MySQL Community Server - GPL). started with:
+Tcp port: 3306  Unix socket: /var/run/mysqld/mysqld.sock
+Time                 Id Command    Argument
+# Time: 2026-10-11T02:02:57.489158Z
+# User@Host: root[root] @  [127.0.0.1]  Id:    27
+# Query_time: 0.002042  Lock_time: 0.000000 Rows_sent: 0  Rows_examined: 0 Thread_id: 27 Errno: 0 Killed: 0 Bytes_received: 22 Bytes_sent: 11 Read_first: 0 Read_last: 0 Read_key: 0 Read_next: 0 Read_prev: 0 Read_rnd: 0 Read_rnd_next: 0 Sort_merge_passes: 0 Sort_range_count: 0 Sort_rows: 0 Sort_scan_count: 0 Created_tmp_disk_tables: 0 Created_tmp_tables: 0 Start: 2026-10-11T02:02:57.487116Z End: 2026-10-11T02:02:57.489158Z
+SET timestamp=1791684177;
+FLUSH SLOW LOGS;
+# Time: 2026-10-11T02:02:57.489293Z
+# User@Host: root[root] @  [127.0.0.1]  Id:    27
+# Query_time: 0.000001  Lock_time: 0.000000 Rows_sent: 0  Rows_examined: 0 Thread_id: 27 Errno: 0 Killed: 0 Bytes_received: 5 Bytes_sent: 0 Read_first: 0 Read_last: 0 Read_key: 0 Read_next: 0 Read_prev: 0 Read_rnd: 0 Read_rnd_next: 0 Sort_merge_passes: 0 Sort_range_count: 0 Sort_rows: 0 Sort_scan_count: 0 Created_tmp_disk_tables: 0 Created_tmp_tables: 0 Start: 2026-10-11T02:02:57.489292Z End: 2026-10-11T02:02:57.489293Z
+SET timestamp=1791684177;
+# administrator command: Quit;
+# Time: 2026-10-11T02:02:57.611085Z
+# User@Host: root[root] @  [127.0.0.1]  Id:    28
+# Query_time: 0.000068  Lock_time: 0.000000 Rows_sent: 1  Rows_examined: 1 Thread_id: 28 Errno: 0 Killed: 0 Bytes_received: 39 Bytes_sent: 92 Read_first: 0 Read_last: 0 Read_key: 0 Read_next: 0 Read_prev: 0 Read_rnd: 0 Read_rnd_next: 0 Sort_merge_passes: 0 Sort_range_count: 0 Sort_rows: 0 Sort_scan_count: 0 Created_tmp_disk_tables: 0 Created_tmp_tables: 0 Start: 2026-10-11T02:02:57.611017Z End: 2026-10-11T02:02:57.611085Z
+SET timestamp=1791684177;
+select @@version_comment limit 1;
+# Time: 2026-10-11T02:02:57.611089Z
+# User@Host: root[root] @  [127.0.0.1]  Id:    30
+# Query_time: 0.000043  Lock_time: 0.000000 Rows_sent: 1  Rows_examined: 1 Thread_id: 30 Errno: 0 Killed: 0 Bytes_received: 39 Bytes_sent: 92 Read_first: 0 Read_last: 0 Read_key: 0 Read_next: 0 Read_prev: 0 Read_rnd: 0 Read_rnd_next: 0 Sort_merge_passes: 0 Sort_range_count: 0 Sort_rows: 0 Sort_scan_count: 0 Created_tmp_disk_tables: 0 Created_tmp_tables: 0 Start: 2026-10-11T02:02:57.611046Z End: 2026-10-11T02:02:57.611089Z
+use other;
+SET timestamp=1791684177;
+select @@version_comment limit 1;
+# Time: 2026-10-11T02:02:57.611205Z
+# User@Host: root[root] @  [127.0.0.1]  Id:    29
+# Query_time: 0.000065  Lock_time: 0.000000 Rows_sent: 1  Rows_examined: 1 Thread_id: 29 Errno: 0 Killed: 0 Bytes_received: 39 Bytes_sent: 92 Read_first: 0 Read_last: 0 Read_key: 0 Read_next: 0 Read_prev: 0 Read_rnd: 0 Read_rnd_next: 0 Sort_merge_passes: 0 Sort_range_count: 0 Sort_rows: 0 Sort_scan_count: 0 Created_tmp_disk_tables: 0 Created_tmp_tables: 0 Start: 2026-10-11T02:02:57.611140Z End: 2026-10-11T02:02:57.611205Z
+use shop;
+SET timestamp=1791684177;
+select @@version_comment limit 1;
+# Time: 2026-10-11T02:02:57.612915Z
+# User@Host: root[root] @  [127.0.0.1]  Id:    29
+# Query_time: 0.000033  Lock_time: 0.000000 Rows_sent: 1  Rows_examined: 1 Thread_id: 29 Errno: 0 Killed: 0 Bytes_received: 29 Bytes_sent: 49 Read_first: 0 Read_last: 0 Read_key: 0 Read_next: 0 Read_prev: 0 Read_rnd: 0 Read_rnd_next: 0 Sort_merge_passes: 0 Sort_range_count: 0 Sort_rows: 0 Sort_scan_count: 0 Created_tmp_disk_tables: 0 Created_tmp_tables: 0 Start: 2026-10-11T02:02:57.612882Z End: 2026-10-11T02:02:57.612915Z
+SET timestamp=1791684177;
+SELECT /* a1 shop */ 1;
+# Time: 2026-10-11T02:02:57.718487Z
+# User@Host: root[root] @  [127.0.0.1]  Id:    30
+# Query_time: 0.105872  Lock_time: 0.000000 Rows_sent: 0  Rows_examined: 1 Thread_id: 30 Errno: 0 Killed: 0 Bytes_received: 35 Bytes_sent: 11 Read_first: 0 Read_last: 0 Read_key: 0 Read_next: 0 Read_prev: 0 Read_rnd: 0 Read_rnd_next: 0 Sort_merge_passes: 0 Sort_range_count: 0 Sort_rows: 0 Sort_scan_count: 0 Created_tmp_disk_tables: 0 Created_tmp_tables: 0 Start: 2026-10-11T02:02:57.612615Z End: 2026-10-11T02:02:57.718487Z
+use other;
+SET timestamp=1791684177;
+DO /* b1 other */ SLEEP(0.1);
+# Time: 2026-10-11T02:02:57.718703Z
+# User@Host: root[root] @  [127.0.0.1]  Id:    30
+# Query_time: 0.000081  Lock_time: 0.000000 Rows_sent: 1  Rows_examined: 1 Thread_id: 30 Errno: 0 Killed: 0 Bytes_received: 30 Bytes_sent: 49 Read_first: 0 Read_last: 0 Read_key: 0 Read_next: 0 Read_prev: 0 Read_rnd: 0 Read_rnd_next: 0 Sort_merge_passes: 0 Sort_range_count: 0 Sort_rows: 0 Sort_scan_count: 0 Created_tmp_disk_tables: 0 Created_tmp_tables: 0 Start: 2026-10-11T02:02:57.718622Z End: 2026-10-11T02:02:57.718703Z
+SET timestamp=1791684177;
+SELECT /* b2 other */ 3;
+# Time: 2026-10-11T02:02:57.816898Z
+# User@Host: root[root] @  [127.0.0.1]  Id:    28
+# Query_time: 0.205666  Lock_time: 0.000000 Rows_sent: 0  Rows_examined: 1 Thread_id: 28 Errno: 0 Killed: 0 Bytes_received: 34 Bytes_sent: 11 Read_first: 0 Read_last: 0 Read_key: 0 Read_next: 0 Read_prev: 0 Read_rnd: 0 Read_rnd_next: 0 Sort_merge_passes: 0 Sort_range_count: 0 Sort_rows: 0 Sort_scan_count: 0 Created_tmp_disk_tables: 0 Created_tmp_tables: 0 Start: 2026-10-11T02:02:57.611232Z End: 2026-10-11T02:02:57.816898Z
+SET timestamp=1791684177;
+DO /* c1 none */ SLEEP(0.2);
+# Time: 2026-10-11T02:02:57.817724Z
+# User@Host: root[root] @  [127.0.0.1]  Id:    28
+# Query_time: 0.000267  Lock_time: 0.000000 Rows_sent: 1  Rows_examined: 1 Thread_id: 28 Errno: 0 Killed: 0 Bytes_received: 29 Bytes_sent: 49 Read_first: 0 Read_last: 0 Read_key: 0 Read_next: 0 Read_prev: 0 Read_rnd: 0 Read_rnd_next: 0 Sort_merge_passes: 0 Sort_range_count: 0 Sort_rows: 0 Sort_scan_count: 0 Created_tmp_disk_tables: 0 Created_tmp_tables: 0 Start: 2026-10-11T02:02:57.817457Z End: 2026-10-11T02:02:57.817724Z
+SET timestamp=1791684177;
+SELECT /* c2 none */ 5;
+# Time: 2026-10-11T02:02:57.916859Z
+# User@Host: root[root] @  [127.0.0.1]  Id:    29
+# Query_time: 0.303872  Lock_time: 0.000000 Rows_sent: 0  Rows_examined: 1 Thread_id: 29 Errno: 0 Killed: 0 Bytes_received: 34 Bytes_sent: 11 Read_first: 0 Read_last: 0 Read_key: 0 Read_next: 0 Read_prev: 0 Read_rnd: 0 Read_rnd_next: 0 Sort_merge_passes: 0 Sort_range_count: 0 Sort_rows: 0 Sort_scan_count: 0 Created_tmp_disk_tables: 0 Created_tmp_tables: 0 Start: 2026-10-11T02:02:57.612987Z End: 2026-10-11T02:02:57.916859Z
+use shop;
+SET timestamp=1791684177;
+DO /* a2 shop */ SLEEP(0.3);
+# Time: 2026-10-11T02:02:57.917894Z
+# User@Host: root[root] @  [127.0.0.1]  Id:    29
+# Query_time: 0.000214  Lock_time: 0.000000 Rows_sent: 1  Rows_examined: 1 Thread_id: 29 Errno: 0 Killed: 0 Bytes_received: 29 Bytes_sent: 49 Read_first: 0 Read_last: 0 Read_key: 0 Read_next: 0 Read_prev: 0 Read_rnd: 0 Read_rnd_next: 0 Sort_merge_passes: 0 Sort_range_count: 0 Sort_rows: 0 Sort_scan_count: 0 Created_tmp_disk_tables: 0 Created_tmp_tables: 0 Start: 2026-10-11T02:02:57.917680Z End: 2026-10-11T02:02:57.917894Z
+SET timestamp=1791684177;
+SELECT /* a3 shop */ 2;
+# Time: 2026-10-11T02:02:57.918478Z
+# User@Host: root[root] @  [127.0.0.1]  Id:    29
+# Query_time: 0.000006  Lock_time: 0.000000 Rows_sent: 0  Rows_examined: 1 Thread_id: 29 Errno: 0 Killed: 0 Bytes_received: 5 Bytes_sent: 0 Read_first: 0 Read_last: 0 Read_key: 0 Read_next: 0 Read_prev: 0 Read_rnd: 0 Read_rnd_next: 0 Sort_merge_passes: 0 Sort_range_count: 0 Sort_rows: 0 Sort_scan_count: 0 Created_tmp_disk_tables: 0 Created_tmp_tables: 0 Start: 2026-10-11T02:02:57.918472Z End: 2026-10-11T02:02:57.918478Z
+SET timestamp=1791684177;
+# administrator command: Quit;
+# Time: 2026-10-11T02:02:58.123904Z
+# User@Host: root[root] @  [127.0.0.1]  Id:    30
+# Query_time: 0.405078  Lock_time: 0.000000 Rows_sent: 0  Rows_examined: 1 Thread_id: 30 Errno: 0 Killed: 0 Bytes_received: 35 Bytes_sent: 11 Read_first: 0 Read_last: 0 Read_key: 0 Read_next: 0 Read_prev: 0 Read_rnd: 0 Read_rnd_next: 0 Sort_merge_passes: 0 Sort_range_count: 0 Sort_rows: 0 Sort_scan_count: 0 Created_tmp_disk_tables: 0 Created_tmp_tables: 0 Start: 2026-10-11T02:02:57.718826Z End: 2026-10-11T02:02:58.123904Z
+use other;
+SET timestamp=1791684177;
+DO /* b3 other */ SLEEP(0.4);
+# Time: 2026-10-11T02:02:58.124211Z
+# User@Host: root[root] @  [127.0.0.1]  Id:    30
+# Query_time: 0.000149  Lock_time: 0.000000 Rows_sent: 1  Rows_examined: 1 Thread_id: 30 Errno: 0 Killed: 0 Bytes_received: 30 Bytes_sent: 49 Read_first: 0 Read_last: 0 Read_key: 0 Read_next: 0 Read_prev: 0 Read_rnd: 0 Read_rnd_next: 0 Sort_merge_passes: 0 Sort_range_count: 0 Sort_rows: 0 Sort_scan_count: 0 Created_tmp_disk_tables: 0 Created_tmp_tables: 0 Start: 2026-10-11T02:02:58.124062Z End: 2026-10-11T02:02:58.124211Z
+SET timestamp=1791684178;
+SELECT /* b4 other */ 4;
+# Time: 2026-10-11T02:02:58.124735Z
+# User@Host: root[root] @  [127.0.0.1]  Id:    30
+# Query_time: 0.000012  Lock_time: 0.000000 Rows_sent: 0  Rows_examined: 1 Thread_id: 30 Errno: 0 Killed: 0 Bytes_received: 5 Bytes_sent: 0 Read_first: 0 Read_last: 0 Read_key: 0 Read_next: 0 Read_prev: 0 Read_rnd: 0 Read_rnd_next: 0 Sort_merge_passes: 0 Sort_range_count: 0 Sort_rows: 0 Sort_scan_count: 0 Created_tmp_disk_tables: 0 Created_tmp_tables: 0 Start: 2026-10-11T02:02:58.124723Z End: 2026-10-11T02:02:58.124735Z
+SET timestamp=1791684178;
+# administrator command: Quit;
+# Time: 2026-10-11T02:02:58.271349Z
+# User@Host: root[root] @  [127.0.0.1]  Id:    28
+# Query_time: 0.453300  Lock_time: 0.000000 Rows_sent: 0  Rows_examined: 1 Thread_id: 28 Errno: 0 Killed: 0 Bytes_received: 35 Bytes_sent: 11 Read_first: 0 Read_last: 0 Read_key: 0 Read_next: 0 Read_prev: 0 Read_rnd: 0 Read_rnd_next: 0 Sort_merge_passes: 0 Sort_range_count: 0 Sort_rows: 0 Sort_scan_count: 0 Created_tmp_disk_tables: 0 Created_tmp_tables: 0 Start: 2026-10-11T02:02:57.818049Z End: 2026-10-11T02:02:58.271349Z
+SET timestamp=1791684177;
+DO /* c3 none */ SLEEP(0.45);
+# Time: 2026-10-11T02:02:58.271652Z
+# User@Host: root[root] @  [127.0.0.1]  Id:    28
+# Query_time: 0.000150  Lock_time: 0.000000 Rows_sent: 1  Rows_examined: 1 Thread_id: 28 Errno: 0 Killed: 0 Bytes_received: 29 Bytes_sent: 49 Read_first: 0 Read_last: 0 Read_key: 0 Read_next: 0 Read_prev: 0 Read_rnd: 0 Read_rnd_next: 0 Sort_merge_passes: 0 Sort_range_count: 0 Sort_rows: 0 Sort_scan_count: 0 Created_tmp_disk_tables: 0 Created_tmp_tables: 0 Start: 2026-10-11T02:02:58.271502Z End: 2026-10-11T02:02:58.271652Z
+SET timestamp=1791684178;
+SELECT /* c4 none */ 6;
+# Time: 2026-10-11T02:02:58.272100Z
+# User@Host: root[root] @  [127.0.0.1]  Id:    28
+# Query_time: 0.000004  Lock_time: 0.000000 Rows_sent: 0  Rows_examined: 1 Thread_id: 28 Errno: 0 Killed: 0 Bytes_received: 5 Bytes_sent: 0 Read_first: 0 Read_last: 0 Read_key: 0 Read_next: 0 Read_prev: 0 Read_rnd: 0 Read_rnd_next: 0 Sort_merge_passes: 0 Sort_range_count: 0 Sort_rows: 0 Sort_scan_count: 0 Created_tmp_disk_tables: 0 Created_tmp_tables: 0 Start: 2026-10-11T02:02:58.272096Z End: 2026-10-11T02:02:58.272100Z
+SET timestamp=1791684178;
+# administrator command: Quit;
