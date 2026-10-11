@@ -1,0 +1,5 @@
+name	file_mb
+sbtest/sbtest1	32.0
+sbtest/sbtest2	32.0
+sbtest/sbtest3	32.0
+sbtest/sbtest4	32.0

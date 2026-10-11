@@ -1,24 +1,25 @@
-전체: 문장 41260 → 41254개, 실패 0 → 0개
-      실행 시간 평균 0.105ms → 0.051ms, 중앙값 0.037ms → 0.033ms, p99 0.880ms → 0.312ms
+전체: 문장 42544 → 42545개, 실패 0 → 0개
+      실행 시간 평균 0.080ms → 0.041ms, 중앙값 0.033ms → 0.028ms, p99 0.608ms → 0.368ms
 
 나빠진 SQL
         횟수       평균 앞       평균 뒤       변화      p99 앞      p99 뒤  모양
-      5889    0.010ms    0.012ms   +18.7%    0.045ms    0.057ms  BEGIN
-      5889    0.091ms    0.103ms   +12.7%    0.344ms    0.392ms  UPDATE pgbench_accounts SET abalance = abalance + ? WHERE aid = ?
-      5889    0.032ms    0.035ms   +10.6%    0.128ms    0.144ms  INSERT INTO pgbench_history (tid, bid, aid, delta, mtime) VALUES (?, ?, ?, ?, CURRENT_T...
+      6028    0.034ms    0.035ms    +3.4%    0.110ms    0.110ms  SELECT abalance FROM pgbench_accounts WHERE aid = ?
+       314    0.395ms    0.407ms    +3.0%    0.896ms    0.976ms  SELECT count(*), count(*) FILTER (WHERE now() - query_start > (?::int8) * interval ?) F...
+      6028    0.065ms    0.067ms    +2.6%    0.204ms    0.196ms  UPDATE pgbench_accounts SET abalance = abalance + ? WHERE aid = ?
 
 좋아진 SQL
         횟수       평균 앞       평균 뒤       변화      p99 앞      p99 뒤  모양
-      5889    0.372ms    0.023ms   -93.9%    3.008ms    0.096ms  END
-      5889    0.124ms    0.078ms   -37.0%    1.728ms    1.024ms  UPDATE pgbench_branches SET bbalance = bbalance + ? WHERE bid = ?
-      5889    0.061ms    0.057ms    -6.3%    0.280ms    0.280ms  UPDATE pgbench_tellers SET tbalance = tbalance + ? WHERE tid = ?
+      6028    0.280ms    0.018ms   -93.6%    0.992ms    0.059ms  END
+      6028    0.081ms    0.063ms   -22.7%    1.248ms    0.928ms  UPDATE pgbench_branches SET bbalance = bbalance + ? WHERE bid = ?
+      6028    0.028ms    0.027ms    -0.3%    0.092ms    0.078ms  INSERT INTO pgbench_history (tid, bid, aid, delta, mtime) VALUES (?, ?, ?, ?, CURRENT_T...
 
 실행 시간을 많이 쓴 순서
         횟수       평균 앞       평균 뒤       변화      p99 앞      p99 뒤  모양
-      5889    0.372ms    0.023ms   -93.9%    3.008ms    0.096ms  END
-      5889    0.124ms    0.078ms   -37.0%    1.728ms    1.024ms  UPDATE pgbench_branches SET bbalance = bbalance + ? WHERE bid = ?
-      5889    0.091ms    0.103ms   +12.7%    0.344ms    0.392ms  UPDATE pgbench_accounts SET abalance = abalance + ? WHERE aid = ?
-      5889    0.061ms    0.057ms    -6.3%    0.280ms    0.280ms  UPDATE pgbench_tellers SET tbalance = tbalance + ? WHERE tid = ?
-      5889    0.043ms    0.048ms   +10.5%    0.180ms    0.192ms  SELECT abalance FROM pgbench_accounts WHERE aid = ?
-      5889    0.032ms    0.035ms   +10.6%    0.128ms    0.144ms  INSERT INTO pgbench_history (tid, bid, aid, delta, mtime) VALUES (?, ?, ?, ?, CURRENT_T...
-      5889    0.010ms    0.012ms   +18.7%    0.045ms    0.057ms  BEGIN
+      6028    0.280ms    0.018ms   -93.6%    0.992ms    0.059ms  END
+      6028    0.081ms    0.063ms   -22.7%    1.248ms    0.928ms  UPDATE pgbench_branches SET bbalance = bbalance + ? WHERE bid = ?
+      6028    0.065ms    0.067ms    +2.6%    0.204ms    0.196ms  UPDATE pgbench_accounts SET abalance = abalance + ? WHERE aid = ?
+      6028    0.045ms    0.046ms    +1.3%    0.192ms    0.152ms  UPDATE pgbench_tellers SET tbalance = tbalance + ? WHERE tid = ?
+      6028    0.034ms    0.035ms    +3.4%    0.110ms    0.110ms  SELECT abalance FROM pgbench_accounts WHERE aid = ?
+      6028    0.028ms    0.027ms    -0.3%    0.092ms    0.078ms  INSERT INTO pgbench_history (tid, bid, aid, delta, mtime) VALUES (?, ?, ?, ?, CURRENT_T...
+       314    0.395ms    0.407ms    +3.0%    0.896ms    0.976ms  SELECT count(*), count(*) FILTER (WHERE now() - query_start > (?::int8) * interval ?) F...
+      6028    0.007ms    0.007ms    +1.6%    0.031ms    0.027ms  BEGIN

@@ -24,6 +24,12 @@ log_off() {
   sleep 1
   docker compose exec -T pg16 cat $CSV </dev/null > "out/$1.csv"
   $RUN /app/bin/dbreplay convert --from postgres-csv --in "/exp/out/$1.csv" --out "/exp/out/$1.trace.jsonl" </dev/null > "out/$1-convert.txt"
+  # 파이프 안의 실패는 set -e가 잡지 못한다. 재생이 죽어도 빈 로그로 끝까지 갈 수 있어서 줄 수로 확인한다
+  lines=$(wc -l < "out/$1.trace.jsonl")
+  if [ "$lines" -lt 30000 ]; then
+    echo "out/$1.trace.jsonl이 ${lines}줄뿐이다. 앞 단계가 돌지 않았다" >&2
+    exit 1
+  fi
 }
 
 (cd "$ROOT" && ./gradlew -q installDist)
@@ -36,21 +42,24 @@ docker compose exec -T pg16 pg_dump -U postgres --clean --if-exists shop </dev/n
 
 echo "== 녹화 =="
 log_on
+$RUN /app/bin/dbreplay sample --url "$URL" --user postgres --seconds 30 --metric-command "sh /exp/metrics.sh" </dev/null > out/record-metrics.txt &
 docker compose exec -T pg16 pgbench -U postgres -n -c 8 -j 4 -T 30 -R 200 -M prepared shop </dev/null > out/record-pgbench.txt 2>&1
+wait
+test -s out/record-metrics.txt
 log_off prod
 cat out/prod-convert.txt
 
 echo "== 변경 전: 1배속 재생 =="
 $RUN sh /exp/reset.sh </dev/null
 log_on
-$RUN /app/bin/dbreplay replay --trace /exp/out/prod.trace.jsonl --url "$URL" --user postgres --speed 1 </dev/null | tee out/replay-before.txt
+$RUN /app/bin/dbreplay replay --trace /exp/out/prod.trace.jsonl --url "$URL" --user postgres --speed 1 --metric-command "sh /exp/metrics.sh" </dev/null | tee out/replay-before.txt
 log_off before
 
 echo "== 변경 후(synchronous_commit=off): 1배속 재생 =="
 $RUN sh /exp/reset.sh </dev/null
 $P -c "ALTER SYSTEM SET synchronous_commit = off" -c "SELECT pg_reload_conf()" </dev/null >/dev/null
 log_on
-$RUN /app/bin/dbreplay replay --trace /exp/out/prod.trace.jsonl --url "$URL" --user postgres --speed 1 </dev/null | tee out/replay-after.txt
+$RUN /app/bin/dbreplay replay --trace /exp/out/prod.trace.jsonl --url "$URL" --user postgres --speed 1 --metric-command "sh /exp/metrics.sh" </dev/null | tee out/replay-after.txt
 log_off after
 $P -c "ALTER SYSTEM RESET synchronous_commit" -c "SELECT pg_reload_conf()" </dev/null >/dev/null
 
@@ -61,9 +70,9 @@ $RUN /app/bin/dbreplay compare --before /exp/out/before.trace.jsonl --after /exp
 
 echo "== 용량 탐색 =="
 $RUN /app/bin/dbreplay explore --trace /exp/out/prod.trace.jsonl --url "$URL" --user postgres \
-  --reset-command "sh /exp/reset.sh" --alarm-active-sessions 32 --max-speed 64 \
+  --reset-command "sh /exp/reset.sh" --alarm-metric "active_sessions>=32" --metric-command "sh /exp/metrics.sh" --max-speed 64 \
   --out /exp/out/evaluation.json </dev/null | tee out/explore.txt
 
 echo "== 평가 유효성 확인 =="
 $RUN /app/bin/dbreplay check --evaluation /exp/out/evaluation.json --url "$URL" --user postgres \
-  --alarm-active-sessions 32 --trace /exp/out/prod.trace.jsonl </dev/null | tee out/check-valid.txt
+  --alarm-metric "active_sessions>=32" --trace /exp/out/prod.trace.jsonl </dev/null | tee out/check-valid.txt

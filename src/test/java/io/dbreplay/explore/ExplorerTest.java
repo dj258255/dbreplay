@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
+import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 
@@ -15,10 +16,14 @@ import io.dbreplay.replay.ReplaySummary;
 class ExplorerTest {
 
 	/** 문장 1,000개 중 lateByReplayer개를 재생기가 늦게 내보낸 라운드. */
-	private static RoundData round(double speed, long lateByReplayer, int... activeSessions) {
+	private static RoundData round(double speed, long lateByReplayer, double... activeSessions) {
+		return round(speed, lateByReplayer, Map.of("active_sessions", activeSessions));
+	}
+
+	private static RoundData round(double speed, long lateByReplayer, Map<String, double[]> metrics) {
 		ReplaySummary summary = new ReplaySummary(1_000, 8, 0, 0, 0, lateByReplayer, 0, speed, 30_000_000,
 				(long) (30e6 / speed), new Histogram(), new Histogram(), new Histogram());
-		return new RoundData(speed, 1_000_000, 1_030_000, summary, activeSessions);
+		return new RoundData(speed, 1_000_000, 1_030_000, summary, metrics);
 	}
 
 	/** limit 배속을 넘으면 알람이 울리는 대상. */
@@ -96,12 +101,33 @@ class ExplorerTest {
 	}
 
 	@Test
-	void activeSessionAlarmNeedsConsecutiveSamples() throws Exception {
-		Alarm alarm = Alarm.activeSessions(32, 3);
+	void metricAlarmNeedsConsecutiveSamples() throws Exception {
+		Alarm alarm = Alarm.metric("active_sessions", 32, 3);
 
 		assertNull(alarm.check(round(1, 0, 40, 40, 10, 40, 40)), "두 번 연속까지는 울리지 않는다");
-		assertEquals("실행 중인 연결이 3번 연속 32 이상 (최대 50)", alarm.check(round(1, 0, 5, 32, 50, 33, 4)));
+		assertEquals("active_sessions이(가) 3번 연속 32 이상 (최대 50)", alarm.check(round(1, 0, 5, 32, 50, 33, 4)));
 		assertNull(alarm.check(round(1, 0)), "뜬 값이 없으면 울리지 않는다");
+	}
+
+	/** 지표 명령이 낸 이름에도 알람을 걸 수 있다. 조건 여럿은 쉼표로 잇는다. */
+	@Test
+	void parsesSeveralMetricConditions() throws Exception {
+		List<Alarm> alarms = Alarm.metrics("active_sessions>=32, load1>=7.5", 2);
+		RoundData busyHost = round(1, 0, Map.of("active_sessions", new double[] {3, 4}, "load1", new double[] {7.9, 8.2}));
+
+		assertEquals(2, alarms.size());
+		assertNull(alarms.get(0).check(busyHost));
+		assertEquals("load1이(가) 2번 연속 7.5 이상 (최대 8.2)", alarms.get(1).check(busyHost));
+		assertThrows(IllegalArgumentException.class, () -> Alarm.metrics("load1>8", 2));
+	}
+
+	@Test
+	void summarizesAMetricOverTheRound() {
+		RoundData data = round(1, 0, 2, 6, 10);
+
+		assertEquals(10, data.maxActiveSessions());
+		assertEquals(6.0, data.mean("active_sessions"), 1e-9);
+		assertEquals(0.0, data.max("없는 지표"), 1e-9);
 	}
 
 	@Test
