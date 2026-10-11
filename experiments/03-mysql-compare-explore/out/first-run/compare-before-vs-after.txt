@@ -1,0 +1,32 @@
+전체: 문장 142657 → 142656개, 실패 0 → 0개
+      실행 시간 평균 0.103ms → 0.162ms, 중앙값 0.032ms → 0.036ms, p99 1.632ms → 2.048ms
+
+나빠진 SQL
+        횟수       평균 앞       평균 뒤       변화      p99 앞      p99 뒤  모양
+      1457    0.046ms    0.376ms  +721.0%    0.110ms    2.048ms  INSERT INTO sbtest2 (id, k, c, pad) VALUES (?+)
+      1442    0.051ms    0.362ms  +607.4%    0.114ms    2.304ms  INSERT INTO sbtest4 (id, k, c, pad) VALUES (?+)
+      1539    0.054ms    0.316ms  +481.1%    0.110ms    2.240ms  INSERT INTO sbtest3 (id, k, c, pad) VALUES (?+)
+
+좋아진 SQL
+        횟수       평균 앞       평균 뒤       변화      p99 앞      p99 뒤  모양
+        20    0.029ms    0.025ms   -15.6%    0.072ms    0.047ms  SET autocommit=?
+        20    0.033ms    0.029ms   -13.6%    0.094ms    0.053ms  SET character_set_results = NULL
+        20    0.080ms    0.078ms    -2.6%    0.180ms    0.136ms  SELECT @@session.auto_increment_increment AS auto_increment_increment, @@character_set_...
+
+실행 시간을 많이 쓴 순서
+        횟수       평균 앞       평균 뒤       변화      p99 앞      p99 뒤  모양
+      5941    1.449ms    1.542ms    +6.4%    7.424ms    7.168ms  COMMIT
+     15319    0.031ms    0.064ms  +105.6%    0.086ms    0.424ms  SELECT c FROM sbtest3 WHERE id=?
+     15140    0.031ms    0.058ms   +84.6%    0.078ms    0.312ms  SELECT c FROM sbtest4 WHERE id=?
+     14910    0.031ms    0.059ms   +90.5%    0.080ms    0.280ms  SELECT c FROM sbtest1 WHERE id=?
+     14040    0.031ms    0.056ms   +79.7%    0.080ms    0.320ms  SELECT c FROM sbtest2 WHERE id=?
+     23764    0.022ms    0.023ms    +1.9%    0.062ms    0.062ms  SELECT @@session.transaction_read_only
+      1501    0.084ms    0.429ms  +409.6%    0.560ms    2.432ms  UPDATE sbtest2 SET k=k+? WHERE id=?
+      1501    0.086ms    0.418ms  +385.0%    0.296ms    2.240ms  UPDATE sbtest4 SET k=k+? WHERE id=?
+      1456    0.083ms    0.379ms  +355.7%    0.328ms    3.200ms  UPDATE sbtest3 SET k=k+? WHERE id=?
+      1483    0.079ms    0.375ms  +376.2%    0.424ms    2.496ms  UPDATE sbtest1 SET k=k+? WHERE id=?
+      1457    0.046ms    0.376ms  +721.0%    0.110ms    2.048ms  INSERT INTO sbtest2 (id, k, c, pad) VALUES (?+)
+      1442    0.051ms    0.362ms  +607.4%    0.114ms    2.304ms  INSERT INTO sbtest4 (id, k, c, pad) VALUES (?+)
+      1539    0.054ms    0.316ms  +481.1%    0.110ms    2.240ms  INSERT INTO sbtest3 (id, k, c, pad) VALUES (?+)
+      1503    0.051ms    0.285ms  +463.3%    0.096ms    1.856ms  INSERT INTO sbtest1 (id, k, c, pad) VALUES (?+)
+      1511    0.131ms    0.195ms   +49.2%    0.200ms    0.960ms  SELECT DISTINCT c FROM sbtest3 WHERE id BETWEEN ? AND ? ORDER BY c

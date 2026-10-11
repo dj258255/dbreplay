@@ -1,0 +1,129 @@
+== 녹화 ==
+로그 항목 121104개를 읽어 문장 120482개, 연결 종료 12개를 썼다 (연결 20개)
+뺀 것: 재생에 쓰지 않는 항목 610, 머리에서 잘린 트랜잭션의 문장 0
+읽지 못한 항목 0, 같은 연결의 앞 문장보다 이르게 계산돼 시각을 맞춘 문장 1
+== 변경 전: 1배속 재생 ==
+name	file_mb
+sbtest/sbtest1	32.0
+sbtest/sbtest2	32.0
+sbtest/sbtest3	32.0
+sbtest/sbtest4	32.0
+문장 120482개를 연결 20개로 1.0배속에 틀었다
+걸린 시간: 30.61초 (원본 구간 30.60초를 배속으로 나누면 30.60초)
+오류: 원본 0개, 재생 0개
+계획보다 1.0ms 넘게 늦은 문장: 92506개 (76.78%)
+  재생기가 늦어서: 1.72%   <- 재생의 왜곡
+  같은 연결의 앞 문장이 안 끝나서: 75.06%   <- 문장의 왕복이 원본보다 오래 걸린 구간
+늦은 정도: 중앙값 1.472ms, p99 4.864ms, 최대 16.602ms
+실행 시간 중앙값: 원본 0.031ms, 재생 0.144ms
+실행 시간 p99:    원본 1.664ms, 재생 1.920ms
+== 변경 후(테이블 압축): 1배속 재생 ==
+name	file_mb
+sbtest/sbtest1	22.0
+sbtest/sbtest2	22.0
+sbtest/sbtest3	22.0
+sbtest/sbtest4	22.0
+문장 120482개를 연결 20개로 1.0배속에 틀었다
+걸린 시간: 30.61초 (원본 구간 30.60초를 배속으로 나누면 30.60초)
+오류: 원본 0개, 재생 0개
+계획보다 1.0ms 넘게 늦은 문장: 95088개 (78.92%)
+  재생기가 늦어서: 1.17%   <- 재생의 왜곡
+  같은 연결의 앞 문장이 안 끝나서: 77.75%   <- 문장의 왕복이 원본보다 오래 걸린 구간
+늦은 정도: 중앙값 1.600ms, p99 10.240ms, 최대 56.813ms
+실행 시간 중앙값: 원본 0.031ms, 재생 0.160ms
+실행 시간 p99:    원본 1.664ms, 재생 2.624ms
+== 비교: 원본 대 변경 전 재생 (재생이 원본과 같은가) ==
+전체: 문장 120482 → 120533개, 실패 0 → 0개
+      실행 시간 평균 0.111ms → 0.118ms, 중앙값 0.031ms → 0.037ms, p99 1.664ms → 1.728ms
+
+나빠진 SQL
+        횟수       평균 앞       평균 뒤       변화      p99 앞      p99 뒤  모양
+      1499    0.041ms    0.066ms   +59.9%    0.078ms    0.102ms  UPDATE sbtest1 SET c=? WHERE id=?
+      1501    0.045ms    0.068ms   +51.0%    0.076ms    0.120ms  UPDATE sbtest4 SET c=? WHERE id=?
+     14780    0.023ms    0.032ms   +37.3%    0.062ms    0.076ms  SELECT c FROM sbtest4 WHERE id=?
+
+좋아진 SQL
+        횟수       평균 앞       평균 뒤       변화      p99 앞      p99 뒤  모양
+      1509    0.063ms    0.045ms   -28.8%    0.160ms    0.080ms  INSERT INTO sbtest3 (id, k, c, pad) VALUES (?+)
+      6024    0.029ms    0.022ms   -23.2%    0.066ms    0.057ms  BEGIN
+      1469    0.097ms    0.079ms   -18.7%    0.272ms    0.368ms  UPDATE sbtest2 SET k=k+? WHERE id=?
+
+실행 시간을 많이 쓴 순서
+        횟수       평균 앞       평균 뒤       변화      p99 앞      p99 뒤  모양
+      6024    1.386ms    1.408ms    +1.6%    7.040ms    7.808ms  COMMIT
+     15330    0.023ms    0.032ms   +35.9%    0.061ms    0.074ms  SELECT c FROM sbtest3 WHERE id=?
+     15270    0.023ms    0.031ms   +34.4%    0.061ms    0.074ms  SELECT c FROM sbtest1 WHERE id=?
+     14860    0.024ms    0.032ms   +35.2%    0.060ms    0.078ms  SELECT c FROM sbtest2 WHERE id=?
+     14780    0.023ms    0.032ms   +37.3%    0.062ms    0.076ms  SELECT c FROM sbtest4 WHERE id=?
+      1566    0.126ms    0.131ms    +4.1%    0.192ms    0.200ms  SELECT DISTINCT c FROM sbtest2 WHERE id BETWEEN ? AND ? ORDER BY c
+      1503    0.126ms    0.133ms    +5.2%    0.192ms    0.204ms  SELECT DISTINCT c FROM sbtest3 WHERE id BETWEEN ? AND ? ORDER BY c
+      1485    0.125ms    0.134ms    +7.2%    0.180ms    0.192ms  SELECT DISTINCT c FROM sbtest1 WHERE id BETWEEN ? AND ? ORDER BY c
+      1470    0.125ms    0.132ms    +5.6%    0.200ms    0.196ms  SELECT DISTINCT c FROM sbtest4 WHERE id BETWEEN ? AND ? ORDER BY c
+      1530    0.097ms    0.116ms   +19.2%    0.248ms    1.632ms  UPDATE sbtest1 SET k=k+? WHERE id=?
+      6024    0.029ms    0.022ms   -23.2%    0.066ms    0.057ms  BEGIN
+      1458    0.086ms    0.099ms   +14.3%    0.392ms    0.336ms  UPDATE sbtest4 SET k=k+? WHERE id=?
+      1567    0.076ms    0.097ms   +28.3%    0.220ms    0.768ms  UPDATE sbtest3 SET k=k+? WHERE id=?
+      1550    0.084ms    0.087ms    +4.2%    0.132ms    0.136ms  SELECT c FROM sbtest4 WHERE id BETWEEN ? AND ? ORDER BY c
+      1469    0.097ms    0.079ms   -18.7%    0.272ms    0.368ms  UPDATE sbtest2 SET k=k+? WHERE id=?
+
+한쪽에만 있는 모양: 앞 0개, 뒤 3개
+== 비교: 변경 전 대 변경 후 ==
+전체: 문장 120533 → 120533개, 실패 0 → 0개
+      실행 시간 평균 0.118ms → 0.200ms, 중앙값 0.037ms → 0.047ms, p99 1.728ms → 2.432ms
+
+나빠진 SQL
+        횟수       평균 앞       평균 뒤       변화      p99 앞      p99 뒤  모양
+      1478    0.051ms    0.367ms  +614.0%    0.096ms    2.176ms  INSERT INTO sbtest1 (id, k, c, pad) VALUES (?+)
+      1509    0.045ms    0.318ms  +612.7%    0.080ms    1.888ms  INSERT INTO sbtest3 (id, k, c, pad) VALUES (?+)
+      1521    0.054ms    0.339ms  +523.2%    0.110ms    2.176ms  INSERT INTO sbtest4 (id, k, c, pad) VALUES (?+)
+
+좋아진 SQL
+  없음
+
+실행 시간을 많이 쓴 순서
+        횟수       평균 앞       평균 뒤       변화      p99 앞      p99 뒤  모양
+      6024    1.408ms    1.662ms   +18.1%    7.808ms    7.936ms  COMMIT
+     15270    0.031ms    0.064ms  +104.4%    0.074ms    0.368ms  SELECT c FROM sbtest1 WHERE id=?
+     14780    0.032ms    0.062ms   +91.5%    0.076ms    0.336ms  SELECT c FROM sbtest4 WHERE id=?
+     14860    0.032ms    0.061ms   +90.4%    0.078ms    0.400ms  SELECT c FROM sbtest2 WHERE id=?
+     15330    0.032ms    0.058ms   +82.1%    0.074ms    0.256ms  SELECT c FROM sbtest3 WHERE id=?
+      1567    0.097ms    0.421ms  +334.3%    0.768ms    2.560ms  UPDATE sbtest3 SET k=k+? WHERE id=?
+      1530    0.116ms    0.410ms  +253.4%    1.632ms    3.008ms  UPDATE sbtest1 SET k=k+? WHERE id=?
+      1469    0.079ms    0.447ms  +469.4%    0.368ms    4.224ms  UPDATE sbtest2 SET k=k+? WHERE id=?
+      1458    0.099ms    0.379ms  +283.6%    0.336ms    2.112ms  UPDATE sbtest4 SET k=k+? WHERE id=?
+      1516    0.061ms    0.373ms  +511.1%    0.100ms    2.752ms  INSERT INTO sbtest2 (id, k, c, pad) VALUES (?+)
+      1478    0.051ms    0.367ms  +614.0%    0.096ms    2.176ms  INSERT INTO sbtest1 (id, k, c, pad) VALUES (?+)
+      1521    0.054ms    0.339ms  +523.2%    0.110ms    2.176ms  INSERT INTO sbtest4 (id, k, c, pad) VALUES (?+)
+      1509    0.045ms    0.318ms  +612.7%    0.080ms    1.888ms  INSERT INTO sbtest3 (id, k, c, pad) VALUES (?+)
+      1566    0.131ms    0.198ms   +51.3%    0.200ms    0.720ms  SELECT DISTINCT c FROM sbtest2 WHERE id BETWEEN ? AND ? ORDER BY c
+      1485    0.134ms    0.201ms   +50.6%    0.192ms    0.864ms  SELECT DISTINCT c FROM sbtest1 WHERE id BETWEEN ? AND ? ORDER BY c
+== 용량 탐색: 변경 전 ==
+라운드          배속      계획(초)      실제(초)       늦음 p99     새 실패  판정
+1          1.00      30.60      30.61      4.864ms        0  버팀
+2          2.00      15.30      15.31    116.736ms        0  버팀
+3          4.00       7.65       7.65     25.600ms        0  버팀
+4          8.00       3.83       5.88   2031.616ms        0  과부하 (걸린 시간이 계획의 154%)
+5          6.00       5.10       5.36    344.064ms        0  과부하 (걸린 시간이 계획의 105%)
+6          5.00       6.12       6.12     46.080ms        0  버팀
+7          5.50       5.56       6.20    704.512ms        0  과부하 (걸린 시간이 계획의 111%)
+
+상한: 5.00배속 
+녹화 구간의 초당 문장 수 3937, 상한 19685
+수위: 20% (초당 3937 ÷ 상한 19685), 건강 구간 30~50% → 과잉
+용량을 지금의 0.40배까지 줄여도 수위가 50%를 넘지 않는다
+== 용량 탐색: 변경 후(테이블 압축) ==
+라운드          배속      계획(초)      실제(초)       늦음 p99     새 실패  판정
+1          1.00      30.60      30.61     11.008ms        0  버팀
+2          2.00      15.30      15.31     52.224ms        0  버팀
+3          4.00       7.65       7.65    225.280ms        0  버팀
+4          8.00       3.83       7.56   3670.016ms        0  과부하 (걸린 시간이 계획의 198%)
+5          6.00       5.10       7.00   1933.312ms        0  과부하 (걸린 시간이 계획의 137%)
+6          5.00       6.12       8.51   2424.832ms        0  과부하 (걸린 시간이 계획의 139%)
+7          4.50       6.80       8.40   1671.168ms        0  과부하 (걸린 시간이 계획의 124%)
+8          4.25       7.20       7.22    233.472ms        0  버팀
+
+상한: 4.25배속 
+녹화 구간의 초당 문장 수 3937, 상한 16732
+수위: 24% (초당 3937 ÷ 상한 16732), 건강 구간 30~50% → 과잉
+용량을 지금의 0.47배까지 줄여도 수위가 50%를 넘지 않는다
+exit=0
