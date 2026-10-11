@@ -19,7 +19,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 
 import io.dbreplay.convert.ConvertSummary;
-import io.dbreplay.explore.ActiveSessionSampler;
 import io.dbreplay.explore.Alarm;
 import io.dbreplay.explore.Evaluation;
 import io.dbreplay.explore.Explorer;
@@ -28,6 +27,9 @@ import io.dbreplay.explore.RoundJudge;
 import io.dbreplay.explore.TargetProfile;
 import io.dbreplay.explore.TrafficModel;
 import io.dbreplay.explore.WaterLevel;
+import io.dbreplay.metrics.CommandMetricSource;
+import io.dbreplay.metrics.DbMetricSource;
+import io.dbreplay.metrics.MetricSampler;
 import io.dbreplay.mysql.SlowLogConverter;
 import io.dbreplay.postgres.CsvLogConverter;
 import io.dbreplay.replay.JdbcTarget;
@@ -45,14 +47,15 @@ public final class Main {
 
 			  dbreplay replay  --trace <트래픽 파일> --url <JDBC URL> --user <계정> [--password <암호>]
 			                   [--speed 1] [--unit transaction|statement|session] [--max-connections 500]
-			                   [--out <결과 파일>]
+			                   [--out <결과 파일>] [--metrics on] [지표 옵션]
 
 			  dbreplay compare --before <트래픽 파일> --after <트래픽 파일> [--top 3] [--min-count 100]
 
 			  dbreplay explore --trace <트래픽 파일> --url <JDBC URL> --user <계정> [--password <암호>]
 			                   --reset-command <데이터 되돌리기 명령>
-			                   [--alarm-command <알람 확인 명령>] [--alarm-active-sessions <개수>]
-			                   [--alarm-sustain 3] [--sample-ms 200] [--max-distortion 0.2]
+			                   [--alarm-command <알람 확인 명령>] [--alarm-metric <이름>=<값>,...]
+			                   [--alarm-active-sessions <개수>] [--alarm-sustain 3] [--max-distortion 0.2]
+			                   [지표 옵션]
 			                   [--unit transaction|statement|session] [--max-connections 500]
 			                   [--start-speed 1] [--max-speed 64] [--precision 0.1]
 			                   [--current-qps <지금의 초당 문장 수>] [--level-low 0.3] [--level-high 0.5]
@@ -62,6 +65,16 @@ public final class Main {
 			                   [--trace <지금의 트래픽 파일>] [--max-traffic-distance 0.2]
 			                   [explore에 줬던 알람 옵션]
 
+			  dbreplay sample  --url <JDBC URL> --user <계정> [--password <암호>] --seconds <초> [지표 옵션]
+			                   녹화하는 동안 운영 쪽의 부하 지표를 떠 둘 때 쓴다
+
+			지표 옵션:
+			  --sample-ms 200            DB에서 지표를 뜨는 간격. active_sessions(실행 중인 연결)와
+			                             slow_running(실행 중이면서 --slow-ms를 넘긴 문장)을 뜬다
+			  --slow-ms 100              실행 중인 문장을 느리다고 볼 기준 시간
+			  --metric-command <명령>    DB 접속으로 못 읽는 지표(CPU, Load Average)를 받는다.
+			                             한 줄에 '이름 값'을 내는 명령을 --metric-command-ms(기본 1000)마다 실행한다
+
 			재생 단위(--unit):
 			  transaction  트랜잭션 하나가 한 단위다. 주 DB의 트래픽에 쓴다 (기본)
 			  statement    문장 하나가 한 단위다. 종 DB의 읽기 트래픽에 쓴다
@@ -70,7 +83,9 @@ public final class Main {
 			과부하는 알람으로 판정한다. explore에는 알람이 하나는 있어야 한다.
 			  --alarm-command          라운드가 끝날 때 sh -c로 실행한다. 0이 아닌 값으로 끝나면 알람이 울린 것이다.
 			                           DBREPLAY_ROUND_START, DBREPLAY_ROUND_END(에포크 초), DBREPLAY_SPEED를 환경 변수로 받는다
-			  --alarm-active-sessions  대상에서 실행 중인 연결 수가 이 값 이상으로 --alarm-sustain번 연속 떠지면 울린다
+			  --alarm-metric           지표가 값 이상으로 --alarm-sustain번 연속 떠지면 울린다.
+			                           예: active_sessions>=32,load1>=8. 지표 명령이 내는 이름도 쓸 수 있다
+			  --alarm-active-sessions  --alarm-metric active_sessions>=<개수>와 같다
 
 			암호는 --password 대신 환경 변수 DBREPLAY_PASSWORD로 줄 수 있다.
 			compare의 두 파일은 재생할 때 대상의 로그를 켜서 얻은 것이어야 한다. 원본 로그와 재생 로그는 같은 자가 아니다.
@@ -95,6 +110,7 @@ public final class Main {
 			case "compare" -> compare(options);
 			case "explore" -> explore(options);
 			case "check" -> check(options);
+			case "sample" -> sample(options);
 			default -> usage();
 		}
 	}
@@ -119,13 +135,16 @@ public final class Main {
 		}
 	}
 
-	private static void replay(Map<String, String> options) throws IOException {
+	private static void replay(Map<String, String> options) throws Exception {
 		JdbcTarget target = target(options);
 		Replayer.Options replayOptions = replayOptions(options, number(options, "--speed", 1));
 		String out = options.get("--out");
 
+		boolean withMetrics = options.getOrDefault("--metrics", "off").equals("on") || options.containsKey("--metric-command");
 		ReplaySummary s;
-		try (TraceReader trace = openTrace(required(options, "--trace"))) {
+		Map<String, double[]> metrics = Map.of();
+		try (MetricSampler sampler = withMetrics ? sampler(target, options) : new MetricSampler();
+				TraceReader trace = openTrace(required(options, "--trace"))) {
 			if (out == null) {
 				s = Replayer.run(trace, target, result -> { }, replayOptions);
 			}
@@ -134,8 +153,42 @@ public final class Main {
 					s = Replayer.run(trace, target, results, replayOptions);
 				}
 			}
+			metrics = sampler.stop();
 		}
 		print(s, replayOptions);
+		printMetrics(metrics);
+	}
+
+	private static void sample(Map<String, String> options) throws Exception {
+		JdbcTarget target = target(options);
+		long seconds = (long) number(options, "--seconds", 30);
+		Map<String, double[]> metrics;
+		try (MetricSampler sampler = sampler(target, options)) {
+			Thread.sleep(seconds * 1_000);
+			metrics = sampler.stop();
+		}
+		System.out.printf("%d초 동안 뜬 지표%n", seconds);
+		printMetrics(metrics);
+	}
+
+	private static MetricSampler sampler(JdbcTarget target, Map<String, String> options) throws Exception {
+		MetricSampler sampler = new MetricSampler()
+				.add(new DbMetricSource(target, (long) number(options, "--slow-ms", 100)), (long) number(options, "--sample-ms", 200));
+		if (options.containsKey("--metric-command")) {
+			sampler.add(new CommandMetricSource(options.get("--metric-command")), (long) number(options, "--metric-command-ms", 1_000));
+		}
+		return sampler;
+	}
+
+	private static void printMetrics(Map<String, double[]> metrics) {
+		if (metrics.isEmpty()) {
+			return;
+		}
+		System.out.printf("%n%-20s %8s %10s %10s %10s%n", "지표", "표본 수", "최소", "평균", "최대");
+		metrics.forEach((name, values) -> {
+			var stats = java.util.Arrays.stream(values).summaryStatistics();
+			System.out.printf("%-20s %8d %10.2f %10.2f %10.2f%n", name, values.length, stats.getMin(), stats.getAverage(), stats.getMax());
+		});
 	}
 
 	private static void compare(Map<String, String> options) throws IOException {
@@ -182,7 +235,6 @@ public final class Main {
 		String resetCommand = required(options, "--reset-command");
 		Map<String, String> alarmSettings = alarmSettings(options);
 		RoundJudge judge = judge(options);
-		long sampleMillis = (long) number(options, "--sample-ms", 200);
 		Explorer.Options defaults = Explorer.Options.defaults();
 		Explorer.Options exploreOptions = new Explorer.Options(
 				number(options, "--start-speed", defaults.startSpeed()),
@@ -201,13 +253,12 @@ public final class Main {
 			run(resetCommand);
 			long started = System.currentTimeMillis();
 			ReplaySummary s;
-			int[] samples;
-			try (ActiveSessionSampler sampler = new ActiveSessionSampler(target, sampleMillis);
-					TraceReader trace = openTrace(tracePath)) {
+			Map<String, double[]> metrics;
+			try (MetricSampler sampler = sampler(target, options); TraceReader trace = openTrace(tracePath)) {
 				s = Replayer.run(trace, target, r -> { }, replayOptions(options, speed));
-				samples = sampler.stop();
+				metrics = sampler.stop();
 			}
-			return new RoundData(speed, started, System.currentTimeMillis(), s, samples);
+			return new RoundData(speed, started, System.currentTimeMillis(), s, metrics);
 		}, judge, exploreOptions, round -> {
 			ReplaySummary s = round.data().summary();
 			System.out.printf("%-6d %7.2f %9.2f %9.2f %10s %8.1f%% %9d  %s%n", round.number(), round.speed(),
@@ -219,6 +270,20 @@ public final class Main {
 						case DISTORTED -> "왜곡: " + round.verdict().reason();
 					});
 		});
+
+		System.out.printf("%n라운드별 지표 (평균 / 최대)%n");
+		java.util.Set<String> names = new java.util.TreeSet<>();
+		result.rounds().forEach(r -> names.addAll(r.data().metrics().keySet()));
+		System.out.printf("%-6s %7s", "라운드", "배속");
+		names.forEach(n -> System.out.printf(" %22s", n));
+		System.out.println();
+		for (Explorer.Round r : result.rounds()) {
+			System.out.printf("%-6d %7.2f", r.number(), r.speed());
+			for (String n : names) {
+				System.out.printf(" %22s", String.format("%.1f / %.1f", r.data().mean(n), r.data().max(n)));
+			}
+			System.out.println();
+		}
 
 		System.out.println();
 		if (result.ceilingSpeed() == 0) {
@@ -298,13 +363,14 @@ public final class Main {
 	/** 평가 파일에 적어 두고 나중에 바뀌었는지 볼 알람 설정. */
 	private static Map<String, String> alarmSettings(Map<String, String> options) {
 		Map<String, String> settings = new TreeMap<>();
-		for (String name : List.of("--alarm-command", "--alarm-active-sessions")) {
+		for (String name : List.of("--alarm-command", "--alarm-metric", "--alarm-active-sessions")) {
 			if (options.containsKey(name)) {
 				settings.put(name.substring(2), options.get(name));
 			}
 		}
-		if (options.containsKey("--alarm-active-sessions")) {
+		if (options.containsKey("--alarm-active-sessions") || options.containsKey("--alarm-metric")) {
 			settings.put("alarm-sustain", options.getOrDefault("--alarm-sustain", "3"));
+			settings.put("slow-ms", options.getOrDefault("--slow-ms", "100"));
 		}
 		return settings;
 	}
@@ -314,12 +380,15 @@ public final class Main {
 		if (options.containsKey("--alarm-command")) {
 			alarms.add(Alarm.command(options.get("--alarm-command")));
 		}
+		int sustain = (int) number(options, "--alarm-sustain", 3);
 		if (options.containsKey("--alarm-active-sessions")) {
-			alarms.add(Alarm.activeSessions((int) number(options, "--alarm-active-sessions", 0),
-					(int) number(options, "--alarm-sustain", 3)));
+			alarms.add(Alarm.metric(DbMetricSource.ACTIVE_SESSIONS, number(options, "--alarm-active-sessions", 0), sustain));
+		}
+		if (options.containsKey("--alarm-metric")) {
+			alarms.addAll(Alarm.metrics(options.get("--alarm-metric"), sustain));
 		}
 		if (alarms.isEmpty()) {
-			System.err.println("과부하는 알람으로 판정한다. --alarm-command나 --alarm-active-sessions를 줘야 한다");
+			System.err.println("과부하는 알람으로 판정한다. --alarm-command, --alarm-metric, --alarm-active-sessions 중 하나는 줘야 한다");
 			System.exit(2);
 		}
 		return new RoundJudge(alarms, number(options, "--max-distortion", 0.2));
