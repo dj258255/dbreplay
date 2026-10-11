@@ -1,0 +1,403 @@
+package io.dbreplay.cli;
+
+import java.io.IOException;
+import java.io.Reader;
+import java.io.Writer;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.TreeMap;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+
+import io.dbreplay.convert.ConvertSummary;
+import io.dbreplay.explore.ActiveSessionSampler;
+import io.dbreplay.explore.Alarm;
+import io.dbreplay.explore.Evaluation;
+import io.dbreplay.explore.Explorer;
+import io.dbreplay.explore.RoundData;
+import io.dbreplay.explore.RoundJudge;
+import io.dbreplay.explore.TargetProfile;
+import io.dbreplay.explore.TrafficModel;
+import io.dbreplay.explore.WaterLevel;
+import io.dbreplay.mysql.SlowLogConverter;
+import io.dbreplay.postgres.CsvLogConverter;
+import io.dbreplay.replay.JdbcTarget;
+import io.dbreplay.replay.ReplaySummary;
+import io.dbreplay.replay.Replayer;
+import io.dbreplay.replay.ResultWriter;
+import io.dbreplay.report.TraceComparison;
+import io.dbreplay.trace.TraceReader;
+
+public final class Main {
+
+	private static final String USAGE = """
+			사용법:
+			  dbreplay convert --in <서버 로그> --out <트래픽 파일> [--from mysql-slow|postgres-csv]
+
+			  dbreplay replay  --trace <트래픽 파일> --url <JDBC URL> --user <계정> [--password <암호>]
+			                   [--speed 1] [--unit transaction|statement|session] [--max-connections 500]
+			                   [--out <결과 파일>]
+
+			  dbreplay compare --before <트래픽 파일> --after <트래픽 파일> [--top 3] [--min-count 100]
+
+			  dbreplay explore --trace <트래픽 파일> --url <JDBC URL> --user <계정> [--password <암호>]
+			                   --reset-command <데이터 되돌리기 명령>
+			                   [--alarm-command <알람 확인 명령>] [--alarm-active-sessions <개수>]
+			                   [--alarm-sustain 3] [--sample-ms 200] [--max-distortion 0.2]
+			                   [--unit transaction|statement|session] [--max-connections 500]
+			                   [--start-speed 1] [--max-speed 64] [--precision 0.1]
+			                   [--current-qps <지금의 초당 문장 수>] [--level-low 0.3] [--level-high 0.5]
+			                   [--out <평가 파일>] [--valid-days 30]
+
+			  dbreplay check   --evaluation <평가 파일> --url <JDBC URL> --user <계정> [--password <암호>]
+			                   [--trace <지금의 트래픽 파일>] [--max-traffic-distance 0.2]
+			                   [explore에 줬던 알람 옵션]
+
+			재생 단위(--unit):
+			  transaction  트랜잭션 하나가 한 단위다. 주 DB의 트래픽에 쓴다 (기본)
+			  statement    문장 하나가 한 단위다. 종 DB의 읽기 트래픽에 쓴다
+			  session      원본의 연결을 그대로 옮긴다. 세션 상태에 기대는 트래픽에 쓴다
+
+			과부하는 알람으로 판정한다. explore에는 알람이 하나는 있어야 한다.
+			  --alarm-command          라운드가 끝날 때 sh -c로 실행한다. 0이 아닌 값으로 끝나면 알람이 울린 것이다.
+			                           DBREPLAY_ROUND_START, DBREPLAY_ROUND_END(에포크 초), DBREPLAY_SPEED를 환경 변수로 받는다
+			  --alarm-active-sessions  대상에서 실행 중인 연결 수가 이 값 이상으로 --alarm-sustain번 연속 떠지면 울린다
+
+			암호는 --password 대신 환경 변수 DBREPLAY_PASSWORD로 줄 수 있다.
+			compare의 두 파일은 재생할 때 대상의 로그를 켜서 얻은 것이어야 한다. 원본 로그와 재생 로그는 같은 자가 아니다.
+			""";
+
+	private static final ObjectMapper JSON = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
+
+	private Main() {
+	}
+
+	public static void main(String[] args) throws Exception {
+		if (args.length == 0 || args.length % 2 == 0) {
+			usage();
+		}
+		Map<String, String> options = new HashMap<>();
+		for (int i = 1; i < args.length; i += 2) {
+			options.put(args[i], args[i + 1]);
+		}
+		switch (args[0]) {
+			case "convert" -> convert(options);
+			case "replay" -> replay(options);
+			case "compare" -> compare(options);
+			case "explore" -> explore(options);
+			case "check" -> check(options);
+			default -> usage();
+		}
+	}
+
+	private static void convert(Map<String, String> options) throws IOException {
+		String from = options.getOrDefault("--from", "mysql-slow");
+		ConvertSummary s;
+		try (Reader reader = Files.newBufferedReader(Path.of(required(options, "--in")), StandardCharsets.UTF_8);
+				Writer writer = Files.newBufferedWriter(Path.of(required(options, "--out")), StandardCharsets.UTF_8)) {
+			s = switch (from) {
+				case "mysql-slow" -> SlowLogConverter.convert(reader, writer);
+				case "postgres-csv" -> CsvLogConverter.convert(reader, writer);
+				default -> throw new IllegalArgumentException("모르는 로그 종류: " + from);
+			};
+		}
+		System.out.printf("로그 항목 %d개를 읽어 문장 %d개, 연결 종료 %d개를 썼다 (연결 %d개)%n",
+				s.entries(), s.statements(), s.closes(), s.sessions());
+		System.out.printf("뺀 것: 재생에 쓰지 않는 항목 %d, 머리에서 잘린 트랜잭션의 문장 %d%n", s.ignored(), s.droppedHead());
+		if (s.skipped() > 0 || s.clamped() > 0) {
+			// 시각을 맞춘 문장은 밀리초 단위로 찍는 PostgreSQL 로그에서는 흔하다. 한 연결 안의 순서는 그대로다
+			System.out.printf("읽지 못한 항목 %d, 같은 연결의 앞 문장보다 이르게 계산돼 시각을 맞춘 문장 %d%n", s.skipped(), s.clamped());
+		}
+	}
+
+	private static void replay(Map<String, String> options) throws IOException {
+		JdbcTarget target = target(options);
+		Replayer.Options replayOptions = replayOptions(options, number(options, "--speed", 1));
+		String out = options.get("--out");
+
+		ReplaySummary s;
+		try (TraceReader trace = openTrace(required(options, "--trace"))) {
+			if (out == null) {
+				s = Replayer.run(trace, target, result -> { }, replayOptions);
+			}
+			else {
+				try (ResultWriter results = new ResultWriter(Files.newBufferedWriter(Path.of(out), StandardCharsets.UTF_8))) {
+					s = Replayer.run(trace, target, results, replayOptions);
+				}
+			}
+		}
+		print(s, replayOptions);
+	}
+
+	private static void compare(Map<String, String> options) throws IOException {
+		int top = (int) number(options, "--top", 3);
+		long minCount = (long) number(options, "--min-count", 100);
+		TraceComparison c;
+		try (TraceReader before = openTrace(required(options, "--before"));
+				TraceReader after = openTrace(required(options, "--after"))) {
+			c = TraceComparison.of(before, after);
+		}
+		TraceComparison.Side b = c.totalBefore();
+		TraceComparison.Side a = c.totalAfter();
+		System.out.printf("전체: 문장 %d → %d개, 실패 %d → %d개%n", b.count(), a.count(), b.errors(), a.errors());
+		System.out.printf("      실행 시간 평균 %s → %s, 중앙값 %s → %s, p99 %s → %s%n",
+				ms(b.meanMicros()), ms(a.meanMicros()), ms(b.quantile(0.5)), ms(a.quantile(0.5)),
+				ms(b.quantile(0.99)), ms(a.quantile(0.99)));
+
+		printRows("나빠진 SQL", c.worst(top, minCount));
+		printRows("좋아진 SQL", c.best(top, minCount));
+		printRows("실행 시간을 많이 쓴 순서", c.rows(minCount).stream().limit(15).toList());
+		if (!c.onlyBefore().isEmpty() || !c.onlyAfter().isEmpty()) {
+			System.out.printf("%n한쪽에만 있는 모양: 앞 %d개, 뒤 %d개%n", c.onlyBefore().size(), c.onlyAfter().size());
+		}
+	}
+
+	private static void printRows(String title, List<TraceComparison.Row> rows) {
+		System.out.printf("%n%s%n", title);
+		if (rows.isEmpty()) {
+			System.out.println("  없음");
+			return;
+		}
+		System.out.printf("  %8s %10s %10s %8s %10s %10s  %s%n", "횟수", "평균 앞", "평균 뒤", "변화", "p99 앞", "p99 뒤", "모양");
+		for (TraceComparison.Row r : rows) {
+			String shape = r.shape().length() > 90 ? r.shape().substring(0, 87) + "..." : r.shape();
+			System.out.printf("  %8d %10s %10s %+7.1f%% %10s %10s  %s%n", r.after().count(),
+					ms(r.before().meanMicros()), ms(r.after().meanMicros()), (r.ratio() - 1) * 100,
+					ms(r.before().quantile(0.99)), ms(r.after().quantile(0.99)), shape);
+		}
+	}
+
+	private static void explore(Map<String, String> options) throws Exception {
+		JdbcTarget target = target(options);
+		String tracePath = required(options, "--trace");
+		String resetCommand = required(options, "--reset-command");
+		Map<String, String> alarmSettings = alarmSettings(options);
+		RoundJudge judge = judge(options);
+		long sampleMillis = (long) number(options, "--sample-ms", 200);
+		Explorer.Options defaults = Explorer.Options.defaults();
+		Explorer.Options exploreOptions = new Explorer.Options(
+				number(options, "--start-speed", defaults.startSpeed()),
+				number(options, "--max-speed", defaults.maxSpeed()),
+				number(options, "--precision", defaults.precision()),
+				defaults.maxRounds());
+
+		TrafficModel traffic;
+		try (TraceReader trace = openTrace(tracePath)) {
+			traffic = TrafficModel.of(trace);
+		}
+
+		System.out.printf("%-6s %7s %9s %9s %10s %9s %9s  %s%n",
+				"라운드", "배속", "계획(초)", "실제(초)", "늦음 p99", "왜곡", "실행 중", "판정");
+		Explorer.Result result = Explorer.explore(speed -> {
+			run(resetCommand);
+			long started = System.currentTimeMillis();
+			ReplaySummary s;
+			int[] samples;
+			try (ActiveSessionSampler sampler = new ActiveSessionSampler(target, sampleMillis);
+					TraceReader trace = openTrace(tracePath)) {
+				s = Replayer.run(trace, target, r -> { }, replayOptions(options, speed));
+				samples = sampler.stop();
+			}
+			return new RoundData(speed, started, System.currentTimeMillis(), s, samples);
+		}, judge, exploreOptions, round -> {
+			ReplaySummary s = round.data().summary();
+			System.out.printf("%-6d %7.2f %9.2f %9.2f %10s %8.1f%% %9d  %s%n", round.number(), round.speed(),
+					s.traceSpanMicros() / round.speed() / 1e6, s.elapsedMicros() / 1e6, ms(s.lag().quantile(0.99)),
+					s.replayerLateRatio() * 100, round.data().maxActiveSessions(),
+					switch (round.verdict().state()) {
+						case HELD -> "버팀";
+						case OVERLOADED -> "과부하: " + round.verdict().reason();
+						case DISTORTED -> "왜곡: " + round.verdict().reason();
+					});
+		});
+
+		System.out.println();
+		if (result.ceilingSpeed() == 0) {
+			System.out.printf("상한: %.2f배속에서도 버티지 못했다. 녹화한 부하보다 낮다%n", exploreOptions.startSpeed());
+			return;
+		}
+		System.out.printf("상한: %.2f배속%s%n", result.ceilingSpeed(), result.stoppedBy() == null
+				? " 이상 (이 배속까지 알람이 울리지 않았다)"
+				: result.stoppedBy() == RoundJudge.State.DISTORTED
+						? " 이상 (그 위는 재생기가 내지 못해 대상의 한계를 보지 못했다)"
+						: "");
+		double ceilingQps = traffic.qps() * result.ceilingSpeed();
+		double currentQps = number(options, "--current-qps", traffic.qps());
+		WaterLevel level = new WaterLevel(currentQps, ceilingQps,
+				number(options, "--level-low", 0.30), number(options, "--level-high", 0.50));
+		printLevel(level, traffic.qps());
+
+		String out = options.get("--out");
+		if (out != null) {
+			Evaluation evaluation = new Evaluation(Instant.now().truncatedTo(ChronoUnit.SECONDS).toString(),
+					(int) number(options, "--valid-days", 30), TargetProfile.read(target), alarmSettings,
+					unit(options).name().toLowerCase(Locale.ROOT), traffic, result.ceilingSpeed(),
+					result.stoppedBy() == null ? null : result.stoppedBy().name(), ceilingQps, currentQps,
+					level.low(), level.high());
+			JSON.writeValue(Path.of(out).toFile(), evaluation);
+			System.out.printf("평가를 %s에 적었다. %d일 동안 유효하다%n", out, evaluation.validDays());
+		}
+	}
+
+	private static void printLevel(WaterLevel level, double recordedQps) {
+		System.out.printf("녹화 구간의 초당 문장 수 %.0f, 상한 %.0f%n", recordedQps, level.ceilingQps());
+		System.out.printf("수위: %.0f%% (초당 %.0f ÷ 상한 %.0f), 건강 구간 %.0f~%.0f%% → %s%n",
+				level.level() * 100, level.currentQps(), level.ceilingQps(), level.low() * 100, level.high() * 100,
+				switch (level.verdict()) {
+					case SURPLUS -> "과잉";
+					case HEALTHY -> "적정";
+					case SHORT -> "부족";
+				});
+		switch (level.verdict()) {
+			case SHORT -> System.out.printf("수위를 %.0f%%로 내리려면 용량이 지금의 %.2f배 필요하다%n",
+					level.high() * 100, level.capacityFactor());
+			case SURPLUS -> System.out.printf("용량을 지금의 %.2f배까지 줄여도 수위가 %.0f%%를 넘지 않는다%n",
+					level.capacityFactor(), level.high() * 100);
+			case HEALTHY -> { }
+		}
+	}
+
+	private static void check(Map<String, String> options) throws Exception {
+		Evaluation evaluation = JSON.readValue(Path.of(required(options, "--evaluation")).toFile(), Evaluation.class);
+		JdbcTarget target = target(options);
+		TrafficModel current = null;
+		String tracePath = options.get("--trace");
+		if (tracePath != null) {
+			try (TraceReader trace = openTrace(tracePath)) {
+				current = TrafficModel.of(trace);
+			}
+		}
+		List<String> reasons = evaluation.invalidReasons(Instant.now(), TargetProfile.read(target),
+				alarmSettings(options), current, number(options, "--max-traffic-distance", 0.2));
+
+		System.out.printf("평가: %s, 상한 %.2f배속 (초당 %.0f문장), 수위 %.0f%%%n", evaluation.evaluatedAt(),
+				evaluation.ceilingSpeed(), evaluation.ceilingQps(), evaluation.level().level() * 100);
+		if (reasons.isEmpty()) {
+			System.out.println("유효하다");
+		}
+		else {
+			System.out.println("무효다. 다시 평가해야 한다");
+			reasons.forEach(r -> System.out.println("  - " + r));
+		}
+		System.out.println("하드웨어 사양은 DB 접속으로 알 수 없어 확인하지 않았다"
+				+ (current == null ? ". 트래픽 모양은 --trace를 주지 않아 확인하지 않았다" : ""));
+		if (!reasons.isEmpty()) {
+			System.exit(1);
+		}
+	}
+
+	/** 평가 파일에 적어 두고 나중에 바뀌었는지 볼 알람 설정. */
+	private static Map<String, String> alarmSettings(Map<String, String> options) {
+		Map<String, String> settings = new TreeMap<>();
+		for (String name : List.of("--alarm-command", "--alarm-active-sessions")) {
+			if (options.containsKey(name)) {
+				settings.put(name.substring(2), options.get(name));
+			}
+		}
+		if (options.containsKey("--alarm-active-sessions")) {
+			settings.put("alarm-sustain", options.getOrDefault("--alarm-sustain", "3"));
+		}
+		return settings;
+	}
+
+	private static RoundJudge judge(Map<String, String> options) {
+		List<Alarm> alarms = new ArrayList<>();
+		if (options.containsKey("--alarm-command")) {
+			alarms.add(Alarm.command(options.get("--alarm-command")));
+		}
+		if (options.containsKey("--alarm-active-sessions")) {
+			alarms.add(Alarm.activeSessions((int) number(options, "--alarm-active-sessions", 0),
+					(int) number(options, "--alarm-sustain", 3)));
+		}
+		if (alarms.isEmpty()) {
+			System.err.println("과부하는 알람으로 판정한다. --alarm-command나 --alarm-active-sessions를 줘야 한다");
+			System.exit(2);
+		}
+		return new RoundJudge(alarms, number(options, "--max-distortion", 0.2));
+	}
+
+	private static void run(String command) throws IOException, InterruptedException {
+		Process process = new ProcessBuilder("sh", "-c", command).redirectErrorStream(true)
+				.redirectOutput(ProcessBuilder.Redirect.DISCARD).start();
+		int exit = process.waitFor();
+		if (exit != 0) {
+			throw new IOException("되돌리기 명령이 실패했다 (종료 코드 " + exit + "): " + command);
+		}
+	}
+
+	private static void print(ReplaySummary s, Replayer.Options options) {
+		double planned = s.traceSpanMicros() / s.speed();
+		System.out.printf("문장 %d개를 연결 %d개로 %.1f배속에 틀었다 (단위: %s)%n", s.statements(), s.sessions(), s.speed(),
+				switch (options.unit()) {
+					case TRANSACTION -> "트랜잭션";
+					case STATEMENT -> "문장";
+					case SESSION -> "연결";
+				});
+		if (s.skipped() > 0) {
+			System.out.printf("건너뛴 문장: %d개 (연결을 돌려 쓸 때 뜻이 없는 세션 설정과 트랜잭션 제어)%n", s.skipped());
+		}
+		System.out.printf("걸린 시간: %.2f초 (원본 구간 %.2f초를 배속으로 나누면 %.2f초)%n",
+				s.elapsedMicros() / 1e6, s.traceSpanMicros() / 1e6, planned / 1e6);
+		System.out.printf("오류: 원본 %d개, 재생 %d개%n", s.origErrors(), s.errors());
+		System.out.printf("계획보다 %.1fms 넘게 늦은 문장: %d개 (%.2f%%)%n",
+				options.lateThresholdMicros() / 1e3, s.late(), s.statements() == 0 ? 0 : 100.0 * s.late() / s.statements());
+		System.out.printf("  재생기가 늦어서: %.2f%%   <- 재생의 왜곡%n", s.replayerLateRatio() * 100);
+		System.out.printf("  같은 단위의 앞 문장이 안 끝나서: %.2f%%   <- 문장의 왕복이 원본보다 오래 걸린 구간%n", s.sessionBusyRatio() * 100);
+		System.out.printf("늦은 정도: 중앙값 %s, p99 %s, 최대 %s%n",
+				ms(s.lag().quantile(0.5)), ms(s.lag().quantile(0.99)), ms(s.lag().max()));
+		System.out.printf("실행 시간 중앙값: 원본 %s, 재생 %s%n",
+				ms(s.origDuration().quantile(0.5)), ms(s.duration().quantile(0.5)));
+		System.out.printf("실행 시간 p99:    원본 %s, 재생 %s%n",
+				ms(s.origDuration().quantile(0.99)), ms(s.duration().quantile(0.99)));
+	}
+
+	private static Replayer.Options replayOptions(Map<String, String> options, double speed) {
+		Replayer.Options defaults = Replayer.Options.atSpeed(speed);
+		return defaults.withUnit(unit(options))
+				.withMaxConnections((int) number(options, "--max-connections", defaults.maxConnections()));
+	}
+
+	private static Replayer.Unit unit(Map<String, String> options) {
+		return Replayer.Unit.valueOf(options.getOrDefault("--unit", "transaction").toUpperCase(Locale.ROOT));
+	}
+
+	private static JdbcTarget target(Map<String, String> options) {
+		String password = options.getOrDefault("--password", System.getenv().getOrDefault("DBREPLAY_PASSWORD", ""));
+		return new JdbcTarget(required(options, "--url"), required(options, "--user"), password);
+	}
+
+	private static TraceReader openTrace(String path) throws IOException {
+		return new TraceReader(Files.newBufferedReader(Path.of(path), StandardCharsets.UTF_8));
+	}
+
+	private static double number(Map<String, String> options, String name, double fallback) {
+		String value = options.get(name);
+		return value == null ? fallback : Double.parseDouble(value);
+	}
+
+	private static String ms(double micros) {
+		return String.format("%.3fms", micros / 1e3);
+	}
+
+	private static String required(Map<String, String> options, String name) {
+		String value = options.get(name);
+		if (value == null) {
+			usage();
+		}
+		return value;
+	}
+
+	private static void usage() {
+		System.err.print(USAGE);
+		System.exit(2);
+	}
+}
