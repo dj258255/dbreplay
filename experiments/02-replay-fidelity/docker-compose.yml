@@ -1,0 +1,24 @@
+# 실험 02: 녹화한 트래픽을 같은 서버에 다시 틀어 재생이 원본과 얼마나 같은지 본다.
+name: dbreplay-exp02
+
+services:
+  mysql84:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: replay
+      MYSQL_DATABASE: sbtest
+    command:
+      - --slow-query-log=OFF
+      - --long-query-time=0
+      - --log-output=FILE
+      - --slow-query-log-file=/var/lib/mysql/slow.log
+      - --log-slow-extra=ON
+      - --log-slow-admin-statements=ON
+      - --max-connections=1000
+    ports:
+      - "127.0.0.1:33085:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-uroot", "-preplay", "--silent"]
+      interval: 2s
+      timeout: 2s
+      retries: 60
