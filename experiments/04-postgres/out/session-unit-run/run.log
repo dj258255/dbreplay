@@ -1,0 +1,92 @@
+== 녹화 ==
+로그 항목 82555개를 읽어 문장 41234개, 연결 종료 27개를 썼다 (연결 27개)
+뺀 것: 재생에 쓰지 않는 항목 41294, 머리에서 잘린 트랜잭션의 문장 0
+주의: 읽지 못한 항목 0, 시각을 당겨 맞춘 문장 20039
+== 변경 전: 1배속 재생 ==
+문장 41234개를 연결 27개로 1.0배속에 틀었다
+걸린 시간: 31.36초 (원본 구간 31.35초를 배속으로 나누면 31.35초)
+오류: 원본 0개, 재생 0개
+계획보다 1.0ms 넘게 늦은 문장: 23348개 (56.62%)
+  재생기가 늦어서: 5.44%   <- 재생의 왜곡
+  같은 연결의 앞 문장이 안 끝나서: 51.18%   <- 문장의 왕복이 원본보다 오래 걸린 구간
+늦은 정도: 중앙값 1.120ms, p99 7.552ms, 최대 29.144ms
+실행 시간 중앙값: 원본 0.028ms, 재생 0.264ms
+실행 시간 p99:    원본 1.152ms, 재생 1.376ms
+== 변경 후(synchronous_commit=off): 1배속 재생 ==
+문장 41234개를 연결 27개로 1.0배속에 틀었다
+걸린 시간: 31.36초 (원본 구간 31.35초를 배속으로 나누면 31.35초)
+오류: 원본 0개, 재생 0개
+계획보다 1.0ms 넘게 늦은 문장: 33022개 (80.08%)
+  재생기가 늦어서: 10.65%   <- 재생의 왜곡
+  같은 연결의 앞 문장이 안 끝나서: 69.43%   <- 문장의 왕복이 원본보다 오래 걸린 구간
+늦은 정도: 중앙값 1.824ms, p99 9.472ms, 최대 22.037ms
+실행 시간 중앙값: 원본 0.028ms, 재생 0.264ms
+실행 시간 p99:    원본 1.152ms, 재생 1.312ms
+== 비교: 원본 대 변경 전 재생 (재생이 원본과 같은가) ==
+전체: 문장 41234 → 41261개, 실패 0 → 0개
+      실행 시간 평균 0.132ms → 0.126ms, 중앙값 0.028ms → 0.055ms, p99 1.152ms → 0.960ms
+
+나빠진 SQL
+        횟수       평균 앞       평균 뒤       변화      p99 앞      p99 뒤  모양
+      5890    0.013ms    0.058ms  +337.5%    0.056ms    0.196ms  SELECT abalance FROM pgbench_accounts WHERE aid = ?
+      5890    0.006ms    0.018ms  +173.3%    0.031ms    0.088ms  BEGIN
+      5890    0.024ms    0.043ms   +76.9%    0.084ms    0.120ms  INSERT INTO pgbench_history (tid, bid, aid, delta, mtime) VALUES (?, ?, ?, ?, CURRENT_T...
+
+좋아진 SQL
+        횟수       평균 앞       평균 뒤       변화      p99 앞      p99 뒤  모양
+      5890    0.594ms    0.414ms   -30.3%    2.112ms    1.344ms  END
+      5890    0.150ms    0.148ms    -1.8%    0.440ms    0.592ms  UPDATE pgbench_accounts SET abalance = abalance + ? WHERE aid = ?
+
+실행 시간을 많이 쓴 순서
+        횟수       평균 앞       평균 뒤       변화      p99 앞      p99 뒤  모양
+      5890    0.594ms    0.414ms   -30.3%    2.112ms    1.344ms  END
+      5890    0.150ms    0.148ms    -1.8%    0.440ms    0.592ms  UPDATE pgbench_accounts SET abalance = abalance + ? WHERE aid = ?
+      5890    0.088ms    0.127ms   +45.3%    1.344ms    1.600ms  UPDATE pgbench_branches SET bbalance = bbalance + ? WHERE bid = ?
+      5890    0.051ms    0.076ms   +50.6%    0.328ms    0.408ms  UPDATE pgbench_tellers SET tbalance = tbalance + ? WHERE tid = ?
+      5890    0.013ms    0.058ms  +337.5%    0.056ms    0.196ms  SELECT abalance FROM pgbench_accounts WHERE aid = ?
+      5890    0.024ms    0.043ms   +76.9%    0.084ms    0.120ms  INSERT INTO pgbench_history (tid, bid, aid, delta, mtime) VALUES (?, ?, ?, ?, CURRENT_T...
+      5890    0.006ms    0.018ms  +173.3%    0.031ms    0.088ms  BEGIN
+
+한쪽에만 있는 모양: 앞 0개, 뒤 1개
+== 비교: 변경 전 대 변경 후 ==
+전체: 문장 41261 → 41261개, 실패 0 → 0개
+      실행 시간 평균 0.126ms → 0.077ms, 중앙값 0.055ms → 0.047ms, p99 0.960ms → 0.608ms
+
+나빠진 SQL
+        횟수       평균 앞       평균 뒤       변화      p99 앞      p99 뒤  모양
+      5890    0.018ms    0.021ms   +20.2%    0.088ms    0.108ms  BEGIN
+      5890    0.148ms    0.173ms   +17.1%    0.592ms    0.672ms  UPDATE pgbench_accounts SET abalance = abalance + ? WHERE aid = ?
+      5890    0.043ms    0.049ms   +15.0%    0.120ms    0.156ms  INSERT INTO pgbench_history (tid, bid, aid, delta, mtime) VALUES (?, ?, ?, ?, CURRENT_T...
+
+좋아진 SQL
+        횟수       평균 앞       평균 뒤       변화      p99 앞      p99 뒤  모양
+      5890    0.414ms    0.030ms   -92.7%    1.344ms    0.096ms  END
+      5890    0.127ms    0.116ms    -8.5%    1.600ms    1.088ms  UPDATE pgbench_branches SET bbalance = bbalance + ? WHERE bid = ?
+
+실행 시간을 많이 쓴 순서
+        횟수       평균 앞       평균 뒤       변화      p99 앞      p99 뒤  모양
+      5890    0.414ms    0.030ms   -92.7%    1.344ms    0.096ms  END
+      5890    0.148ms    0.173ms   +17.1%    0.592ms    0.672ms  UPDATE pgbench_accounts SET abalance = abalance + ? WHERE aid = ?
+      5890    0.127ms    0.116ms    -8.5%    1.600ms    1.088ms  UPDATE pgbench_branches SET bbalance = bbalance + ? WHERE bid = ?
+      5890    0.076ms    0.081ms    +5.8%    0.408ms    0.608ms  UPDATE pgbench_tellers SET tbalance = tbalance + ? WHERE tid = ?
+      5890    0.058ms    0.064ms   +11.6%    0.196ms    0.224ms  SELECT abalance FROM pgbench_accounts WHERE aid = ?
+      5890    0.043ms    0.049ms   +15.0%    0.120ms    0.156ms  INSERT INTO pgbench_history (tid, bid, aid, delta, mtime) VALUES (?, ?, ?, ?, CURRENT_T...
+      5890    0.018ms    0.021ms   +20.2%    0.088ms    0.108ms  BEGIN
+== 용량 탐색 ==
+라운드          배속      계획(초)      실제(초)       늦음 p99     새 실패  판정
+1          1.00      31.35      31.36      9.472ms        0  버팀
+2          2.00      15.68      15.68      4.864ms        0  버팀
+3          4.00       7.84       7.84      3.840ms        0  버팀
+4          8.00       3.92       3.92      8.960ms        0  버팀
+5         16.00       1.96       1.97     98.304ms        0  버팀
+6         32.00       0.98       1.60    622.592ms        0  과부하 (걸린 시간이 계획의 163%)
+7         24.00       1.31       1.55    262.144ms        0  과부하 (걸린 시간이 계획의 118%)
+8         20.00       1.57       1.76    241.664ms        0  과부하 (걸린 시간이 계획의 112%)
+9         18.00       1.74       1.75     77.824ms        0  버팀
+10        19.00       1.65       1.65     61.440ms        0  버팀
+
+상한: 19.00배속 
+녹화 구간의 초당 문장 수 1315, 상한 24988
+수위: 5% (초당 1315 ÷ 상한 24988), 건강 구간 30~50% → 과잉
+용량을 지금의 0.11배까지 줄여도 수위가 50%를 넘지 않는다
+exit=0

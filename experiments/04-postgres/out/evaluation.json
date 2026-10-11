@@ -1,0 +1,47 @@
+{
+  "evaluatedAt" : "2026-10-11T17:44:08Z",
+  "validDays" : 30,
+  "profile" : {
+    "checkpoint_timeout" : "300",
+    "default_transaction_isolation" : "read committed",
+    "effective_cache_size" : "524288",
+    "fsync" : "on",
+    "full_page_writes" : "on",
+    "max_connections" : "300",
+    "max_wal_size" : "1024",
+    "random_page_cost" : "4",
+    "shared_buffers" : "16384",
+    "synchronous_commit" : "on",
+    "version" : "16.15 (Debian 16.15-1.pgdg13+2)",
+    "wal_level" : "replica",
+    "work_mem" : "4096"
+  },
+  "alarms" : {
+    "alarm-active-sessions" : "32",
+    "alarm-sustain" : "3"
+  },
+  "unit" : "transaction",
+  "traffic" : {
+    "statements" : 41227,
+    "spanMicros" : 30120265,
+    "shares" : {
+      "BEGIN" : 0.14284328231498775,
+      "END" : 0.14284328231498775,
+      "INSERT INTO pgbench_history (tid, bid, aid, delta, mtime) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)" : 0.14284328231498775,
+      "SELECT abalance FROM pgbench_accounts WHERE aid = ?" : 0.14284328231498775,
+      "UPDATE pgbench_accounts SET abalance = abalance + ? WHERE aid = ?" : 0.14284328231498775,
+      "UPDATE pgbench_branches SET bbalance = bbalance + ? WHERE bid = ?" : 0.14284328231498775,
+      "UPDATE pgbench_tellers SET tbalance = tbalance + ? WHERE tid = ?" : 0.14284328231498775,
+      "ALTER SYSTEM SET log_min_duration_statement = ?" : 2.4255948771436196E-5,
+      "SELECT pg_reload_conf()" : 2.4255948771436196E-5,
+      "select count(*) from pgbench_branches" : 2.4255948771436196E-5,
+      "select o.n, p.partstrat, pg_catalog.count(i.inhparent) from pg_catalog.pg_class as c join pg_catalog.pg_namespace as n on (n.oid = c.relnamespace) cross join lateral (select pg_catalog.array_position(pg_catalog.current_schemas(true), n.nspname)) as o(n) left join pg_catalog.pg_partitioned_table as p on (p.partrelid = c.oid) left join pg_catalog.pg_inherits as i on (c.oid = i.inhparent) where c.relname = ? and o.n is not null group by ?, ? order by ? asc limit ?" : 2.4255948771436196E-5
+    }
+  },
+  "ceilingSpeed" : 9.5,
+  "stoppedBy" : "OVERLOADED",
+  "ceilingQps" : 13003.089448250206,
+  "currentQps" : 1368.746257710548,
+  "low" : 0.3,
+  "high" : 0.5
+}

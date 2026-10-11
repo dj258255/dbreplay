@@ -1,0 +1,23 @@
+전체: 문장 41261 → 41261개, 실패 0 → 0개
+      실행 시간 평균 0.126ms → 0.077ms, 중앙값 0.055ms → 0.047ms, p99 0.960ms → 0.608ms
+
+나빠진 SQL
+        횟수       평균 앞       평균 뒤       변화      p99 앞      p99 뒤  모양
+      5890    0.018ms    0.021ms   +20.2%    0.088ms    0.108ms  BEGIN
+      5890    0.148ms    0.173ms   +17.1%    0.592ms    0.672ms  UPDATE pgbench_accounts SET abalance = abalance + ? WHERE aid = ?
+      5890    0.043ms    0.049ms   +15.0%    0.120ms    0.156ms  INSERT INTO pgbench_history (tid, bid, aid, delta, mtime) VALUES (?, ?, ?, ?, CURRENT_T...
+
+좋아진 SQL
+        횟수       평균 앞       평균 뒤       변화      p99 앞      p99 뒤  모양
+      5890    0.414ms    0.030ms   -92.7%    1.344ms    0.096ms  END
+      5890    0.127ms    0.116ms    -8.5%    1.600ms    1.088ms  UPDATE pgbench_branches SET bbalance = bbalance + ? WHERE bid = ?
+
+실행 시간을 많이 쓴 순서
+        횟수       평균 앞       평균 뒤       변화      p99 앞      p99 뒤  모양
+      5890    0.414ms    0.030ms   -92.7%    1.344ms    0.096ms  END
+      5890    0.148ms    0.173ms   +17.1%    0.592ms    0.672ms  UPDATE pgbench_accounts SET abalance = abalance + ? WHERE aid = ?
+      5890    0.127ms    0.116ms    -8.5%    1.600ms    1.088ms  UPDATE pgbench_branches SET bbalance = bbalance + ? WHERE bid = ?
+      5890    0.076ms    0.081ms    +5.8%    0.408ms    0.608ms  UPDATE pgbench_tellers SET tbalance = tbalance + ? WHERE tid = ?
+      5890    0.058ms    0.064ms   +11.6%    0.196ms    0.224ms  SELECT abalance FROM pgbench_accounts WHERE aid = ?
+      5890    0.043ms    0.049ms   +15.0%    0.120ms    0.156ms  INSERT INTO pgbench_history (tid, bid, aid, delta, mtime) VALUES (?, ?, ?, ?, CURRENT_T...
+      5890    0.018ms    0.021ms   +20.2%    0.088ms    0.108ms  BEGIN
