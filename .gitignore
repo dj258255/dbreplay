@@ -1,0 +1,9 @@
+.gradle/
+build/
+out/
+!experiments/**/out/
+.idea/
+*.iml
+.vscode/
+.DS_Store
+__pycache__/
