@@ -60,5 +60,9 @@ class SandboxTest {
 				() -> new JdbcTarget("jdbc:h2:mem:x?user=root&password=secret", "u", "p").endpoint());
 
 		assertEquals("접속 위치를 읽을 수 없는 URL이다: jdbc:h2:mem:x", e.getMessage());
+
+		IllegalArgumentException withUserInfo = assertThrows(IllegalArgumentException.class,
+				() -> new JdbcTarget("jdbc:h2://root:secret@host:9092/x?password=also", "u", "p").endpoint());
+		assertEquals("접속 위치를 읽을 수 없는 URL이다: jdbc:h2://host:9092/x", withUserInfo.getMessage());
 	}
 }
