@@ -45,6 +45,7 @@ dbreplay explore --trace prod.trace.jsonl --url jdbc:mysql://sandbox:3306/ --use
 | [06](experiments/06-plan-change/README.md) | 실행 계획이 바뀐 것이 읽은 행 수로 드러나는가 |
 | [07](experiments/07-read-ceiling/README.md) | 읽기만 늘 때의 상한은 전체가 함께 늘 때와 얼마나 다른가 |
 | [08](experiments/08-managed/README.md) | 위탁해 둔 대상을 훑어 필요한 것만 다시 평가하는가 |
+| [09](experiments/09-use-cases/README.md) | 인덱스 삭제, 8.0 → 8.4, 파라미터 변경에서 도구가 차이를 잡는가 |
 
 ## 문서
 
