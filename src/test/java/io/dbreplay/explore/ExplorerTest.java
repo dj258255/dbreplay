@@ -144,19 +144,38 @@ class ExplorerTest {
 	void advisesReadNodesFromTheLevelAndKeepsTheMinimum() {
 		WaterLevel write = WaterLevel.of(800, 4_000);
 
-		ScaleAdvice surplus = ScaleAdvice.of(WaterLevel.of(2_000, 16_000), write, 6, 2);
+		ScaleAdvice surplus = ScaleAdvice.of(WaterLevel.of(2_000, 16_000), write, 6, 2, 100);
 		assertEquals(2, surplus.recommendedReadNodes(), "수위 12.5%면 계산은 1.5개지만 최소 2개를 지킨다");
 		assertEquals(-4, surplus.readNodeChange());
 
-		ScaleAdvice healthy = ScaleAdvice.of(WaterLevel.of(4_000, 10_000), write, 6, 2);
+		ScaleAdvice healthy = ScaleAdvice.of(WaterLevel.of(4_000, 10_000), write, 6, 2, 100);
 		assertEquals(6, healthy.recommendedReadNodes(), "건강 구간 안이면 건드리지 않는다");
 
-		ScaleAdvice shortOf = ScaleAdvice.of(WaterLevel.of(6_200, 10_000), WaterLevel.of(6_200, 10_000), 6, 2);
+		ScaleAdvice shortOf = ScaleAdvice.of(WaterLevel.of(6_200, 10_000), WaterLevel.of(6_200, 10_000), 6, 2, 100);
 		assertEquals(8, shortOf.recommendedReadNodes(), "수위 62%를 50%로 내리려면 6 × 0.62 ÷ 0.5 = 7.44, 올림해 8개");
 		assertEquals(1.24, shortOf.writeCapacityFactor(), 1e-9, "쓰기는 노드 수가 아니라 용량의 배수다");
 		assertEquals(WaterLevel.Verdict.SHORT, shortOf.writeVerdict());
 
-		assertEquals(4, ScaleAdvice.of(WaterLevel.of(2_500, 10_000), write, 8, 1).recommendedReadNodes(), "딱 떨어지면 올리지 않는다");
+		assertEquals(4, ScaleAdvice.of(WaterLevel.of(2_500, 10_000), write, 8, 1, 100).recommendedReadNodes(), "딱 떨어지면 올리지 않는다");
+	}
+
+	/** 상한이 0에 가깝게 나오면 계산한 노드 수가 터무니없이 커진다. 한도를 넘기지 않고, 넘었다는 것을 알린다. */
+	@Test
+	void neverAdvisesMoreNodesThanTheLimit() {
+		WaterLevel write = WaterLevel.of(800, 4_000);
+
+		ScaleAdvice huge = ScaleAdvice.of(WaterLevel.of(1_000_000, 1), write, 6, 2, 12);
+		assertEquals(12, huge.recommendedReadNodes());
+		assertTrue(huge.capped());
+
+		ScaleAdvice noCeiling = ScaleAdvice.of(WaterLevel.of(1_000, 0), write, 6, 2, 12);
+		assertEquals(12, noCeiling.recommendedReadNodes(), "상한이 0이면 수위가 무한대다");
+		assertTrue(noCeiling.capped());
+
+		ScaleAdvice unlimited = ScaleAdvice.of(WaterLevel.of(1_000_000, 1), write, 6, 2, Integer.MAX_VALUE);
+		assertEquals(Integer.MAX_VALUE, unlimited.recommendedReadNodes(), "한도를 주지 않으면 잘린 값이 그대로 보이고, 명령은 실행되지 않는다");
+
+		assertEquals(false, ScaleAdvice.of(WaterLevel.of(6_200, 10_000), write, 6, 2, 12).capped());
 	}
 
 	@Test
