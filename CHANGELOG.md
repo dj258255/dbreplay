@@ -22,6 +22,10 @@
   조용해질 때까지 기다린다. 검증하려는 변경은 `--change-command`로 넣는다. `dbreplay reset`으로 따로 부를 수도 있다.
   mysql이나 psql 클라이언트가 있어야 한다. `--reset-command`는 그대로 쓸 수 있다.
 
+- `compare`가 읽은 행 수와 오류의 변화를 낸다(#19). 문장당 읽는 행 수가 2배 이상 늘어난 SQL 모양, 새로 난 오류와
+  사라진 오류의 번호를 보여 준다. 실행 계획이 바뀐 것과 호환성 문제가 실행 시간과 따로 보인다.
+  트래픽 파일에 `rowsSent`와 `rowsExamined`가 더해졌다. MySQL에서만 채워진다. 예전 파일도 그대로 읽는다.
+
 ### 바뀐 것
 
 - `--alarm-active-sessions <개수>`는 `--alarm-metric active_sessions>=<개수>`의 줄임으로 남는다.
