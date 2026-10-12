@@ -18,7 +18,7 @@ Java 25와 Gradle로 만든다.
 | `io.dbreplay.mysql` | MySQL 슬로우 로그 변환기 |
 | `io.dbreplay.postgres` | PostgreSQL csvlog 변환기 |
 | `io.dbreplay.replay` | 재생기. 트랜잭션·문장·연결 단위로 내보낸다 |
-| `io.dbreplay.report` | SQL 모양별 전후 비교 |
+| `io.dbreplay.report` | SQL 모양별 전후 비교, Markdown 리포트 |
 | `io.dbreplay.metrics` | 재생하는 동안 대상의 부하 지표를 뜬다. DB 접속으로 읽는 것과 사용자 명령으로 받는 것 |
 | `io.dbreplay.sandbox` | 샌드박스를 녹화 시작 시점으로 되돌린다. 덤프 되붓기, 변경, 통계, 대기 |
 | `io.dbreplay.explore` | 용량 탐색, 알람 판정, 수위, 평가의 유효성 |
@@ -29,6 +29,7 @@ Java 25와 Gradle로 만든다.
 dbreplay convert --in <서버 로그> --out <트래픽 파일> [--from mysql-slow|postgres-csv]
 dbreplay replay  --trace <트래픽 파일> --url <JDBC URL> --user <계정> --speed 1 [--unit transaction|statement|session]
 dbreplay compare --before <트래픽 파일> --after <트래픽 파일>
+dbreplay report  --before <트래픽 파일> --after <트래픽 파일> --out <리포트.md>
 dbreplay explore --trace <트래픽 파일> --url <JDBC URL> --user <계정> --snapshot <덤프 파일> --alarm-command <명령>
 dbreplay reset   --url <JDBC URL> --user <계정> --snapshot <덤프 파일>
 dbreplay check   --evaluation <평가 파일> --url <JDBC URL> --user <계정>

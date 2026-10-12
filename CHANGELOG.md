@@ -26,6 +26,9 @@
   사라진 오류의 번호를 보여 준다. 실행 계획이 바뀐 것과 호환성 문제가 실행 시간과 따로 보인다.
   트래픽 파일에 `rowsSent`와 `rowsExamined`가 더해졌다. MySQL에서만 채워진다. 예전 파일도 그대로 읽는다.
 
+- `dbreplay report`(#5). 변경 전후의 SQL 비교, 읽은 행 수, 오류, 부하 지표, 달라진 파라미터, 상한과 수위를 Markdown 문서
+  하나로 낸다. 재생할 때 `--run-out`으로 그때의 대상 설정과 지표를 남기면 리포트에 실린다.
+
 ### 바뀐 것
 
 - `--alarm-active-sessions <개수>`는 `--alarm-metric active_sessions>=<개수>`의 줄임으로 남는다.

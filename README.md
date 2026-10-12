@@ -23,12 +23,15 @@ alias dbreplay=build/install/dbreplay/bin/dbreplay
 dbreplay convert --in slow.log --out prod.trace.jsonl
 dbreplay replay  --trace prod.trace.jsonl --url jdbc:mysql://sandbox:3306/ --user root --speed 1
 dbreplay compare --before before.trace.jsonl --after after.trace.jsonl
+dbreplay report  --before before.trace.jsonl --after after.trace.jsonl --out report.md
 dbreplay explore --trace prod.trace.jsonl --url jdbc:mysql://sandbox:3306/ --user root \
   --snapshot snapshot.sql --alarm-command ./alarm.sh --metric-command ./metrics.sh
 ```
 
 녹화부터 용량 탐색까지 한 번에 돌리는 예는 `experiments/03-mysql-compare-explore/run.sh`와
 `experiments/04-postgres/run.sh`에 있다. Docker가 필요하다.
+
+리포트가 어떻게 나오는지는 [테이블 압축 전후의 예시](experiments/03-mysql-compare-explore/report-example.md)에 있다.
 
 ## 실험에서 나온 것
 
