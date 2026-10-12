@@ -37,6 +37,7 @@ import io.dbreplay.replay.ReplaySummary;
 import io.dbreplay.replay.Replayer;
 import io.dbreplay.replay.ResultWriter;
 import io.dbreplay.report.TraceComparison;
+import io.dbreplay.sandbox.Sandbox;
 import io.dbreplay.trace.TraceReader;
 
 public final class Main {
@@ -52,7 +53,7 @@ public final class Main {
 			  dbreplay compare --before <트래픽 파일> --after <트래픽 파일> [--top 3] [--min-count 100]
 
 			  dbreplay explore --trace <트래픽 파일> --url <JDBC URL> --user <계정> [--password <암호>]
-			                   --reset-command <데이터 되돌리기 명령>
+			                   (--snapshot <덤프 파일> [되돌리기 옵션] | --reset-command <데이터 되돌리기 명령>)
 			                   [--alarm-command <알람 확인 명령>] [--alarm-metric <이름>=<값>,...]
 			                   [--alarm-active-sessions <개수>] [--alarm-sustain 3] [--max-distortion 0.2]
 			                   [지표 옵션]
@@ -67,6 +68,16 @@ public final class Main {
 
 			  dbreplay sample  --url <JDBC URL> --user <계정> [--password <암호>] --seconds <초> [지표 옵션]
 			                   녹화하는 동안 운영 쪽의 부하 지표를 떠 둘 때 쓴다
+
+			  dbreplay reset   --url <JDBC URL> --user <계정> [--password <암호>] --snapshot <덤프 파일> [되돌리기 옵션]
+			                   샌드박스를 녹화 시작 시점으로 되돌린다. mysql이나 psql 클라이언트가 있어야 한다
+
+			되돌리기 옵션:
+			  --snapshot <덤프 파일>     녹화 시작 시점의 논리 덤프(mysqldump, pg_dump의 평문 출력)
+			  --snapshot-db <이름>       덤프를 부을 데이터베이스. 없으면 URL의 것
+			  --change-command <명령>    되부은 뒤 통계를 잡기 전에 실행한다. 검증하려는 변경을 여기서 넣는다
+			  --ready-command <명령>     다 끝난 뒤 재생 직전에 실행한다
+			  --settle-seconds 60        서버가 되부은 쓰기를 다 내릴 때까지 기다리는 시간의 상한. 0이면 기다리지 않는다
 
 			지표 옵션:
 			  --sample-ms 200            DB에서 지표를 뜨는 간격. active_sessions(실행 중인 연결)와
@@ -111,6 +122,7 @@ public final class Main {
 			case "explore" -> explore(options);
 			case "check" -> check(options);
 			case "sample" -> sample(options);
+			case "reset" -> reset(options);
 			default -> usage();
 		}
 	}
@@ -232,7 +244,8 @@ public final class Main {
 	private static void explore(Map<String, String> options) throws Exception {
 		JdbcTarget target = target(options);
 		String tracePath = required(options, "--trace");
-		String resetCommand = required(options, "--reset-command");
+		Sandbox sandbox = options.containsKey("--snapshot") ? sandbox(target, options) : null;
+		String resetCommand = sandbox == null ? required(options, "--reset-command") : null;
 		Map<String, String> alarmSettings = alarmSettings(options);
 		RoundJudge judge = judge(options);
 		Explorer.Options defaults = Explorer.Options.defaults();
@@ -250,7 +263,12 @@ public final class Main {
 		System.out.printf("%-6s %7s %9s %9s %10s %9s %9s  %s%n",
 				"라운드", "배속", "계획(초)", "실제(초)", "늦음 p99", "왜곡", "실행 중", "판정");
 		Explorer.Result result = Explorer.explore(speed -> {
-			run(resetCommand);
+			if (sandbox != null) {
+				sandbox.reset();
+			}
+			else {
+				run(resetCommand);
+			}
 			long started = System.currentTimeMillis();
 			ReplaySummary s;
 			Map<String, double[]> metrics;
@@ -311,6 +329,18 @@ public final class Main {
 			JSON.writeValue(Path.of(out).toFile(), evaluation);
 			System.out.printf("평가를 %s에 적었다. %d일 동안 유효하다%n", out, evaluation.validDays());
 		}
+	}
+
+	private static Sandbox sandbox(JdbcTarget target, Map<String, String> options) {
+		return new Sandbox(target, new Sandbox.Options(required(options, "--snapshot"), options.get("--snapshot-db"),
+				options.get("--change-command"), options.get("--ready-command"), (long) number(options, "--settle-seconds", 60)));
+	}
+
+	private static void reset(Map<String, String> options) throws Exception {
+		Sandbox.Timing t = sandbox(target(options), options).reset();
+		System.out.printf("되돌리기 %.1f초: 덤프 되붓기 %.1f, 변경 %.1f, 통계 %.1f, 조용해질 때까지 %.1f (%s)%n",
+				t.totalMillis() / 1e3, t.restoreMillis() / 1e3, t.changeMillis() / 1e3, t.analyzeMillis() / 1e3,
+				t.settleMillis() / 1e3, t.settled() ? "조용해짐" : "기다리지 않았거나 시간 안에 조용해지지 않음");
 	}
 
 	private static void printLevel(WaterLevel level, double recordedQps) {
