@@ -84,6 +84,21 @@ class EvaluationTest {
 		assertEquals(800.0, traffic(80, 20).readQps(), 10, "100문장이 0.099초에 걸쳐 있다");
 	}
 
+	/** 대상 목록의 설정은 explore의 옵션을 그대로 받는다. 새 문법을 만들지 않는다. */
+	@Test
+	void readsTheManagedTargetsFile() throws IOException {
+		ManagedTargets managed = new ObjectMapper().readValue("""
+				{"targets": [
+				  {"name": "orders", "evaluation": "eval/orders.json",
+				   "options": {"--trace": "orders.trace.jsonl", "--url": "jdbc:mysql://db/orders", "--alarm-metric": "active_sessions>=32"}},
+				  {"name": "users", "evaluation": "eval/users.json", "options": {}}
+				]}
+				""", ManagedTargets.class);
+
+		assertEquals(List.of("orders", "users"), managed.targets().stream().map(ManagedTargets.Target::name).toList());
+		assertEquals("active_sessions>=32", managed.targets().getFirst().options().get("--alarm-metric"));
+	}
+
 	@Test
 	void survivesBeingWrittenToAFileAndReadBack() throws IOException {
 		ObjectMapper json = new ObjectMapper();

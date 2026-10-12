@@ -1,0 +1,28 @@
+{
+  "targets": [
+    {
+      "name": "orders-mysql",
+      "evaluation": "/exp/out/eval-orders-mysql.json",
+      "options": {
+        "--trace": "/exp/out/mysql.trace.jsonl",
+        "--url": "jdbc:mysql://mysql84:3306/sbtest?sslMode=DISABLED&allowPublicKeyRetrieval=true",
+        "--user": "root",
+        "--snapshot": "/exp/out/mysql-snapshot.sql",
+        "--alarm-metric": "active_sessions>=32",
+        "--max-speed": "16"
+      }
+    },
+    {
+      "name": "shop-postgres",
+      "evaluation": "/exp/out/eval-shop-postgres.json",
+      "options": {
+        "--trace": "/exp/out/pg.trace.jsonl",
+        "--url": "jdbc:postgresql://pg16:5432/shop?preferQueryMode=simple",
+        "--user": "postgres",
+        "--snapshot": "/exp/out/pg-snapshot.sql",
+        "--alarm-metric": "active_sessions>=32",
+        "--max-speed": "16"
+      }
+    }
+  ]
+}

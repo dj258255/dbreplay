@@ -1,0 +1,4 @@
+out/*.jsonl
+out/*.csv
+out/*-slow.log
+out/*snapshot.sql
