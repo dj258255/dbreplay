@@ -139,6 +139,26 @@ class ExplorerTest {
 				+ "&& test \"$DBREPLAY_ROUND_END\" = 1031").check(round(2, 0)));
 	}
 
+	/** 읽기는 노드 수로, 쓰기는 용량의 배수로 권한다. 수위가 과잉, 적정, 부족인 세 경우다. */
+	@Test
+	void advisesReadNodesFromTheLevelAndKeepsTheMinimum() {
+		WaterLevel write = WaterLevel.of(800, 4_000);
+
+		ScaleAdvice surplus = ScaleAdvice.of(WaterLevel.of(2_000, 16_000), write, 6, 2);
+		assertEquals(2, surplus.recommendedReadNodes(), "수위 12.5%면 계산은 1.5개지만 최소 2개를 지킨다");
+		assertEquals(-4, surplus.readNodeChange());
+
+		ScaleAdvice healthy = ScaleAdvice.of(WaterLevel.of(4_000, 10_000), write, 6, 2);
+		assertEquals(6, healthy.recommendedReadNodes(), "건강 구간 안이면 건드리지 않는다");
+
+		ScaleAdvice shortOf = ScaleAdvice.of(WaterLevel.of(6_200, 10_000), WaterLevel.of(6_200, 10_000), 6, 2);
+		assertEquals(8, shortOf.recommendedReadNodes(), "수위 62%를 50%로 내리려면 6 × 0.62 ÷ 0.5 = 7.44, 올림해 8개");
+		assertEquals(1.24, shortOf.writeCapacityFactor(), 1e-9, "쓰기는 노드 수가 아니라 용량의 배수다");
+		assertEquals(WaterLevel.Verdict.SHORT, shortOf.writeVerdict());
+
+		assertEquals(4, ScaleAdvice.of(WaterLevel.of(2_500, 10_000), write, 8, 1).recommendedReadNodes(), "딱 떨어지면 올리지 않는다");
+	}
+
 	@Test
 	void waterLevelFollowsTheArticlesDefinition() {
 		WaterLevel surplus = WaterLevel.of(4_000, 16_000);
