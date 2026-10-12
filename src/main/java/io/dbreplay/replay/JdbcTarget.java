@@ -20,6 +20,31 @@ public final class JdbcTarget implements Target {
 		this.password = password;
 	}
 
+	/** JDBC URL에서 읽은 접속 위치. 클라이언트 도구를 부를 때 쓴다. database는 URL에 없으면 null. */
+	public record Endpoint(String host, int port, String database) {
+	}
+
+	private static final java.util.regex.Pattern ENDPOINT =
+			java.util.regex.Pattern.compile("jdbc:(mysql|postgresql)://([^:/?]+)(?::(\\d+))?(?:/([^?]*))?.*");
+
+	public Endpoint endpoint() {
+		java.util.regex.Matcher m = ENDPOINT.matcher(url);
+		if (!m.matches()) {
+			throw new IllegalArgumentException("접속 위치를 읽을 수 없는 URL이다: " + url);
+		}
+		int port = m.group(3) != null ? Integer.parseInt(m.group(3)) : m.group(1).equals("mysql") ? 3306 : 5432;
+		String database = m.group(4) == null || m.group(4).isEmpty() ? null : m.group(4);
+		return new Endpoint(m.group(2), port, database);
+	}
+
+	public String user() {
+		return user;
+	}
+
+	public String password() {
+		return password;
+	}
+
 	public boolean isPostgres() {
 		return url.startsWith("jdbc:postgresql:");
 	}
