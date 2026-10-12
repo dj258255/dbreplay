@@ -22,6 +22,17 @@ public final class TraceWriter implements Closeable {
 		writeLine(record);
 	}
 
+	/** 레코드를 파일의 한 줄이 될 JSON으로 바꾼다. 줄바꿈은 붙이지 않는다. */
+	public static String serialize(TraceRecord record) throws IOException {
+		return MAPPER.writeValueAsString(record);
+	}
+
+	/** {@link #serialize}로 만들어 둔 줄을 그대로 쓴다. 큰 로그를 병합할 때 다시 읽고 만드는 일을 줄인다. */
+	public void writeSerialized(String json) throws IOException {
+		out.write(json);
+		out.write('\n');
+	}
+
 	private void writeLine(Object value) throws IOException {
 		out.write(MAPPER.writeValueAsString(value));
 		out.write('\n');

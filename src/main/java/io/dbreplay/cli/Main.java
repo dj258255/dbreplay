@@ -19,6 +19,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 
 import io.dbreplay.convert.ConvertSummary;
+import io.dbreplay.convert.HeadPolicy;
+import io.dbreplay.convert.RecordBuffer;
 import io.dbreplay.explore.Alarm;
 import io.dbreplay.explore.Evaluation;
 import io.dbreplay.explore.Explorer;
@@ -50,6 +52,8 @@ public final class Main {
 	private static final String USAGE = """
 			사용법:
 			  dbreplay convert --in <서버 로그> --out <트래픽 파일> [--from mysql-slow|postgres-csv]
+			                   [--sort-memory-mb <힙의 4분의 1>] [--tmp-dir <출력 파일의 폴더>]
+			                   메모리에 다 들어가지 않는 로그는 임시 파일로 나눠 정렬한다. 로그만큼의 디스크가 더 든다
 
 			  dbreplay replay  --trace <트래픽 파일> --url <JDBC URL> --user <계정> [--password <암호>]
 			                   [--speed 1] [--unit transaction|statement|session] [--max-connections 500]
@@ -157,14 +161,25 @@ public final class Main {
 
 	private static void convert(Map<String, String> options) throws IOException {
 		String from = options.getOrDefault("--from", "mysql-slow");
+		Path out = Path.of(required(options, "--out")).toAbsolutePath();
+		// 임시 파일은 출력 파일 옆에 둔다. 출력만큼의 자리가 더 있어야 하는 곳이 거기다. 시스템의 임시 폴더는 작을 수 있다
+		Path tempParent = options.containsKey("--tmp-dir") ? Path.of(options.get("--tmp-dir")) : out.getParent();
+		long sortBytes = options.containsKey("--sort-memory-mb") ? (long) (number(options, "--sort-memory-mb", 0) * 1024 * 1024)
+				: Runtime.getRuntime().maxMemory() / 4;
 		ConvertSummary s;
+		long spills;
 		try (Reader reader = Files.newBufferedReader(Path.of(required(options, "--in")), StandardCharsets.UTF_8);
-				Writer writer = Files.newBufferedWriter(Path.of(required(options, "--out")), StandardCharsets.UTF_8)) {
+				Writer writer = Files.newBufferedWriter(out, StandardCharsets.UTF_8);
+				RecordBuffer buffer = new RecordBuffer(tempParent, sortBytes)) {
 			s = switch (from) {
-				case "mysql-slow" -> SlowLogConverter.convert(reader, writer);
-				case "postgres-csv" -> CsvLogConverter.convert(reader, writer);
+				case "mysql-slow" -> SlowLogConverter.convert(reader, writer, HeadPolicy::byDefault, buffer);
+				case "postgres-csv" -> CsvLogConverter.convert(reader, writer, HeadPolicy::byDefault, buffer);
 				default -> throw new IllegalArgumentException("모르는 로그 종류: " + from);
 			};
+			spills = buffer.spills();
+		}
+		if (spills > 0) {
+			System.out.printf("메모리에 다 올리지 않고 임시 파일 %d개로 나눠 정렬했다%n", spills);
 		}
 		System.out.printf("로그 항목 %d개를 읽어 문장 %d개, 연결 종료 %d개를 썼다 (연결 %d개)%n",
 				s.entries(), s.statements(), s.closes(), s.sessions());

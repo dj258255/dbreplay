@@ -66,8 +66,15 @@ public final class CsvLogConverter {
 	}
 
 	public static ConvertSummary convert(Reader csvLog, Writer trace, HeadPolicy headPolicy) throws IOException {
+		try (RecordBuffer buffer = new RecordBuffer()) {
+			return convert(csvLog, trace, headPolicy, buffer);
+		}
+	}
+
+	/** @param buffer 레코드를 모아 정렬할 곳. 메모리 한도와 임시 폴더를 정해서 넘긴다. 닫는 것은 부른 쪽이 한다 */
+	public static ConvertSummary convert(Reader csvLog, Writer trace, HeadPolicy headPolicy, RecordBuffer buffer)
+			throws IOException {
 		CsvReader reader = new CsvReader(csvLog);
-		RecordBuffer buffer = new RecordBuffer();
 		Map<String, Session> sessions = new HashMap<>();
 		long entries = 0, ignored = 0, skipped = 0, clamped = 0;
 
@@ -132,13 +139,13 @@ public final class CsvLogConverter {
 			boolean isEnd = kind == PgTransactionTracker.Kind.END || kind == PgTransactionTracker.Kind.END_AND_CHAIN;
 			boolean orphanEnd = isEnd && !session.tracker.inTransaction();
 			Long txn = session.tracker.assign(kind);
-			int index = buffer.add(new TraceRecord(sessionId, start, durationMicros, sql, row.get(DATABASE),
+			long index = buffer.add(new TraceRecord(sessionId, start, durationMicros, sql, row.get(DATABASE),
 					error, null, txn, null));
 			if (kind == PgTransactionTracker.Kind.OTHER) {
 				session.head.statement(index, sql);
 			}
 			else {
-				session.head.boundary(index, orphanEnd, sql, headPolicy, buffer);
+				session.head.boundary(sessionId, index, orphanEnd, sql, headPolicy, buffer);
 			}
 		}
 
