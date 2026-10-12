@@ -1,0 +1,50 @@
+{
+  "evaluatedAt" : "2026-10-12T01:44:32Z",
+  "validDays" : 30,
+  "profile" : {
+    "checkpoint_timeout" : "300",
+    "default_transaction_isolation" : "read committed",
+    "effective_cache_size" : "524288",
+    "fsync" : "on",
+    "full_page_writes" : "on",
+    "max_connections" : "300",
+    "max_wal_size" : "1024",
+    "random_page_cost" : "4",
+    "shared_buffers" : "16384",
+    "synchronous_commit" : "on",
+    "version" : "16.15 (Debian 16.15-1.pgdg13+2)",
+    "wal_level" : "replica",
+    "work_mem" : "4096"
+  },
+  "alarms" : {
+    "alarm-metric" : "active_sessions>=32",
+    "alarm-sustain" : "3",
+    "slow-ms" : "100"
+  },
+  "unit" : "transaction",
+  "traffic" : {
+    "statements" : 41850,
+    "spanMicros" : 30188541,
+    "shares" : {
+      "BEGIN" : 0.14284348864994026,
+      "END" : 0.14284348864994026,
+      "INSERT INTO pgbench_history (tid, bid, aid, delta, mtime) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)" : 0.14284348864994026,
+      "SELECT abalance FROM pgbench_accounts WHERE aid = ?" : 0.14284348864994026,
+      "UPDATE pgbench_accounts SET abalance = abalance + ? WHERE aid = ?" : 0.14284348864994026,
+      "UPDATE pgbench_branches SET bbalance = bbalance + ? WHERE bid = ?" : 0.14284348864994026,
+      "UPDATE pgbench_tellers SET tbalance = tbalance + ? WHERE tid = ?" : 0.14284348864994026,
+      "ALTER SYSTEM SET log_min_duration_statement = ?" : 2.3894862604540025E-5,
+      "SELECT pg_reload_conf()" : 2.3894862604540025E-5,
+      "select count(*) from pgbench_branches" : 2.3894862604540025E-5,
+      "select o.n, p.partstrat, pg_catalog.count(i.inhparent) from pg_catalog.pg_class as c join pg_catalog.pg_namespace as n on (n.oid = c.relnamespace) cross join lateral (select pg_catalog.array_position(pg_catalog.current_schemas(true), n.nspname)) as o(n) left join pg_catalog.pg_partitioned_table as p on (p.partrelid = c.oid) left join pg_catalog.pg_inherits as i on (c.oid = i.inhparent) where c.relname = ? and o.n is not null group by ?, ? order by ? asc limit ?" : 2.3894862604540025E-5
+    },
+    "reads" : 5981,
+    "writes" : 23912
+  },
+  "ceilingSpeed" : 14.0,
+  "stoppedBy" : "OVERLOADED",
+  "ceilingQps" : 19408.026376630787,
+  "currentQps" : 1386.2875983307706,
+  "low" : 0.3,
+  "high" : 0.5
+}
