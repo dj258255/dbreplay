@@ -25,7 +25,7 @@
 
 ```sh
 ./run.sh                 # 약 20분. 세 장면의 1배속 재생 18번과 탐색 6번
-./run-ceiling.sh         # 약 25분. 파라미터 장면의 상한만 더 무거운 녹화로 다시 잰다
+./run-ceiling.sh         # 약 12분. 파라미터 장면의 상한만 더 무거운 녹화로 다시 잰다
 python3 analyze.py a     # 장면별로 세 번의 비교를 모아 본다 (a, b, c)
 docker compose down -v
 ```
