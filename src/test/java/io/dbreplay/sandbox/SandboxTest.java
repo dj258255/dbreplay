@@ -52,4 +52,13 @@ class SandboxTest {
 		assertEquals(3307, new JdbcTarget("jdbc:mysql://db:3307/?x=y", "u", "p").endpoint().port());
 		assertThrows(IllegalArgumentException.class, () -> new JdbcTarget("jdbc:h2:mem:x", "u", "p").endpoint());
 	}
+
+	/** JDBC URL에는 암호를 넣어 쓸 수 있다. 읽지 못한 URL을 알려 줄 때 그 부분이 따라 나오면 안 된다. */
+	@Test
+	void keepsTheQueryPartOfTheUrlOutOfTheErrorMessage() {
+		IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+				() -> new JdbcTarget("jdbc:h2:mem:x?user=root&password=secret", "u", "p").endpoint());
+
+		assertEquals("접속 위치를 읽을 수 없는 URL이다: jdbc:h2:mem:x", e.getMessage());
+	}
 }
