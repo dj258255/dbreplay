@@ -1,0 +1,3 @@
+out/*.jsonl
+out/*-slow.log
+out/*snapshot.sql

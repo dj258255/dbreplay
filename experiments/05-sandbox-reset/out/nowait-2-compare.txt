@@ -1,0 +1,34 @@
+전체: 문장 120942 → 120999개, 실패 0 → 0개
+      실행 시간 평균 0.120ms → 0.126ms, 중앙값 0.031ms → 0.037ms, p99 2.304ms → 2.016ms
+
+나빠진 SQL
+        횟수       평균 앞       평균 뒤       변화      p99 앞      p99 뒤  모양
+      1561    0.037ms    0.060ms   +62.6%    0.078ms    0.152ms  INSERT INTO sbtest1 (id, k, c, pad) VALUES (?+)
+      1504    0.041ms    0.065ms   +57.9%    0.090ms    0.168ms  INSERT INTO sbtest4 (id, k, c, pad) VALUES (?+)
+      1527    0.036ms    0.055ms   +50.7%    0.072ms    0.172ms  UPDATE sbtest4 SET c=? WHERE id=?
+
+좋아진 SQL
+        횟수       평균 앞       평균 뒤       변화      p99 앞      p99 뒤  모양
+      6047    0.027ms    0.021ms   -23.0%    0.064ms    0.086ms  BEGIN
+      1506    0.059ms    0.052ms   -12.4%    0.092ms    0.168ms  UPDATE sbtest3 SET c=? WHERE id=?
+      6047    1.607ms    1.547ms    -3.7%    7.296ms    8.064ms  COMMIT
+
+실행 시간을 많이 쓴 순서
+        횟수       평균 앞       평균 뒤       변화      p99 앞      p99 뒤  모양
+      6047    1.607ms    1.547ms    -3.7%    7.296ms    8.064ms  COMMIT
+     15850    0.023ms    0.033ms   +41.9%    0.061ms    0.116ms  SELECT c FROM sbtest3 WHERE id=?
+     15300    0.023ms    0.034ms   +46.1%    0.059ms    0.122ms  SELECT c FROM sbtest4 WHERE id=?
+     15250    0.023ms    0.033ms   +40.1%    0.061ms    0.110ms  SELECT c FROM sbtest1 WHERE id=?
+     14070    0.024ms    0.034ms   +41.5%    0.062ms    0.116ms  SELECT c FROM sbtest2 WHERE id=?
+      1571    0.125ms    0.132ms    +5.3%    0.196ms    0.296ms  SELECT DISTINCT c FROM sbtest3 WHERE id BETWEEN ? AND ? ORDER BY c
+      1506    0.124ms    0.133ms    +7.0%    0.184ms    0.304ms  SELECT DISTINCT c FROM sbtest2 WHERE id BETWEEN ? AND ? ORDER BY c
+      1513    0.123ms    0.131ms    +6.5%    0.180ms    0.256ms  SELECT DISTINCT c FROM sbtest1 WHERE id BETWEEN ? AND ? ORDER BY c
+      1457    0.124ms    0.134ms    +7.5%    0.184ms    0.280ms  SELECT DISTINCT c FROM sbtest4 WHERE id BETWEEN ? AND ? ORDER BY c
+      6047    0.027ms    0.021ms   -23.0%    0.064ms    0.086ms  BEGIN
+      1555    0.075ms    0.104ms   +38.9%    0.200ms    1.312ms  UPDATE sbtest4 SET k=k+? WHERE id=?
+      1535    0.083ms    0.092ms   +10.8%    0.132ms    0.224ms  SELECT c FROM sbtest4 WHERE id BETWEEN ? AND ? ORDER BY c
+      1541    0.081ms    0.089ms   +10.2%    0.132ms    0.216ms  SELECT c FROM sbtest1 WHERE id BETWEEN ? AND ? ORDER BY c
+      1487    0.077ms    0.097ms   +26.4%    0.168ms    1.248ms  UPDATE sbtest2 SET k=k+? WHERE id=?
+      1476    0.083ms    0.089ms    +7.4%    0.132ms    0.208ms  SELECT c FROM sbtest3 WHERE id BETWEEN ? AND ? ORDER BY c
+
+한쪽에만 있는 모양: 앞 0개, 뒤 2개
