@@ -52,8 +52,8 @@ services:
       POSTGRES_PASSWORD: replay
       POSTGRES_DB: shop
     volumes:
-      - ./pg-primary-init.sh:/docker-entrypoint-initdb.d/10-replication.sh:ro
-    command: ["postgres", "-c", "logging_collector=on", "-c", "log_destination=csvlog", "-c", "log_directory=log",
+      - ./pg_hba.conf:/etc/dbreplay/pg_hba.conf:ro
+    command: ["postgres", "-c", "hba_file=/etc/dbreplay/pg_hba.conf", "-c", "logging_collector=on", "-c", "log_destination=csvlog", "-c", "log_directory=log",
               "-c", "log_filename=pg.log", "-c", "log_rotation_age=0", "-c", "log_rotation_size=0",
               "-c", "log_timezone=UTC", "-c", "log_disconnections=on", "-c", "max_connections=300"]
     healthcheck: *pg-health

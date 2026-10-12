@@ -23,11 +23,15 @@ public final class DbMetricSource implements MetricSource {
 	public static final String ACTIVE_SESSIONS = "active_sessions";
 	public static final String SLOW_RUNNING = "slow_running";
 
-	// TIMER_WAIT는 피코초다. 실행 중인 문장은 조회하는 순간까지 흐른 시간이 들어 있다
+	// TIMER_WAIT는 피코초다. 실행 중인 문장은 조회하는 순간까지 흐른 시간이 들어 있다.
+	// 종 DB에 바이너리 로그를 보내는 스레드는 뺀다. 언제나 실행 중으로 잡혀서, 종 DB가 하나 붙으면 실행 중인 연결이 1 늘고
+	// 느린 문장이 늘 1로 나온다(실험 11)
 	private static final String MYSQL = """
-			/* dbreplay:sampler */ SELECT (SELECT VARIABLE_VALUE - 1 FROM performance_schema.global_status WHERE VARIABLE_NAME = 'Threads_running'),
+			/* dbreplay:sampler */ SELECT (SELECT VARIABLE_VALUE - 1 FROM performance_schema.global_status WHERE VARIABLE_NAME = 'Threads_running')
+			         - (SELECT COUNT(*) FROM performance_schema.threads WHERE PROCESSLIST_COMMAND LIKE 'Binlog Dump%'),
 			       (SELECT COUNT(*) FROM performance_schema.events_statements_current
-			         WHERE END_EVENT_ID IS NULL AND TIMER_WAIT > ? * 1000000000)""";
+			         WHERE END_EVENT_ID IS NULL AND TIMER_WAIT > ? * 1000000000
+			           AND THREAD_ID NOT IN (SELECT THREAD_ID FROM performance_schema.threads WHERE PROCESSLIST_COMMAND LIKE 'Binlog Dump%'))""";
 	private static final String POSTGRES = """
 			/* dbreplay:sampler */ SELECT count(*), count(*) FILTER (WHERE now() - query_start > ? * interval '1 millisecond')
 			  FROM pg_stat_activity
