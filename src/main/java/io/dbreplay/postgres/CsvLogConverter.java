@@ -20,6 +20,7 @@ import io.dbreplay.convert.ConvertSummary;
 import io.dbreplay.convert.HeadPolicy;
 import io.dbreplay.convert.RecordBuffer;
 import io.dbreplay.convert.SessionHead;
+import io.dbreplay.convert.SqlWords;
 import io.dbreplay.trace.TraceHeader;
 import io.dbreplay.trace.TraceRecord;
 
@@ -115,6 +116,10 @@ public final class CsvLogConverter {
 			}
 
 			sql = stripSemicolon(sql.strip());
+			if (SqlWords.ownStatement(sql)) {
+				ignored++; // 이 도구의 표본기가 보낸 조회
+				continue;
+			}
 			Session session = sessions.computeIfAbsent(sessionId, id -> new Session());
 			long start = loggedMicros - durationMicros;
 			if (start < session.lastStartMicros) {

@@ -163,6 +163,26 @@ class SlowLogConverterTest {
 		assertEquals(2, dropped.summary().droppedHead());
 	}
 
+	/** 녹화하는 동안 이 도구로 지표를 뜨면 그 조회가 로그에 섞인다. 원본의 트래픽이 아니라서 뺀다. */
+	@Test
+	void leavesOutTheStatementsThisToolSentItself() throws IOException {
+		String log = entry("2026-10-11T00:00:01.000000Z", 3, "0.000100", "SELECT 1")
+				+ entry("2026-10-11T00:00:02.000000Z", 9, "0.000300", "/* dbreplay:sampler */ SELECT (SELECT VARIABLE_VALUE - 1 FROM performance_schema.global_status)");
+
+		Converted c = convert(new StringReader(log), HeadPolicy::byDefault);
+		assertEquals(List.of("SELECT 1"), c.records().stream().map(TraceRecord::sql).toList());
+		assertEquals(1, c.summary().ignored());
+	}
+
+	/** 표시는 문장의 맨 앞에 있을 때만 본다. 그 글자가 값 안에 든 원본의 문장을 빼면 안 된다. */
+	@Test
+	void keepsAnApplicationStatementThatOnlyMentionsTheMark() throws IOException {
+		String sql = "INSERT INTO notes (body) VALUES ('/* dbreplay:sampler */ 라는 글자를 봤다')";
+		Converted c = convert(new StringReader(entry("2026-10-11T00:00:01.000000Z", 3, "0.000100", sql)), HeadPolicy::byDefault);
+
+		assertEquals(List.of(sql), c.records().stream().map(TraceRecord::sql).toList());
+	}
+
 	@Test
 	void derivesStartFromEndTimeWhenExtraFieldsAreOff() throws IOException {
 		Converted c = convert(new StringReader(

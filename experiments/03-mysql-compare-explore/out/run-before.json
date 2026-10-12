@@ -1,0 +1,51 @@
+{
+  "recordedAt" : "2026-10-12T01:03:41Z",
+  "speed" : 1.0,
+  "unit" : "transaction",
+  "statements" : 118902,
+  "errors" : 0,
+  "origErrors" : 0,
+  "replayerLateRatio" : 1.5138517434525912E-4,
+  "lagP99Micros" : 3520,
+  "profile" : {
+    "innodb_buffer_pool_instances" : "1",
+    "innodb_buffer_pool_size" : "134217728",
+    "innodb_flush_log_at_trx_commit" : "1",
+    "innodb_flush_method" : "O_DIRECT",
+    "innodb_io_capacity" : "10000",
+    "innodb_io_capacity_max" : "20000",
+    "innodb_redo_log_capacity" : "104857600",
+    "innodb_thread_concurrency" : "0",
+    "max_connections" : "1000",
+    "sync_binlog" : "1",
+    "table_open_cache" : "4000",
+    "transaction_isolation" : "REPEATABLE-READ",
+    "version" : "8.4.11"
+  },
+  "metrics" : {
+    "active_sessions" : {
+      "samples" : 161,
+      "min" : 1.0,
+      "mean" : 1.6149068322981366,
+      "max" : 6.0
+    },
+    "cpu_busy" : {
+      "samples" : 33,
+      "min" : 9.0,
+      "mean" : 16.060606060606062,
+      "max" : 25.9
+    },
+    "load1" : {
+      "samples" : 33,
+      "min" : 5.3,
+      "mean" : 5.578787878787878,
+      "max" : 5.71
+    },
+    "slow_running" : {
+      "samples" : 161,
+      "min" : 0.0,
+      "mean" : 0.0,
+      "max" : 0.0
+    }
+  }
+}

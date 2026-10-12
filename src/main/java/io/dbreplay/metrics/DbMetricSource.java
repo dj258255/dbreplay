@@ -25,11 +25,11 @@ public final class DbMetricSource implements MetricSource {
 
 	// TIMER_WAIT는 피코초다. 실행 중인 문장은 조회하는 순간까지 흐른 시간이 들어 있다
 	private static final String MYSQL = """
-			SELECT (SELECT VARIABLE_VALUE - 1 FROM performance_schema.global_status WHERE VARIABLE_NAME = 'Threads_running'),
+			/* dbreplay:sampler */ SELECT (SELECT VARIABLE_VALUE - 1 FROM performance_schema.global_status WHERE VARIABLE_NAME = 'Threads_running'),
 			       (SELECT COUNT(*) FROM performance_schema.events_statements_current
 			         WHERE END_EVENT_ID IS NULL AND TIMER_WAIT > ? * 1000000000)""";
 	private static final String POSTGRES = """
-			SELECT count(*), count(*) FILTER (WHERE now() - query_start > ? * interval '1 millisecond')
+			/* dbreplay:sampler */ SELECT count(*), count(*) FILTER (WHERE now() - query_start > ? * interval '1 millisecond')
 			  FROM pg_stat_activity
 			 WHERE state = 'active' AND backend_type = 'client backend' AND pid <> pg_backend_pid()""";
 
