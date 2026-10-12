@@ -1,0 +1,30 @@
+전체: 문장 42617 → 42614개, 실패 0 → 0개
+      실행 시간 평균 0.075ms → 0.080ms, 중앙값 0.031ms → 0.031ms, p99 0.576ms → 0.544ms
+
+나빠진 SQL
+        횟수       평균 앞       평균 뒤       변화      p99 앞      p99 뒤  모양
+      6082    0.116ms    0.132ms   +14.5%    1.760ms    1.696ms  UPDATE pgbench_branches SET bbalance = bbalance + ? WHERE bid = ?
+      6082    0.230ms    0.246ms    +7.1%    0.640ms    0.640ms  END
+      6082    0.030ms    0.031ms    +2.2%    0.084ms    0.094ms  SELECT abalance FROM pgbench_accounts WHERE aid = ?
+      6082    0.049ms    0.050ms    +2.1%    0.224ms    0.188ms  UPDATE pgbench_tellers SET tbalance = tbalance + ? WHERE tid = ?
+      6082    0.068ms    0.069ms    +1.6%    0.196ms    0.192ms  UPDATE pgbench_accounts SET abalance = abalance + ? WHERE aid = ?
+
+좋아진 SQL
+        횟수       평균 앞       평균 뒤       변화      p99 앞      p99 뒤  모양
+      6082    0.006ms    0.006ms    -0.6%    0.022ms    0.024ms  BEGIN
+
+실행 시간을 많이 쓴 순서
+        횟수       평균 앞       평균 뒤       변화      p99 앞      p99 뒤  모양
+      6082    0.230ms    0.246ms    +7.1%    0.640ms    0.640ms  END
+      6082    0.116ms    0.132ms   +14.5%    1.760ms    1.696ms  UPDATE pgbench_branches SET bbalance = bbalance + ? WHERE bid = ?
+      6082    0.068ms    0.069ms    +1.6%    0.196ms    0.192ms  UPDATE pgbench_accounts SET abalance = abalance + ? WHERE aid = ?
+      6082    0.049ms    0.050ms    +2.1%    0.224ms    0.188ms  UPDATE pgbench_tellers SET tbalance = tbalance + ? WHERE tid = ?
+      6082    0.030ms    0.031ms    +2.2%    0.084ms    0.094ms  SELECT abalance FROM pgbench_accounts WHERE aid = ?
+      6082    0.025ms    0.025ms    +1.1%    0.074ms    0.074ms  INSERT INTO pgbench_history (tid, bid, aid, delta, mtime) VALUES (?, ?, ?, ?, CURRENT_T...
+      6082    0.006ms    0.006ms    -0.6%    0.022ms    0.024ms  BEGIN
+
+읽은 행 수가 2배 이상 늘어난 SQL
+  이 녹화에는 읽은 행 수가 없다 (PostgreSQL의 로그에는 없다)
+
+오류가 달라진 SQL
+  없음

@@ -22,6 +22,7 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 
 import io.dbreplay.convert.ConvertSummary;
 import io.dbreplay.convert.HeadPolicy;
+import io.dbreplay.convert.LiteralMasker;
 import io.dbreplay.convert.RecordBuffer;
 import io.dbreplay.explore.Alarm;
 import io.dbreplay.explore.Evaluation;
@@ -55,8 +56,11 @@ public final class Main {
 	private static final String USAGE = """
 			사용법:
 			  dbreplay convert --in <서버 로그> --out <트래픽 파일> [--from mysql-slow|postgres-csv]
-			                   [--sort-memory-mb <힙의 4분의 1>] [--tmp-dir <출력 파일의 폴더>]
+			                   [--sort-memory-mb <힙의 4분의 1>] [--tmp-dir <출력 파일의 폴더>] [--mask none|strings|all]
 			                   메모리에 다 들어가지 않는 로그는 임시 파일로 나눠 정렬한다. 로그만큼의 디스크가 더 든다
+			                   --mask strings는 글자로 된 값과 10자리 이상의 숫자를, all은 숫자까지 전부 가린다.
+			                   길이와 글자의 종류를 지키고 같은 값은 같은 값으로 바꾼다. 날짜 모양의 값은 가리지 않는다.
+			                   all은 값들 사이의 관계를 지키지 못한다. 범위 조회의 폭이 달라져 재생이 다른 부하가 된다(실험 13)
 
 			  dbreplay replay  --trace <트래픽 파일> --url <JDBC URL> --user <계정> [--password <암호>]
 			                   [--speed 1] [--unit transaction|statement|session] [--max-connections 500]
@@ -177,17 +181,29 @@ public final class Main {
 		Path tempParent = options.containsKey("--tmp-dir") ? Path.of(options.get("--tmp-dir")) : out.getParent();
 		long sortBytes = options.containsKey("--sort-memory-mb") ? (long) (number(options, "--sort-memory-mb", 0) * 1024 * 1024)
 				: Runtime.getRuntime().maxMemory() / 4;
+		String mask = options.getOrDefault("--mask", "none");
+		boolean mysql = from.equals("mysql-slow");
+		LiteralMasker masker = switch (mask) {
+			case "none" -> null;
+			case "strings" -> new LiteralMasker(LiteralMasker.Level.STRINGS, mysql, LiteralMasker.randomKey());
+			case "all" -> new LiteralMasker(LiteralMasker.Level.ALL, mysql, LiteralMasker.randomKey());
+			default -> throw new IllegalArgumentException("--mask에는 none, strings, all 중 하나를 준다");
+		};
+		String maskName = masker == null ? null : mask;
 		ConvertSummary s;
 		long spills;
 		try (Reader reader = Files.newBufferedReader(Path.of(required(options, "--in")), StandardCharsets.UTF_8);
 				Writer writer = Files.newBufferedWriter(out, StandardCharsets.UTF_8);
 				RecordBuffer buffer = new RecordBuffer(tempParent, sortBytes)) {
 			s = switch (from) {
-				case "mysql-slow" -> SlowLogConverter.convert(reader, writer, HeadPolicy::byDefault, buffer);
-				case "postgres-csv" -> CsvLogConverter.convert(reader, writer, HeadPolicy::byDefault, buffer);
+				case "mysql-slow" -> SlowLogConverter.convert(reader, writer, HeadPolicy::byDefault, buffer, masker, maskName);
+				case "postgres-csv" -> CsvLogConverter.convert(reader, writer, HeadPolicy::byDefault, buffer, masker, maskName);
 				default -> throw new IllegalArgumentException("모르는 로그 종류: " + from);
 			};
 			spills = buffer.spills();
+		}
+		if (masker != null) {
+			System.out.printf("리터럴을 가렸다 (수준: %s). 날짜와 시각 모양의 값, 주석, 식별자는 그대로다%n", mask);
 		}
 		if (spills > 0) {
 			System.out.printf("메모리에 다 올리지 않고 임시 파일 %d개로 나눠 정렬했다%n", spills);

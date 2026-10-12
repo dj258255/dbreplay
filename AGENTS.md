@@ -26,7 +26,7 @@ Java 25와 Gradle로 만든다.
 ```sh
 ./gradlew test
 ./gradlew installDist     # build/install/dbreplay/bin/dbreplay
-dbreplay convert --in <서버 로그> --out <트래픽 파일> [--from mysql-slow|postgres-csv]
+dbreplay convert --in <서버 로그> --out <트래픽 파일> [--from mysql-slow|postgres-csv] [--mask strings]
 dbreplay replay  --trace <트래픽 파일> --url <JDBC URL> --user <계정> --speed 1 [--unit transaction|statement|session]
 dbreplay compare --before <트래픽 파일> --after <트래픽 파일>
 dbreplay report  --before <트래픽 파일> --after <트래픽 파일> --out <리포트.md>

@@ -1,0 +1,65 @@
+전체: 문장 117353 → 117351개, 실패 0 → 0개
+      실행 시간 평균 0.116ms → 0.111ms, 중앙값 0.036ms → 0.036ms, p99 1.792ms → 1.632ms
+
+나빠진 SQL
+        횟수       평균 앞       평균 뒤       변화      p99 앞      p99 뒤  모양
+      1460    0.047ms    0.053ms   +13.4%    0.092ms    0.110ms  INSERT INTO sbtest3 (id, k, c, pad) VALUES (?+)
+      1450    0.078ms    0.087ms   +11.3%    0.384ms    0.296ms  UPDATE sbtest3 SET k=k+? WHERE id=?
+      1491    0.059ms    0.061ms    +2.6%    0.114ms    0.128ms  SELECT SUM(k) FROM sbtest4 WHERE id BETWEEN ? AND ?
+      1446    0.062ms    0.064ms    +2.4%    0.136ms    0.140ms  SELECT c FROM sbtest1 WHERE id BETWEEN ? AND ?
+      5865    0.019ms    0.020ms    +2.1%    0.056ms    0.057ms  BEGIN
+
+좋아진 SQL
+        횟수       평균 앞       평균 뒤       변화      p99 앞      p99 뒤  모양
+      1455    0.104ms    0.071ms   -31.7%    0.736ms    0.200ms  UPDATE sbtest2 SET k=k+? WHERE id=?
+      1498    0.094ms    0.074ms   -21.8%    0.456ms    0.256ms  UPDATE sbtest4 SET k=k+? WHERE id=?
+      1418    0.059ms    0.048ms   -18.9%    0.136ms    0.090ms  UPDATE sbtest1 SET c=? WHERE id=?
+      1468    0.057ms    0.047ms   -17.0%    0.152ms    0.096ms  DELETE FROM sbtest4 WHERE id=?
+      1523    0.057ms    0.049ms   -14.0%    0.136ms    0.108ms  UPDATE sbtest4 SET c=? WHERE id=?
+
+실행 시간을 많이 쓴 순서
+        횟수       평균 앞       평균 뒤       변화      p99 앞      p99 뒤  모양
+      5865    1.403ms    1.334ms    -4.9%    7.424ms    6.912ms  COMMIT
+     14810    0.031ms    0.031ms    +0.1%    0.080ms    0.070ms  SELECT c FROM sbtest2 WHERE id=?
+     14730    0.031ms    0.031ms    +0.0%    0.076ms    0.078ms  SELECT c FROM sbtest1 WHERE id=?
+     14710    0.031ms    0.031ms    -0.0%    0.076ms    0.072ms  SELECT c FROM sbtest4 WHERE id=?
+     14400    0.031ms    0.032ms    +1.6%    0.082ms    0.076ms  SELECT c FROM sbtest3 WHERE id=?
+      1498    0.125ms    0.126ms    +1.3%    0.220ms    0.200ms  SELECT DISTINCT c FROM sbtest2 WHERE id BETWEEN ? AND ? ORDER BY c
+      1474    0.124ms    0.125ms    +1.3%    0.184ms    0.180ms  SELECT DISTINCT c FROM sbtest4 WHERE id BETWEEN ? AND ? ORDER BY c
+      1445    0.127ms    0.126ms    -0.9%    0.228ms    0.196ms  SELECT DISTINCT c FROM sbtest3 WHERE id BETWEEN ? AND ? ORDER BY c
+      1448    0.125ms    0.127ms    +2.0%    0.192ms    0.188ms  SELECT DISTINCT c FROM sbtest1 WHERE id BETWEEN ? AND ? ORDER BY c
+      1521    0.086ms    0.085ms    -0.9%    0.144ms    0.152ms  SELECT c FROM sbtest3 WHERE id BETWEEN ? AND ? ORDER BY c
+      1455    0.104ms    0.071ms   -31.7%    0.736ms    0.200ms  UPDATE sbtest2 SET k=k+? WHERE id=?
+      1498    0.094ms    0.074ms   -21.8%    0.456ms    0.256ms  UPDATE sbtest4 SET k=k+? WHERE id=?
+      1467    0.087ms    0.085ms    -2.0%    0.132ms    0.136ms  SELECT c FROM sbtest2 WHERE id BETWEEN ? AND ? ORDER BY c
+      1445    0.085ms    0.086ms    +0.6%    0.140ms    0.144ms  SELECT c FROM sbtest4 WHERE id BETWEEN ? AND ? ORDER BY c
+      1432    0.084ms    0.086ms    +2.0%    0.136ms    0.132ms  SELECT c FROM sbtest1 WHERE id BETWEEN ? AND ? ORDER BY c
+      1450    0.078ms    0.087ms   +11.3%    0.384ms    0.296ms  UPDATE sbtest3 SET k=k+? WHERE id=?
+      5865    0.019ms    0.020ms    +2.1%    0.056ms    0.057ms  BEGIN
+      1462    0.074ms    0.074ms    -0.4%    0.368ms    0.256ms  UPDATE sbtest1 SET k=k+? WHERE id=?
+      1510    0.064ms    0.064ms    -0.0%    0.118ms    0.114ms  SELECT c FROM sbtest3 WHERE id BETWEEN ? AND ?
+      1476    0.062ms    0.062ms    -0.7%    0.122ms    0.106ms  SELECT c FROM sbtest4 WHERE id BETWEEN ? AND ?
+      1460    0.064ms    0.061ms    -5.0%    0.104ms    0.112ms  DELETE FROM sbtest3 WHERE id=?
+      1446    0.062ms    0.064ms    +2.4%    0.136ms    0.140ms  SELECT c FROM sbtest1 WHERE id BETWEEN ? AND ?
+      1491    0.059ms    0.061ms    +2.6%    0.114ms    0.128ms  SELECT SUM(k) FROM sbtest4 WHERE id BETWEEN ? AND ?
+      1433    0.062ms    0.062ms    +0.2%    0.106ms    0.102ms  SELECT c FROM sbtest2 WHERE id BETWEEN ? AND ?
+      1462    0.060ms    0.061ms    +0.8%    0.128ms    0.106ms  SELECT SUM(k) FROM sbtest2 WHERE id BETWEEN ? AND ?
+      1456    0.060ms    0.060ms    +0.5%    0.106ms    0.120ms  SELECT SUM(k) FROM sbtest1 WHERE id BETWEEN ? AND ?
+      1456    0.059ms    0.060ms    +2.0%    0.112ms    0.110ms  SELECT SUM(k) FROM sbtest3 WHERE id BETWEEN ? AND ?
+      1458    0.059ms    0.053ms   -11.6%    0.100ms    0.108ms  DELETE FROM sbtest1 WHERE id=?
+      1523    0.057ms    0.049ms   -14.0%    0.136ms    0.108ms  UPDATE sbtest4 SET c=? WHERE id=?
+      1472    0.055ms    0.053ms    -3.2%    0.104ms    0.094ms  UPDATE sbtest2 SET c=? WHERE id=?
+      1468    0.054ms    0.053ms    -0.5%    0.096ms    0.124ms  INSERT INTO sbtest4 (id, k, c, pad) VALUES (?+)
+      1468    0.057ms    0.047ms   -17.0%    0.152ms    0.096ms  DELETE FROM sbtest4 WHERE id=?
+      1418    0.059ms    0.048ms   -18.9%    0.136ms    0.090ms  UPDATE sbtest1 SET c=? WHERE id=?
+      1460    0.047ms    0.053ms   +13.4%    0.092ms    0.110ms  INSERT INTO sbtest3 (id, k, c, pad) VALUES (?+)
+      1452    0.051ms    0.050ms    -2.0%    0.116ms    0.110ms  UPDATE sbtest3 SET c=? WHERE id=?
+      1479    0.049ms    0.048ms    -2.0%    0.112ms    0.096ms  DELETE FROM sbtest2 WHERE id=?
+      1458    0.050ms    0.045ms    -8.9%    0.092ms    0.096ms  INSERT INTO sbtest1 (id, k, c, pad) VALUES (?+)
+      1479    0.044ms    0.045ms    +0.5%    0.094ms    0.084ms  INSERT INTO sbtest2 (id, k, c, pad) VALUES (?+)
+
+읽은 행 수가 2배 이상 늘어난 SQL
+  없음
+
+오류가 달라진 SQL
+  없음

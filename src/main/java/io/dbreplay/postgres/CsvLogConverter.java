@@ -18,6 +18,7 @@ import java.util.regex.Pattern;
 
 import io.dbreplay.convert.ConvertSummary;
 import io.dbreplay.convert.HeadPolicy;
+import io.dbreplay.convert.LiteralMasker;
 import io.dbreplay.convert.RecordBuffer;
 import io.dbreplay.convert.SessionHead;
 import io.dbreplay.convert.SqlWords;
@@ -74,6 +75,15 @@ public final class CsvLogConverter {
 	/** @param buffer 레코드를 모아 정렬할 곳. 메모리 한도와 임시 폴더를 정해서 넘긴다. 닫는 것은 부른 쪽이 한다 */
 	public static ConvertSummary convert(Reader csvLog, Writer trace, HeadPolicy headPolicy, RecordBuffer buffer)
 			throws IOException {
+		return convert(csvLog, trace, headPolicy, buffer, null, null);
+	}
+
+	/**
+	 * @param masker   리터럴을 가릴 때 쓴다. 가리지 않으면 null. 문장의 종류와 트랜잭션 경계는 가리기 전의 문장으로 본다
+	 * @param maskName 머리말에 적을 가림 수준. 가리지 않으면 null
+	 */
+	public static ConvertSummary convert(Reader csvLog, Writer trace, HeadPolicy headPolicy, RecordBuffer buffer,
+			LiteralMasker masker, String maskName) throws IOException {
 		CsvReader reader = new CsvReader(csvLog);
 		Map<String, Session> sessions = new HashMap<>();
 		long entries = 0, ignored = 0, skipped = 0, clamped = 0;
@@ -139,7 +149,8 @@ public final class CsvLogConverter {
 			boolean isEnd = kind == PgTransactionTracker.Kind.END || kind == PgTransactionTracker.Kind.END_AND_CHAIN;
 			boolean orphanEnd = isEnd && !session.tracker.inTransaction();
 			Long txn = session.tracker.assign(kind);
-			long index = buffer.add(new TraceRecord(sessionId, start, durationMicros, sql, row.get(DATABASE),
+			long index = buffer.add(new TraceRecord(sessionId, start, durationMicros,
+					masker == null ? sql : masker.mask(sql), row.get(DATABASE),
 					error, null, txn, null));
 			if (kind == PgTransactionTracker.Kind.OTHER) {
 				session.head.statement(index, sql);
@@ -149,7 +160,7 @@ public final class CsvLogConverter {
 			}
 		}
 
-		RecordBuffer.Written w = buffer.write(trace, TraceHeader.of("postgresql", "csvlog"));
+		RecordBuffer.Written w = buffer.write(trace, TraceHeader.of("postgresql", "csvlog").withMask(maskName));
 		return new ConvertSummary(entries, w.statements(), w.closes(), w.sessions(), ignored,
 				buffer.droppedCount(), skipped, clamped);
 	}

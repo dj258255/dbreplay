@@ -1,0 +1,32 @@
+전체: 문장 42617 → 42617개, 실패 0 → 2개
+      실행 시간 평균 0.075ms → 0.071ms, 중앙값 0.031ms → 0.029ms, p99 0.576ms → 0.512ms
+
+나빠진 SQL
+        횟수       평균 앞       평균 뒤       변화      p99 앞      p99 뒤  모양
+      6082    0.006ms    0.006ms    +4.8%    0.022ms    0.026ms  BEGIN
+      6082    0.230ms    0.233ms    +1.5%    0.640ms    0.688ms  END
+      6082    0.025ms    0.025ms    +1.3%    0.074ms    0.080ms  INSERT INTO pgbench_history (tid, bid, aid, delta, mtime) VALUES (?, ?, ?, ?, CURRENT_T...
+      6082    0.030ms    0.030ms    +0.1%    0.084ms    0.098ms  SELECT abalance FROM pgbench_accounts WHERE aid = ?
+
+좋아진 SQL
+        횟수       평균 앞       평균 뒤       변화      p99 앞      p99 뒤  모양
+      6082    0.049ms    0.041ms   -15.7%    0.224ms    0.148ms  UPDATE pgbench_tellers SET tbalance = tbalance + ? WHERE tid = ?
+      6082    0.116ms    0.099ms   -14.3%    1.760ms    1.504ms  UPDATE pgbench_branches SET bbalance = bbalance + ? WHERE bid = ?
+      6082    0.068ms    0.062ms    -8.4%    0.196ms    0.192ms  UPDATE pgbench_accounts SET abalance = abalance + ? WHERE aid = ?
+
+실행 시간을 많이 쓴 순서
+        횟수       평균 앞       평균 뒤       변화      p99 앞      p99 뒤  모양
+      6082    0.230ms    0.233ms    +1.5%    0.640ms    0.688ms  END
+      6082    0.116ms    0.099ms   -14.3%    1.760ms    1.504ms  UPDATE pgbench_branches SET bbalance = bbalance + ? WHERE bid = ?
+      6082    0.068ms    0.062ms    -8.4%    0.196ms    0.192ms  UPDATE pgbench_accounts SET abalance = abalance + ? WHERE aid = ?
+      6082    0.049ms    0.041ms   -15.7%    0.224ms    0.148ms  UPDATE pgbench_tellers SET tbalance = tbalance + ? WHERE tid = ?
+      6082    0.030ms    0.030ms    +0.1%    0.084ms    0.098ms  SELECT abalance FROM pgbench_accounts WHERE aid = ?
+      6082    0.025ms    0.025ms    +1.3%    0.074ms    0.080ms  INSERT INTO pgbench_history (tid, bid, aid, delta, mtime) VALUES (?, ?, ?, ?, CURRENT_T...
+      6082    0.006ms    0.006ms    +4.8%    0.022ms    0.026ms  BEGIN
+
+읽은 행 수가 2배 이상 늘어난 SQL
+  이 녹화에는 읽은 행 수가 없다 (PostgreSQL의 로그에는 없다)
+
+오류가 달라진 SQL
+  새로 난 오류 [1], 사라진 오류 [] (실패 0 → 1)  select o.n, p.partstrat, pg_catalog.count(i.inhparent) from pg_catalog.pg_class as c jo...
+  새로 난 오류 [1], 사라진 오류 [] (실패 0 → 1)  ALTER SYSTEM SET log_min_duration_statement = ?

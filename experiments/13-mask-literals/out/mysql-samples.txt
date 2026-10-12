@@ -1,0 +1,9 @@
+[none]
+{"session":"27","startMicros":1791780319150783,"durationMicros":67,"sql":"UPDATE sbtest1 SET c='97123983016-45065042872-05077876626-25443776160-77894519008-87802508877-91349106545-87663519741-96941263756-42552315238' WHERE id=50122","db":"sbtest","error":0,"lo
+{"session":"27","startMicros":1791780319141327,"durationMicros":148,"sql":"SELECT c FROM sbtest1 WHERE id BETWEEN 49777 AND 49876","db":"sbtest","error":0,"lockMicros":1,"txn":1,"rowsSent":100,"rowsEx
+[strings]
+{"session":"27","startMicros":1791780319150783,"durationMicros":67,"sql":"UPDATE sbtest1 SET c='24748890363-62511574118-42173998137-64069454844-09894059290-15121938329-00841880702-39741781284-97078109745-86174825103' WHERE id=50122","db":"sbtest","error":0,"lo
+{"session":"27","startMicros":1791780319141327,"durationMicros":148,"sql":"SELECT c FROM sbtest1 WHERE id BETWEEN 49777 AND 49876","db":"sbtest","error":0,"lockMicros":1,"txn":1,"rowsSent":100,"rowsEx
+[all]
+{"session":"27","startMicros":1791780319150783,"durationMicros":67,"sql":"UPDATE sbtest1 SET c='23971889903-89693338271-87311668036-05230649981-87207228432-87474783061-98154965372-58895469408-60944545813-39374791609' WHERE id=41999","db":"sbtest","error":0,"lo
+{"session":"27","startMicros":1791780319141327,"durationMicros":148,"sql":"SELECT c FROM sbtest1 WHERE id BETWEEN 64048 AND 55805","db":"sbtest","error":0,"lockMicros":1,"txn":1,"rowsSent":100,"rowsEx

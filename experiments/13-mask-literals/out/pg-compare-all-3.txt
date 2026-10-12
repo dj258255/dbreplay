@@ -1,0 +1,30 @@
+전체: 문장 42614 → 42619개, 실패 0 → 2개
+      실행 시간 평균 0.080ms → 0.070ms, 중앙값 0.031ms → 0.028ms, p99 0.544ms → 0.504ms
+
+나빠진 SQL
+  없음
+
+좋아진 SQL
+        횟수       평균 앞       평균 뒤       변화      p99 앞      p99 뒤  모양
+      6082    0.132ms    0.098ms   -25.8%    1.696ms    1.600ms  UPDATE pgbench_branches SET bbalance = bbalance + ? WHERE bid = ?
+      6082    0.069ms    0.052ms   -25.0%    0.192ms    0.152ms  UPDATE pgbench_accounts SET abalance = abalance + ? WHERE aid = ?
+      6082    0.050ms    0.042ms   -16.7%    0.188ms    0.164ms  UPDATE pgbench_tellers SET tbalance = tbalance + ? WHERE tid = ?
+      6082    0.031ms    0.028ms    -9.0%    0.094ms    0.072ms  SELECT abalance FROM pgbench_accounts WHERE aid = ?
+      6082    0.025ms    0.024ms    -5.4%    0.074ms    0.072ms  INSERT INTO pgbench_history (tid, bid, aid, delta, mtime) VALUES (?, ?, ?, ?, CURRENT_T...
+
+실행 시간을 많이 쓴 순서
+        횟수       평균 앞       평균 뒤       변화      p99 앞      p99 뒤  모양
+      6082    0.246ms    0.237ms    -3.4%    0.640ms    0.672ms  END
+      6082    0.132ms    0.098ms   -25.8%    1.696ms    1.600ms  UPDATE pgbench_branches SET bbalance = bbalance + ? WHERE bid = ?
+      6082    0.069ms    0.052ms   -25.0%    0.192ms    0.152ms  UPDATE pgbench_accounts SET abalance = abalance + ? WHERE aid = ?
+      6082    0.050ms    0.042ms   -16.7%    0.188ms    0.164ms  UPDATE pgbench_tellers SET tbalance = tbalance + ? WHERE tid = ?
+      6082    0.031ms    0.028ms    -9.0%    0.094ms    0.072ms  SELECT abalance FROM pgbench_accounts WHERE aid = ?
+      6082    0.025ms    0.024ms    -5.4%    0.074ms    0.072ms  INSERT INTO pgbench_history (tid, bid, aid, delta, mtime) VALUES (?, ?, ?, ?, CURRENT_T...
+      6082    0.006ms    0.006ms    -2.7%    0.024ms    0.024ms  BEGIN
+
+읽은 행 수가 2배 이상 늘어난 SQL
+  이 녹화에는 읽은 행 수가 없다 (PostgreSQL의 로그에는 없다)
+
+오류가 달라진 SQL
+  새로 난 오류 [1], 사라진 오류 [] (실패 0 → 1)  select o.n, p.partstrat, pg_catalog.count(i.inhparent) from pg_catalog.pg_class as c jo...
+  새로 난 오류 [1], 사라진 오류 [] (실패 0 → 1)  ALTER SYSTEM SET log_min_duration_statement = ?

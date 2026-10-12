@@ -1,0 +1,9 @@
+[none]
+{"session":"6acc6a2d.f4c","startMicros":1791781421266798,"durationMicros":202,"sql":"UPDATE pgbench_accounts SET abalance = abalance + '-711' WHERE aid = '133775'","db":"shop","error":0,"txn":1}
+{"session":"6acc6a2d.f4c","startMicros":1791781421267911,"durationMicros":89,"sql":"INSERT INTO pgbench_history (tid, bid, aid, delta, mtime) VALUES ('46', '4', '133775', '-711', CURRENT_TIMESTAMP)","db":"shop","error":0,"txn":1}
+[strings]
+{"session":"6acc6a2d.f4c","startMicros":1791781421266798,"durationMicros":202,"sql":"UPDATE pgbench_accounts SET abalance = abalance + '-711' WHERE aid = '133775'","db":"shop","error":0,"txn":1}
+{"session":"6acc6a2d.f4c","startMicros":1791781421267911,"durationMicros":89,"sql":"INSERT INTO pgbench_history (tid, bid, aid, delta, mtime) VALUES ('46', '4', '133775', '-711', CURRENT_TIMESTAMP)","db":"shop","error":0,"txn":1}
+[all]
+{"session":"6acc6a2d.f4c","startMicros":1791781421266798,"durationMicros":202,"sql":"UPDATE pgbench_accounts SET abalance = abalance + '-621' WHERE aid = '733837'","db":"shop","error":0,"txn":1}
+{"session":"6acc6a2d.f4c","startMicros":1791781421267911,"durationMicros":89,"sql":"INSERT INTO pgbench_history (tid, bid, aid, delta, mtime) VALUES ('46', '1', '733837', '-621', CURRENT_TIMESTAMP)","db":"shop","error":0,"txn":1}
