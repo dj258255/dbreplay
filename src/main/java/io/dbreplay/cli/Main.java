@@ -22,6 +22,7 @@ import io.dbreplay.convert.ConvertSummary;
 import io.dbreplay.explore.Alarm;
 import io.dbreplay.explore.Evaluation;
 import io.dbreplay.explore.Explorer;
+import io.dbreplay.explore.ManagedTargets;
 import io.dbreplay.explore.RoundData;
 import io.dbreplay.explore.RoundJudge;
 import io.dbreplay.explore.ScaleAdvice;
@@ -77,6 +78,11 @@ public final class Main {
 			  dbreplay check   --evaluation <평가 파일> --url <JDBC URL> --user <계정> [--password <암호>]
 			                   [--trace <지금의 트래픽 파일>] [--max-traffic-distance 0.2]
 			                   [explore에 줬던 알람 옵션]
+
+			  dbreplay manage  --targets <대상 목록.json> [--force yes] [--max-traffic-distance 0.2]
+			                   등록한 대상을 훑어, 평가한 적이 없거나 만료됐거나 무효인 것만 다시 평가하고 수위를 한 표로 낸다.
+			                   대상 목록은 {"targets": [{"name": ..., "evaluation": <평가 파일>, "options": {explore의 옵션}}]} 꼴이다.
+			                   주기적으로 돌리려면 cron에 건다
 
 			  dbreplay sample  --url <JDBC URL> --user <계정> [--password <암호>] --seconds <초> [지표 옵션]
 			                   녹화하는 동안 운영 쪽의 부하 지표를 떠 둘 때 쓴다
@@ -142,6 +148,7 @@ public final class Main {
 			case "check" -> check(options);
 			case "sample" -> sample(options);
 			case "reset" -> reset(options);
+			case "manage" -> manage(options);
 			default -> usage();
 		}
 	}
@@ -515,9 +522,8 @@ public final class Main {
 		return only != null;
 	}
 
-	private static void check(Map<String, String> options) throws Exception {
-		Evaluation evaluation = JSON.readValue(Path.of(required(options, "--evaluation")).toFile(), Evaluation.class);
-		JdbcTarget target = target(options);
+	/** 이 평가를 지금도 믿어도 되는지 본다. 무효인 이유들을 돌려주고, 비어 있으면 유효하다. */
+	private static List<String> invalidReasons(Evaluation evaluation, Map<String, String> options) throws Exception {
 		TrafficModel current = null;
 		String tracePath = options.get("--trace");
 		if (tracePath != null) {
@@ -525,9 +531,77 @@ public final class Main {
 				current = TrafficModel.of(trace);
 			}
 		}
-		evaluation = withoutRawCommand(evaluation);
-		List<String> reasons = evaluation.invalidReasons(Instant.now(), TargetProfile.read(target),
+		return withoutRawCommand(evaluation).invalidReasons(Instant.now(), TargetProfile.read(target(options)),
 				alarmSettings(options), current, number(options, "--max-traffic-distance", 0.2));
+	}
+
+	private static void manage(Map<String, String> options) throws Exception {
+		ManagedTargets managed = JSON.readValue(Path.of(required(options, "--targets")).toFile(), ManagedTargets.class);
+		boolean force = "yes".equals(options.get("--force"));
+		Map<String, ManagedTargets.Action> actions = new java.util.LinkedHashMap<>();
+		Map<String, String> why = new HashMap<>();
+
+		for (ManagedTargets.Target t : managed.targets()) {
+			Map<String, String> targetOptions = new HashMap<>(t.options());
+			targetOptions.put("--out", t.evaluation());
+			if (options.containsKey("--max-traffic-distance")) {
+				targetOptions.put("--max-traffic-distance", options.get("--max-traffic-distance"));
+			}
+			Path file = Path.of(t.evaluation());
+			ManagedTargets.Action action;
+			try {
+				if (!Files.exists(file)) {
+					action = ManagedTargets.Action.EVALUATED;
+					why.put(t.name(), "평가한 적이 없다");
+				}
+				else {
+					List<String> reasons = force ? List.of("--force") : invalidReasons(JSON.readValue(file.toFile(), Evaluation.class), targetOptions);
+					action = reasons.isEmpty() ? ManagedTargets.Action.KEPT : ManagedTargets.Action.REEVALUATED;
+					why.put(t.name(), String.join(" / ", reasons));
+				}
+				if (action != ManagedTargets.Action.KEPT) {
+					System.out.printf("%n=== %s: %s ===%n", t.name(), why.get(t.name()));
+					explore(targetOptions);
+				}
+			}
+			catch (Exception e) {
+				// 한 대상이 실패해도 나머지는 계속 본다. 실패한 이유는 종류만 적는다. 메시지에 접속 정보가 섞일 수 있다
+				action = ManagedTargets.Action.FAILED;
+				why.put(t.name(), e.getClass().getSimpleName());
+			}
+			actions.put(t.name(), action);
+		}
+
+		System.out.printf("%n%-20s %-12s %8s %12s %6s %-6s  %s%n", "대상", "이번에 한 일", "상한", "상한(문장/초)", "수위", "판정", "평가한 시각");
+		for (ManagedTargets.Target t : managed.targets()) {
+			String did = switch (actions.get(t.name())) {
+				case KEPT -> "그대로";
+				case EVALUATED -> "평가";
+				case REEVALUATED -> "다시 평가";
+				case FAILED -> "실패";
+			};
+			Path file = Path.of(t.evaluation());
+			if (!Files.exists(file)) {
+				System.out.printf("%-20s %-12s %8s %12s %6s %-6s  %s%n", t.name(), did, "-", "-", "-", "-", why.get(t.name()));
+				continue;
+			}
+			Evaluation e = JSON.readValue(file.toFile(), Evaluation.class);
+			System.out.printf("%-20s %-12s %8.2f %12.0f %5.0f%% %-6s  %s%n", t.name(), did, e.ceilingSpeed(), e.ceilingQps(),
+					e.level().level() * 100, switch (e.level().verdict()) {
+						case SURPLUS -> "과잉";
+						case HEALTHY -> "적정";
+						case SHORT -> "부족";
+					}, e.evaluatedAt());
+		}
+		if (actions.containsValue(ManagedTargets.Action.FAILED)) {
+			System.exit(1);
+		}
+	}
+
+	private static void check(Map<String, String> options) throws Exception {
+		Evaluation evaluation = JSON.readValue(Path.of(required(options, "--evaluation")).toFile(), Evaluation.class);
+		String tracePath = options.get("--trace");
+		List<String> reasons = invalidReasons(evaluation, options);
 
 		System.out.printf("평가: %s, 상한 %.2f배속 (초당 %.0f문장), 수위 %.0f%%%n", evaluation.evaluatedAt(),
 				evaluation.ceilingSpeed(), evaluation.ceilingQps(), evaluation.level().level() * 100);
@@ -539,7 +613,7 @@ public final class Main {
 			reasons.forEach(r -> System.out.println("  - " + r));
 		}
 		System.out.println("하드웨어 사양은 DB 접속으로 알 수 없어 확인하지 않았다"
-				+ (current == null ? ". 트래픽 모양은 --trace를 주지 않아 확인하지 않았다" : ""));
+				+ (tracePath == null ? ". 트래픽 모양은 --trace를 주지 않아 확인하지 않았다" : ""));
 		if (!reasons.isEmpty()) {
 			System.exit(1);
 		}
