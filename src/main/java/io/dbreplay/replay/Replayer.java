@@ -44,9 +44,10 @@ public final class Replayer {
 	 * @param warmConnections     연결을 돌려 쓰는 방식에서 시작하기 전에 열어 둘 연결 수
 	 * @param lookaheadMicros     계획 시각보다 이만큼 먼저 문장을 실행 스레드에 넘긴다
 	 * @param lateThresholdMicros 이보다 늦게 나가면 늦은 문장으로 센다
+	 * @param readsOnly           읽기 문장만 튼다. 나머지는 건너뛴 것으로 센다
 	 */
 	public record Options(double speed, Unit unit, int maxConnections, int warmConnections, long lookaheadMicros,
-			long lateThresholdMicros) {
+			long lateThresholdMicros, boolean readsOnly) {
 
 		public Options {
 			if (!(speed > 0)) {
@@ -55,16 +56,21 @@ public final class Replayer {
 		}
 
 		public static Options atSpeed(double speed) {
-			return new Options(speed, Unit.TRANSACTION, 500, 16, 1_000_000, 1_000);
+			return new Options(speed, Unit.TRANSACTION, 500, 16, 1_000_000, 1_000, false);
 		}
 
 		public Options withUnit(Unit unit) {
-			return new Options(speed, unit, maxConnections, warmConnections, lookaheadMicros, lateThresholdMicros);
+			return new Options(speed, unit, maxConnections, warmConnections, lookaheadMicros, lateThresholdMicros, readsOnly);
+		}
+
+		/** 읽기만 튼다. 종 DB가 받는 읽기의 상한을 볼 때 쓴다. 문장 단위로 내보내야 뜻이 있다. */
+		public Options onlyReads() {
+			return new Options(speed, Unit.STATEMENT, maxConnections, warmConnections, lookaheadMicros, lateThresholdMicros, true);
 		}
 
 		public Options withMaxConnections(int maxConnections) {
 			return new Options(speed, unit, maxConnections, Math.min(warmConnections, maxConnections), lookaheadMicros,
-					lateThresholdMicros);
+					lateThresholdMicros, readsOnly);
 		}
 	}
 
@@ -131,6 +137,10 @@ public final class Replayer {
 					// 넘기는 시각은 정밀할 필요가 없다. 실행 스레드가 계획 시각을 타이머로 다시 맞춘다
 					for (long wait; (wait = planNanos - lookaheadNanos - System.nanoTime()) > 0;) {
 						LockSupport.parkNanos(wait);
+					}
+					if (options.readsOnly() && !r.endsSession() && !SqlWords.reads(r.sql())) {
+						skipped++;
+						continue;
 					}
 					dispatcher.accept(new Item(seq, r, planNanos));
 				}

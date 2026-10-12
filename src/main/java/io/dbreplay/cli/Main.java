@@ -50,7 +50,7 @@ public final class Main {
 
 			  dbreplay replay  --trace <트래픽 파일> --url <JDBC URL> --user <계정> [--password <암호>]
 			                   [--speed 1] [--unit transaction|statement|session] [--max-connections 500]
-			                   [--out <결과 파일>] [--run-out <재생 기록 파일>] [--metrics on] [지표 옵션]
+			                   [--only reads] [--out <결과 파일>] [--run-out <재생 기록 파일>] [--metrics on] [지표 옵션]
 
 			  dbreplay compare --before <트래픽 파일> --after <트래픽 파일> [--top 3] [--min-count 100]
 
@@ -65,9 +65,10 @@ public final class Main {
 			                   [--alarm-command <알람 확인 명령>] [--alarm-metric <이름>=<값>,...]
 			                   [--alarm-active-sessions <개수>] [--alarm-sustain 3] [--max-distortion 0.2]
 			                   [지표 옵션]
-			                   [--unit transaction|statement|session] [--max-connections 500]
+			                   [--unit transaction|statement|session] [--only reads] [--max-connections 500]
 			                   [--start-speed 1] [--max-speed 64] [--precision 0.1]
-			                   [--current-qps <지금의 초당 문장 수>] [--level-low 0.3] [--level-high 0.5]
+			                   [--current-qps <지금의 초당 문장 수>] [--current-read-qps <읽기>] [--current-write-qps <쓰기>]
+			                   [--level-low 0.3] [--level-high 0.5]
 			                   [--out <평가 파일>] [--valid-days 30]
 
 			  dbreplay check   --evaluation <평가 파일> --url <JDBC URL> --user <계정> [--password <암호>]
@@ -98,6 +99,7 @@ public final class Main {
 			  transaction  트랜잭션 하나가 한 단위다. 주 DB의 트래픽에 쓴다 (기본)
 			  statement    문장 하나가 한 단위다. 종 DB의 읽기 트래픽에 쓴다
 			  session      원본의 연결을 그대로 옮긴다. 세션 상태에 기대는 트래픽에 쓴다
+			--only reads를 주면 읽기 문장만 하나씩 독립으로 튼다. 읽기만 늘 때의 상한을 볼 때 쓴다
 
 			과부하는 알람으로 판정한다. explore에는 알람이 하나는 있어야 한다.
 			  --alarm-command          라운드가 끝날 때 sh -c로 실행한다. 0이 아닌 값으로 끝나면 알람이 울린 것이다.
@@ -382,11 +384,14 @@ public final class Main {
 				: result.stoppedBy() == RoundJudge.State.DISTORTED
 						? " 이상 (그 위는 재생기가 내지 못해 대상의 한계를 보지 못했다)"
 						: "");
-		double ceilingQps = traffic.qps() * result.ceilingSpeed();
-		double currentQps = number(options, "--current-qps", traffic.qps());
+		// 읽기만 튼 탐색이면 상한과 수위도 읽기의 것이다
+		double recordedQps = readsOnly(options) ? traffic.readQps() : traffic.qps();
+		double ceilingQps = recordedQps * result.ceilingSpeed();
+		double currentQps = number(options, readsOnly(options) ? "--current-read-qps" : "--current-qps", recordedQps);
 		WaterLevel level = new WaterLevel(currentQps, ceilingQps,
 				number(options, "--level-low", 0.30), number(options, "--level-high", 0.50));
-		printLevel(level, traffic.qps());
+		printLevel(level, recordedQps);
+		printReadWrite(options, traffic, result.ceilingSpeed(), level);
 
 		String out = options.get("--out");
 		if (out != null) {
@@ -428,6 +433,38 @@ public final class Main {
 					level.capacityFactor(), level.high() * 100);
 			case HEALTHY -> { }
 		}
+	}
+
+	/**
+	 * 읽기와 쓰기의 상한과 수위를 따로 낸다. 메이투안 글은 읽기 QPS 상한과 쓰기 QPS 상한을 따로 보여 준다.
+	 * 상한 배속 하나를 각각의 QPS에 곱한 값이다. 읽기와 쓰기가 지금의 비율로 함께 늘 때의 상한이라는 뜻이다.
+	 */
+	private static void printReadWrite(Map<String, String> options, TrafficModel traffic, double ceilingSpeed, WaterLevel level) {
+		if (traffic.reads() + traffic.writes() == 0) {
+			return;
+		}
+		if (readsOnly(options)) {
+			System.out.println("읽기만 튼 탐색이다. 위의 초당 문장 수와 상한, 수위는 읽기 문장만 센 것이다");
+			return;
+		}
+		System.out.printf("%n읽기와 쓰기가 지금의 비율(읽기 %.0f%%)로 함께 늘 때:%n",
+				100.0 * traffic.reads() / (traffic.reads() + traffic.writes()));
+		for (String kind : List.of("읽기", "쓰기")) {
+			boolean read = kind.equals("읽기");
+			double recorded = read ? traffic.readQps() : traffic.writeQps();
+			double current = number(options, read ? "--current-read-qps" : "--current-write-qps", recorded);
+			WaterLevel l = new WaterLevel(current, recorded * ceilingSpeed, level.low(), level.high());
+			System.out.printf("  %s: 초당 %.0f, 상한 %.0f, 수위 %.0f%%%n", kind, current, l.ceilingQps(), l.level() * 100);
+		}
+		System.out.println("  읽기만 늘 때의 상한은 --only reads로 따로 탐색한다");
+	}
+
+	private static boolean readsOnly(Map<String, String> options) {
+		String only = options.get("--only");
+		if (only != null && !only.equals("reads")) {
+			throw new IllegalArgumentException("--only에는 reads만 줄 수 있다");
+		}
+		return only != null;
 	}
 
 	private static void check(Map<String, String> options) throws Exception {
@@ -561,8 +598,8 @@ public final class Main {
 
 	private static Replayer.Options replayOptions(Map<String, String> options, double speed) {
 		Replayer.Options defaults = Replayer.Options.atSpeed(speed);
-		return defaults.withUnit(unit(options))
-				.withMaxConnections((int) number(options, "--max-connections", defaults.maxConnections()));
+		Replayer.Options chosen = readsOnly(options) ? defaults.onlyReads() : defaults.withUnit(unit(options));
+		return chosen.withMaxConnections((int) number(options, "--max-connections", defaults.maxConnections()));
 	}
 
 	private static Replayer.Unit unit(Map<String, String> options) {

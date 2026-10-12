@@ -79,6 +79,9 @@ class EvaluationTest {
 		assertEquals(0.6, traffic(80, 20).distance(traffic(20, 80)), 1e-9);
 		assertEquals(Map.of("SELECT c FROM t WHERE id = ?", 0.8, "UPDATE t SET k = k + ? WHERE id = ?", 0.2), traffic(80, 20).shares());
 		assertEquals(100, traffic(80, 20).statements());
+		assertEquals(80, traffic(80, 20).reads());
+		assertEquals(20, traffic(80, 20).writes());
+		assertEquals(800.0, traffic(80, 20).readQps(), 10, "100문장이 0.099초에 걸쳐 있다");
 	}
 
 	@Test
