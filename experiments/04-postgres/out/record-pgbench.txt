@@ -6,10 +6,10 @@ number of clients: 8
 number of threads: 4
 maximum number of tries: 1
 duration: 30 s
-number of transactions actually processed: 6028
+number of transactions actually processed: 6113
 number of failed transactions: 0 (0.000%)
-latency average = 3.473 ms
-latency stddev = 1.874 ms
-rate limit schedule lag: avg 1.658 (max 18.065) ms
-initial connection time = 2.956 ms
-tps = 200.954963 (without initial connection time)
+latency average = 4.755 ms
+latency stddev = 3.409 ms
+rate limit schedule lag: avg 2.629 (max 35.991) ms
+initial connection time = 4.468 ms
+tps = 203.818810 (without initial connection time)
