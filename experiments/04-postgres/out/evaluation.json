@@ -1,5 +1,5 @@
 {
-  "evaluatedAt" : "2026-10-11T22:08:59Z",
+  "evaluatedAt" : "2026-10-12T00:30:16Z",
   "validDays" : 30,
   "profile" : {
     "checkpoint_timeout" : "300",
@@ -23,28 +23,28 @@
   },
   "unit" : "transaction",
   "traffic" : {
-    "statements" : 42350,
-    "spanMicros" : 30870288,
+    "statements" : 42945,
+    "spanMicros" : 30823283,
     "shares" : {
-      "BEGIN" : 0.14233766233766235,
-      "END" : 0.14233766233766235,
-      "INSERT INTO pgbench_history (tid, bid, aid, delta, mtime) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)" : 0.14233766233766235,
-      "SELECT abalance FROM pgbench_accounts WHERE aid = ?" : 0.14233766233766235,
-      "UPDATE pgbench_accounts SET abalance = abalance + ? WHERE aid = ?" : 0.14233766233766235,
-      "UPDATE pgbench_branches SET bbalance = bbalance + ? WHERE bid = ?" : 0.14233766233766235,
-      "UPDATE pgbench_tellers SET tbalance = tbalance + ? WHERE tid = ?" : 0.14233766233766235,
-      "SELECT count(*), count(*) FILTER (WHERE now() - query_start > (?::int8) * interval ?) FROM pg_stat_activity WHERE state = ? AND backend_type = ? AND pid <> pg_backend_pid()" : 0.0035182998819362457,
-      "ALTER SYSTEM SET log_min_duration_statement = ?" : 2.361275088547816E-5,
-      "SELECT pg_reload_conf()" : 2.361275088547816E-5,
-      "SET application_name = ?" : 2.361275088547816E-5,
-      "select count(*) from pgbench_branches" : 2.361275088547816E-5,
-      "select o.n, p.partstrat, pg_catalog.count(i.inhparent) from pg_catalog.pg_class as c join pg_catalog.pg_namespace as n on (n.oid = c.relnamespace) cross join lateral (select pg_catalog.array_position(pg_catalog.current_schemas(true), n.nspname)) as o(n) left join pg_catalog.pg_partitioned_table as p on (p.partrelid = c.oid) left join pg_catalog.pg_inherits as i on (c.oid = i.inhparent) where c.relname = ? and o.n is not null group by ?, ? order by ? asc limit ?" : 2.361275088547816E-5
+      "BEGIN" : 0.1423448597042729,
+      "END" : 0.1423448597042729,
+      "INSERT INTO pgbench_history (tid, bid, aid, delta, mtime) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)" : 0.1423448597042729,
+      "SELECT abalance FROM pgbench_accounts WHERE aid = ?" : 0.1423448597042729,
+      "UPDATE pgbench_accounts SET abalance = abalance + ? WHERE aid = ?" : 0.1423448597042729,
+      "UPDATE pgbench_branches SET bbalance = bbalance + ? WHERE bid = ?" : 0.1423448597042729,
+      "UPDATE pgbench_tellers SET tbalance = tbalance + ? WHERE tid = ?" : 0.1423448597042729,
+      "SELECT count(*), count(*) FILTER (WHERE now() - query_start > (?::int8) * interval ?) FROM pg_stat_activity WHERE state = ? AND backend_type = ? AND pid <> pg_backend_pid()" : 0.0034695540808010244,
+      "ALTER SYSTEM SET log_min_duration_statement = ?" : 2.3285597857724998E-5,
+      "SELECT pg_reload_conf()" : 2.3285597857724998E-5,
+      "SET application_name = ?" : 2.3285597857724998E-5,
+      "select count(*) from pgbench_branches" : 2.3285597857724998E-5,
+      "select o.n, p.partstrat, pg_catalog.count(i.inhparent) from pg_catalog.pg_class as c join pg_catalog.pg_namespace as n on (n.oid = c.relnamespace) cross join lateral (select pg_catalog.array_position(pg_catalog.current_schemas(true), n.nspname)) as o(n) left join pg_catalog.pg_partitioned_table as p on (p.partrelid = c.oid) left join pg_catalog.pg_inherits as i on (c.oid = i.inhparent) where c.relname = ? and o.n is not null group by ?, ? order by ? asc limit ?" : 2.3285597857724998E-5
     }
   },
-  "ceilingSpeed" : 10.0,
+  "ceilingSpeed" : 3.0,
   "stoppedBy" : "OVERLOADED",
-  "ceilingQps" : 13718.692873872767,
-  "currentQps" : 1371.8692873872767,
+  "ceilingQps" : 4179.794864810474,
+  "currentQps" : 1393.2649549368248,
   "low" : 0.3,
   "high" : 0.5
 }

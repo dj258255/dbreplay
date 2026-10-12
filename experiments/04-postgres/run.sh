@@ -12,6 +12,8 @@ P="docker compose exec -T pg16 psql -U postgres -d shop -q -t -A"
 RUN="docker run --rm --network $NET -v $ROOT/build/install/dbreplay:/app:ro -v $HERE:/exp -e DBREPLAY_PASSWORD=replay dbreplay-exp-runner"
 URL="jdbc:postgresql://pg16:5432/postgres?preferQueryMode=simple"
 CSV=/var/lib/postgresql/data/log/pg.csv
+# 되돌리기: 덤프 되붓기, VACUUM ANALYZE, 체크포인트. 도구가 한다(실험 05)
+RESET='--snapshot /exp/out/snapshot.sql --snapshot-db shop'
 
 log_on() {
   docker compose exec -T -u postgres pg16 sh -c ": > $CSV" </dev/null
@@ -50,13 +52,13 @@ log_off prod
 cat out/prod-convert.txt
 
 echo "== 변경 전: 1배속 재생 =="
-$RUN sh /exp/reset.sh </dev/null
+$RUN /app/bin/dbreplay reset --url "$URL" --user postgres $RESET </dev/null
 log_on
 $RUN /app/bin/dbreplay replay --trace /exp/out/prod.trace.jsonl --url "$URL" --user postgres --speed 1 --metric-command "sh /exp/metrics.sh" </dev/null | tee out/replay-before.txt
 log_off before
 
 echo "== 변경 후(synchronous_commit=off): 1배속 재생 =="
-$RUN sh /exp/reset.sh </dev/null
+$RUN /app/bin/dbreplay reset --url "$URL" --user postgres $RESET </dev/null
 $P -c "ALTER SYSTEM SET synchronous_commit = off" -c "SELECT pg_reload_conf()" </dev/null >/dev/null
 log_on
 $RUN /app/bin/dbreplay replay --trace /exp/out/prod.trace.jsonl --url "$URL" --user postgres --speed 1 --metric-command "sh /exp/metrics.sh" </dev/null | tee out/replay-after.txt
@@ -70,7 +72,7 @@ $RUN /app/bin/dbreplay compare --before /exp/out/before.trace.jsonl --after /exp
 
 echo "== 용량 탐색 =="
 $RUN /app/bin/dbreplay explore --trace /exp/out/prod.trace.jsonl --url "$URL" --user postgres \
-  --reset-command "sh /exp/reset.sh" --alarm-metric "active_sessions>=32" --metric-command "sh /exp/metrics.sh" --max-speed 64 \
+  $RESET --alarm-metric "active_sessions>=32" --metric-command "sh /exp/metrics.sh" --max-speed 64 \
   --out /exp/out/evaluation.json </dev/null | tee out/explore.txt
 
 echo "== 평가 유효성 확인 =="

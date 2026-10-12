@@ -15,6 +15,8 @@ URL="jdbc:mysql://mysql84:3306/?sslMode=DISABLED&allowPublicKeyRetrieval=true"
 # 알람: 실행 중인 연결 32개 이상(내장 지표), 그리고 100ms 넘는 문장 50개 이상(알람 확인 명령)
 ALARMS='--alarm-metric active_sessions>=32 --alarm-command'
 METRICS='--metric-command'
+# 되돌리기: 덤프 되붓기, (변경), 통계 다시 잡기, 조용해질 때까지 대기, 분포 비우기. 도구가 한다(실험 05)
+RESET='--snapshot /exp/out/snapshot.sql --snapshot-db sbtest --ready-command'
 SIZES="SELECT name, ROUND(file_size/1024/1024, 1) AS file_mb FROM information_schema.innodb_tablespaces WHERE name LIKE 'sbtest/%' ORDER BY name"
 
 log_on() {
@@ -60,14 +62,14 @@ log_off prod
 cat out/prod-convert.txt
 
 echo "== 변경 전: 1배속 재생 =="
-$RUN sh /exp/reset.sh </dev/null
+$RUN /app/bin/dbreplay reset --url "$URL" --user root $RESET "sh /exp/ready.sh" </dev/null | tee out/reset-before.txt
 $M -e "$SIZES" 2>/dev/null </dev/null | tee out/size-before.txt
 log_on
 $RUN /app/bin/dbreplay replay --trace /exp/out/prod.trace.jsonl --url "$URL" --user root --speed 1 $METRICS "sh /exp/metrics.sh" </dev/null | tee out/replay-before.txt
 log_off before
 
 echo "== 변경 후(테이블 압축): 1배속 재생 =="
-$RUN sh /exp/reset-compressed.sh </dev/null
+$RUN /app/bin/dbreplay reset --url "$URL" --user root $RESET "sh /exp/ready.sh" --change-command "sh /exp/compress.sh" </dev/null | tee out/reset-after.txt
 $M -e "$SIZES" 2>/dev/null </dev/null | tee out/size-after.txt
 log_on
 $RUN /app/bin/dbreplay replay --trace /exp/out/prod.trace.jsonl --url "$URL" --user root --speed 1 $METRICS "sh /exp/metrics.sh" </dev/null | tee out/replay-after.txt
@@ -80,14 +82,14 @@ $RUN /app/bin/dbreplay compare --before /exp/out/before.trace.jsonl --after /exp
 
 echo "== 용량 탐색: 변경 전 =="
 $RUN /app/bin/dbreplay explore --trace /exp/out/prod.trace.jsonl --url "$URL" --user root \
-  --reset-command "sh /exp/reset.sh" $ALARMS "sh /exp/alarm-slow.sh" $METRICS "sh /exp/metrics.sh" --max-speed 32 \
+  $RESET "sh /exp/ready.sh" $ALARMS "sh /exp/alarm-slow.sh" $METRICS "sh /exp/metrics.sh" --max-speed 32 \
   --out /exp/out/evaluation-before.json </dev/null | tee out/explore-before.txt
 echo "== 용량 탐색: 변경 후(테이블 압축) =="
 $RUN /app/bin/dbreplay explore --trace /exp/out/prod.trace.jsonl --url "$URL" --user root \
-  --reset-command "sh /exp/reset-compressed.sh" $ALARMS "sh /exp/alarm-slow.sh" $METRICS "sh /exp/metrics.sh" --max-speed 32 </dev/null | tee out/explore-after.txt
+  $RESET "sh /exp/ready.sh" --change-command "sh /exp/compress.sh" $ALARMS "sh /exp/alarm-slow.sh" $METRICS "sh /exp/metrics.sh" --max-speed 32 </dev/null | tee out/explore-after.txt
 
 echo "== 문장 단위 재생 (종 DB의 읽기를 다루는 방식) =="
-$RUN sh /exp/reset.sh </dev/null
+$RUN /app/bin/dbreplay reset --url "$URL" --user root $RESET "sh /exp/ready.sh" </dev/null | tee out/reset-before.txt
 $RUN /app/bin/dbreplay replay --trace /exp/out/prod.trace.jsonl --url "$URL" --user root --unit statement --speed 1 </dev/null | tee out/replay-statement.txt
 
 echo "== 평가 유효성 확인 =="
