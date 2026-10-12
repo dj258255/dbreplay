@@ -174,6 +174,15 @@ class SlowLogConverterTest {
 		assertEquals(1, c.summary().ignored());
 	}
 
+	/** 표시는 문장의 맨 앞에 있을 때만 본다. 그 글자가 값 안에 든 원본의 문장을 빼면 안 된다. */
+	@Test
+	void keepsAnApplicationStatementThatOnlyMentionsTheMark() throws IOException {
+		String sql = "INSERT INTO notes (body) VALUES ('/* dbreplay:sampler */ 라는 글자를 봤다')";
+		Converted c = convert(new StringReader(entry("2026-10-11T00:00:01.000000Z", 3, "0.000100", sql)), HeadPolicy::byDefault);
+
+		assertEquals(List.of(sql), c.records().stream().map(TraceRecord::sql).toList());
+	}
+
 	@Test
 	void derivesStartFromEndTimeWhenExtraFieldsAreOff() throws IOException {
 		Converted c = convert(new StringReader(

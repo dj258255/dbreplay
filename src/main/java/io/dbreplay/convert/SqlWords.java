@@ -22,7 +22,8 @@ public final class SqlWords {
 	 * 원본의 트래픽이 아니므로 변환기가 뺀다. 실험 03의 리포트에 표본기의 조회가 "좋아진 SQL"로 올라온 적이 있다.
 	 */
 	public static boolean ownStatement(String sql) {
-		return sql.contains(OWN_MARK);
+		// 문장의 맨 앞에 있을 때만 본다. 아무 데나 있어도 뺀다면 그 글자가 리터럴에 든 원본의 문장이 조용히 사라진다
+		return sql.stripLeading().startsWith(OWN_MARK);
 	}
 
 	/** 주석을 걷어 낸 앞 단어들. 대문자로, 많아야 네 조각을 돌려준다. 네 번째 조각에는 나머지가 다 들어 있다. */
