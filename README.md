@@ -43,6 +43,7 @@ dbreplay explore --trace prod.trace.jsonl --url jdbc:mysql://sandbox:3306/ --use
 | [04](experiments/04-postgres/README.md) | PostgreSQL에서 같은 흐름 |
 | [05](experiments/05-sandbox-reset/README.md) | 되돌린 뒤 기다리면 재생이 원본에 가까워지는가 |
 | [06](experiments/06-plan-change/README.md) | 실행 계획이 바뀐 것이 읽은 행 수로 드러나는가 |
+| [07](experiments/07-read-ceiling/README.md) | 읽기만 늘 때의 상한은 전체가 함께 늘 때와 얼마나 다른가 |
 
 ## 문서
 

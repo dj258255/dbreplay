@@ -29,6 +29,9 @@
 - `dbreplay report`(#5). 변경 전후의 SQL 비교, 읽은 행 수, 오류, 부하 지표, 달라진 파라미터, 상한과 수위를 Markdown 문서
   하나로 낸다. 재생할 때 `--run-out`으로 그때의 대상 설정과 지표를 남기면 리포트에 실린다.
 
+- 읽기와 쓰기의 상한과 수위(#17). `explore`가 상한 배속을 읽기 QPS와 쓰기 QPS에 나눠 곱한 값을 낸다.
+  `--only reads`를 주면 읽기 문장만 하나씩 독립으로 틀어 읽기만 늘 때의 상한을 탐색한다.
+
 ### 바뀐 것
 
 - `--alarm-active-sessions <개수>`는 `--alarm-metric active_sessions>=<개수>`의 줄임으로 남는다.
