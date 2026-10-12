@@ -65,14 +65,14 @@ echo "== 변경 전: 1배속 재생 =="
 $RUN /app/bin/dbreplay reset --url "$URL" --user root $RESET "sh /exp/ready.sh" </dev/null | tee out/reset-before.txt
 $M -e "$SIZES" 2>/dev/null </dev/null | tee out/size-before.txt
 log_on
-$RUN /app/bin/dbreplay replay --trace /exp/out/prod.trace.jsonl --url "$URL" --user root --speed 1 $METRICS "sh /exp/metrics.sh" </dev/null | tee out/replay-before.txt
+$RUN /app/bin/dbreplay replay --trace /exp/out/prod.trace.jsonl --url "$URL" --user root --speed 1 $METRICS "sh /exp/metrics.sh" --run-out /exp/out/run-before.json </dev/null | tee out/replay-before.txt
 log_off before
 
 echo "== 변경 후(테이블 압축): 1배속 재생 =="
 $RUN /app/bin/dbreplay reset --url "$URL" --user root $RESET "sh /exp/ready.sh" --change-command "sh /exp/compress.sh" </dev/null | tee out/reset-after.txt
 $M -e "$SIZES" 2>/dev/null </dev/null | tee out/size-after.txt
 log_on
-$RUN /app/bin/dbreplay replay --trace /exp/out/prod.trace.jsonl --url "$URL" --user root --speed 1 $METRICS "sh /exp/metrics.sh" </dev/null | tee out/replay-after.txt
+$RUN /app/bin/dbreplay replay --trace /exp/out/prod.trace.jsonl --url "$URL" --user root --speed 1 $METRICS "sh /exp/metrics.sh" --run-out /exp/out/run-after.json </dev/null | tee out/replay-after.txt
 log_off after
 
 echo "== 비교: 원본 대 변경 전 재생 (재생이 원본과 같은가) =="
@@ -86,7 +86,15 @@ $RUN /app/bin/dbreplay explore --trace /exp/out/prod.trace.jsonl --url "$URL" --
   --out /exp/out/evaluation-before.json </dev/null | tee out/explore-before.txt
 echo "== 용량 탐색: 변경 후(테이블 압축) =="
 $RUN /app/bin/dbreplay explore --trace /exp/out/prod.trace.jsonl --url "$URL" --user root \
-  $RESET "sh /exp/ready.sh" --change-command "sh /exp/compress.sh" $ALARMS "sh /exp/alarm-slow.sh" $METRICS "sh /exp/metrics.sh" --max-speed 32 </dev/null | tee out/explore-after.txt
+  $RESET "sh /exp/ready.sh" --change-command "sh /exp/compress.sh" $ALARMS "sh /exp/alarm-slow.sh" $METRICS "sh /exp/metrics.sh" --max-speed 32 \
+  --out /exp/out/evaluation-after.json </dev/null | tee out/explore-after.txt
+
+echo "== 리포트 =="
+$RUN /app/bin/dbreplay report --title "테이블 압축 전후 (MySQL 8.4, sysbench)" \
+  --before /exp/out/before.trace.jsonl --after /exp/out/after.trace.jsonl \
+  --before-run /exp/out/run-before.json --after-run /exp/out/run-after.json \
+  --before-evaluation /exp/out/evaluation-before.json --after-evaluation /exp/out/evaluation-after.json \
+  --out /exp/report-example.md </dev/null
 
 echo "== 문장 단위 재생 (종 DB의 읽기를 다루는 방식) =="
 $RUN /app/bin/dbreplay reset --url "$URL" --user root $RESET "sh /exp/ready.sh" </dev/null | tee out/reset-before.txt

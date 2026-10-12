@@ -1,34 +1,40 @@
-전체: 문장 118293 → 118514개, 실패 0 → 0개
-      실행 시간 평균 0.118ms → 0.119ms, 중앙값 0.031ms → 0.036ms, p99 1.920ms → 1.856ms
+전체: 문장 118904 → 118966개, 실패 0 → 0개
+      실행 시간 평균 0.110ms → 0.114ms, 중앙값 0.031ms → 0.036ms, p99 1.728ms → 1.728ms
 
 나빠진 SQL
         횟수       평균 앞       평균 뒤       변화      p99 앞      p99 뒤  모양
-      1469    0.039ms    0.059ms   +50.6%    0.084ms    0.168ms  UPDATE sbtest4 SET c=? WHERE id=?
-      1485    0.038ms    0.057ms   +49.2%    0.086ms    0.118ms  UPDATE sbtest2 SET c=? WHERE id=?
-      1490    0.040ms    0.059ms   +48.7%    0.088ms    0.140ms  UPDATE sbtest1 SET c=? WHERE id=?
+     14740    0.024ms    0.032ms   +32.2%    0.066ms    0.088ms  SELECT c FROM sbtest3 WHERE id=?
+     15310    0.024ms    0.031ms   +31.0%    0.061ms    0.082ms  SELECT c FROM sbtest1 WHERE id=?
+     14700    0.024ms    0.031ms   +30.0%    0.066ms    0.080ms  SELECT c FROM sbtest4 WHERE id=?
 
 좋아진 SQL
         횟수       평균 앞       평균 뒤       변화      p99 앞      p99 뒤  모양
-      1472    0.129ms    0.080ms   -37.6%    3.328ms    0.288ms  UPDATE sbtest1 SET k=k+? WHERE id=?
-      1446    0.112ms    0.077ms   -31.7%    0.352ms    0.196ms  UPDATE sbtest3 SET k=k+? WHERE id=?
-      5907    0.028ms    0.020ms   -29.0%    0.064ms    0.070ms  BEGIN
+      1548    0.065ms    0.044ms   -32.8%    0.220ms    0.110ms  INSERT INTO sbtest2 (id, k, c, pad) VALUES (?+)
+      5945    0.029ms    0.020ms   -31.5%    0.068ms    0.062ms  BEGIN
+      1439    0.071ms    0.056ms   -20.8%    0.312ms    0.110ms  INSERT INTO sbtest1 (id, k, c, pad) VALUES (?+)
 
 실행 시간을 많이 쓴 순서
         횟수       평균 앞       평균 뒤       변화      p99 앞      p99 뒤  모양
-      5907    1.503ms    1.444ms    -3.9%    7.936ms    7.296ms  COMMIT
-     15300    0.024ms    0.031ms   +31.8%    0.061ms    0.090ms  SELECT c FROM sbtest2 WHERE id=?
-     14980    0.023ms    0.032ms   +36.8%    0.057ms    0.092ms  SELECT c FROM sbtest1 WHERE id=?
-     14760    0.024ms    0.032ms   +34.2%    0.060ms    0.094ms  SELECT c FROM sbtest3 WHERE id=?
-     14030    0.023ms    0.031ms   +35.4%    0.059ms    0.086ms  SELECT c FROM sbtest4 WHERE id=?
-      1487    0.128ms    0.127ms    -0.9%    0.188ms    0.244ms  SELECT DISTINCT c FROM sbtest3 WHERE id BETWEEN ? AND ? ORDER BY c
-      1485    0.126ms    0.127ms    +0.9%    0.192ms    0.272ms  SELECT DISTINCT c FROM sbtest2 WHERE id BETWEEN ? AND ? ORDER BY c
-      1476    0.125ms    0.128ms    +2.1%    0.188ms    0.248ms  SELECT DISTINCT c FROM sbtest4 WHERE id BETWEEN ? AND ? ORDER BY c
-      1459    0.126ms    0.126ms    +0.5%    0.196ms    0.248ms  SELECT DISTINCT c FROM sbtest1 WHERE id BETWEEN ? AND ? ORDER BY c
-      1472    0.129ms    0.080ms   -37.6%    3.328ms    0.288ms  UPDATE sbtest1 SET k=k+? WHERE id=?
-      1468    0.107ms    0.098ms    -8.9%    0.384ms    0.752ms  UPDATE sbtest4 SET k=k+? WHERE id=?
-      1521    0.097ms    0.094ms    -3.4%    0.264ms    0.296ms  UPDATE sbtest2 SET k=k+? WHERE id=?
-      5907    0.028ms    0.020ms   -29.0%    0.064ms    0.070ms  BEGIN
-      1446    0.112ms    0.077ms   -31.7%    0.352ms    0.196ms  UPDATE sbtest3 SET k=k+? WHERE id=?
-      1506    0.082ms    0.085ms    +3.9%    0.128ms    0.176ms  SELECT c FROM sbtest2 WHERE id BETWEEN ? AND ? ORDER BY c
+      5945    1.361ms    1.384ms    +1.7%    6.016ms    6.656ms  COMMIT
+     15310    0.024ms    0.031ms   +31.0%    0.061ms    0.082ms  SELECT c FROM sbtest1 WHERE id=?
+     14700    0.024ms    0.031ms   +28.4%    0.070ms    0.092ms  SELECT c FROM sbtest2 WHERE id=?
+     14740    0.024ms    0.032ms   +32.2%    0.066ms    0.088ms  SELECT c FROM sbtest3 WHERE id=?
+     14700    0.024ms    0.031ms   +30.0%    0.066ms    0.080ms  SELECT c FROM sbtest4 WHERE id=?
+      1514    0.126ms    0.127ms    +0.5%    0.216ms    0.216ms  SELECT DISTINCT c FROM sbtest3 WHERE id BETWEEN ? AND ? ORDER BY c
+      1506    0.126ms    0.126ms    -0.3%    0.196ms    0.200ms  SELECT DISTINCT c FROM sbtest1 WHERE id BETWEEN ? AND ? ORDER BY c
+      1479    0.129ms    0.127ms    -1.5%    0.232ms    0.236ms  SELECT DISTINCT c FROM sbtest2 WHERE id BETWEEN ? AND ? ORDER BY c
+      1446    0.127ms    0.129ms    +2.0%    0.228ms    0.232ms  SELECT DISTINCT c FROM sbtest4 WHERE id BETWEEN ? AND ? ORDER BY c
+      5945    0.029ms    0.020ms   -31.5%    0.068ms    0.062ms  BEGIN
+      1520    0.083ms    0.086ms    +3.3%    0.160ms    0.184ms  SELECT c FROM sbtest2 WHERE id BETWEEN ? AND ? ORDER BY c
+      1479    0.084ms    0.087ms    +3.6%    0.156ms    0.216ms  SELECT c FROM sbtest1 WHERE id BETWEEN ? AND ? ORDER BY c
+      1493    0.083ms    0.086ms    +3.8%    0.156ms    0.164ms  SELECT c FROM sbtest4 WHERE id BETWEEN ? AND ? ORDER BY c
+      1453    0.085ms    0.085ms    +0.3%    0.152ms    0.156ms  SELECT c FROM sbtest3 WHERE id BETWEEN ? AND ? ORDER BY c
+      1467    0.084ms    0.082ms    -2.3%    0.296ms    0.544ms  UPDATE sbtest1 SET k=k+? WHERE id=?
 
-한쪽에만 있는 모양: 앞 0개, 뒤 1개
+읽은 행 수가 2배 이상 늘어난 SQL
+  없음
+
+오류가 달라진 SQL
+  없음
+
+한쪽에만 있는 모양: 앞 0개, 뒤 3개
