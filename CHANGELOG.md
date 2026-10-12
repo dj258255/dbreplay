@@ -18,6 +18,9 @@
   CPU와 Load Average처럼 DB 접속으로 못 읽는 지표는 `--metric-command`로 받는다. `explore`가 라운드별 지표를
   표로 내고, `--alarm-metric 이름>=값`으로 어느 지표에든 알람을 걸 수 있다.
 - `dbreplay sample`: 녹화하는 동안 운영 쪽의 부하 지표를 떠 둔다.
+- 샌드박스 되돌리기(#4). `--snapshot <덤프 파일>`을 주면 도구가 덤프를 되붓고 통계를 다시 잡는다. MySQL에서는 서버가
+  조용해질 때까지 기다린다. 검증하려는 변경은 `--change-command`로 넣는다. `dbreplay reset`으로 따로 부를 수도 있다.
+  mysql이나 psql 클라이언트가 있어야 한다. `--reset-command`는 그대로 쓸 수 있다.
 
 ### 바뀐 것
 

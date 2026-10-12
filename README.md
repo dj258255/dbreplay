@@ -24,7 +24,7 @@ dbreplay convert --in slow.log --out prod.trace.jsonl
 dbreplay replay  --trace prod.trace.jsonl --url jdbc:mysql://sandbox:3306/ --user root --speed 1
 dbreplay compare --before before.trace.jsonl --after after.trace.jsonl
 dbreplay explore --trace prod.trace.jsonl --url jdbc:mysql://sandbox:3306/ --user root \
-  --reset-command ./reset.sh --alarm-command ./alarm.sh --metric-command ./metrics.sh
+  --snapshot snapshot.sql --alarm-command ./alarm.sh --metric-command ./metrics.sh
 ```
 
 녹화부터 용량 탐색까지 한 번에 돌리는 예는 `experiments/03-mysql-compare-explore/run.sh`와
@@ -38,6 +38,7 @@ dbreplay explore --trace prod.trace.jsonl --url jdbc:mysql://sandbox:3306/ --use
 | [02](experiments/02-replay-fidelity/README.md) | 재생이 원본과 얼마나 같은가 |
 | [03](experiments/03-mysql-compare-explore/README.md) | MySQL에서 테이블 압축 전후 비교와 용량 탐색 |
 | [04](experiments/04-postgres/README.md) | PostgreSQL에서 같은 흐름 |
+| [05](experiments/05-sandbox-reset/README.md) | 되돌린 뒤 기다리면 재생이 원본에 가까워지는가 |
 
 ## 문서
 
