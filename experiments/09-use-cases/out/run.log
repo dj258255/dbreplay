@@ -1,0 +1,117 @@
+version()
+8.0.46
+===== 녹화 (8.4): oltp_read_write와 k 인덱스를 타는 읽기를 함께 =====
+로그 항목 41108개를 읽어 문장 40480개, 연결 종료 15개를 썼다 (연결 20개)
+뺀 것: 재생에 쓰지 않는 항목 613, 머리에서 잘린 트랜잭션의 문장 0
+===== 녹화 (8.0): oltp_read_write와 양성 대조(QUALIFY를 별칭으로 쓴 문장 120개) =====
+8.4가 대조 문장을 거부한다: ERROR 1064 (42000) at line 1: You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near 'qualify FROM sbtest1 WHERE id = 1' at line 1
+로그 항목 41120개를 읽어 문장 40503개, 연결 종료 10개를 썼다 (연결 18개)
+뺀 것: 재생에 쓰지 않는 항목 607, 머리에서 잘린 트랜잭션의 문장 0
+===== A 인덱스 변경 =====
+오류: 원본 0개, 재생 0개
+오류: 원본 0개, 재생 0개
+--- A 1
+전체: 문장 40523 → 40529개, 실패 0 → 0개
+      실행 시간 평균 0.104ms → 0.264ms, 중앙값 0.037ms → 0.036ms, p99 1.344ms → 14.336ms
+
+나빠진 SQL
+        횟수       평균 앞       평균 뒤       변화      p99 앞      p99 뒤  모양
+       418    0.083ms   15.756ms +18787.7%    0.184ms   18.944ms  SELECT id, k, c, pad FROM sbtest1 WHERE k IN (?+)
+       528    0.053ms    0.064ms   +20.6%    0.096ms    0.120ms  UPDATE sbtest4 SET c=? WHERE id=?
+       485    0.043ms    0.050ms   +15.0%    0.076ms    0.132ms  DELETE FROM sbtest2 WHERE id=?
+       465    0.067ms    0.071ms    +5.1%    0.160ms    0.200ms  UPDATE sbtest1 SET k=k+? WHERE id=?
+       509    0.061ms    0.062ms    +2.8%    0.102ms    0.104ms  SELECT SUM(k) FROM sbtest4 WHERE id BETWEEN ? AND ?
+
+좋아진 SQL
+오류: 원본 0개, 재생 0개
+오류: 원본 0개, 재생 0개
+--- A 2
+전체: 문장 40525 → 40527개, 실패 0 → 0개
+      실행 시간 평균 0.104ms → 0.265ms, 중앙값 0.037ms → 0.037ms, p99 1.312ms → 14.336ms
+
+나빠진 SQL
+        횟수       평균 앞       평균 뒤       변화      p99 앞      p99 뒤  모양
+       418    0.084ms   15.711ms +18700.5%    0.192ms   18.944ms  SELECT id, k, c, pad FROM sbtest1 WHERE k IN (?+)
+       528    0.047ms    0.052ms   +10.8%    0.082ms    0.106ms  UPDATE sbtest4 SET c=? WHERE id=?
+       480    0.060ms    0.063ms    +5.5%    0.098ms    0.114ms  SELECT SUM(k) FROM sbtest3 WHERE id BETWEEN ? AND ?
+      2003    0.020ms    0.021ms    +4.4%    0.054ms    0.053ms  BEGIN
+       534    0.085ms    0.088ms    +3.0%    0.132ms    0.140ms  SELECT c FROM sbtest3 WHERE id BETWEEN ? AND ? ORDER BY c
+
+좋아진 SQL
+오류: 원본 0개, 재생 0개
+오류: 원본 0개, 재생 0개
+--- A 3
+전체: 문장 40523 → 40529개, 실패 0 → 0개
+      실행 시간 평균 0.105ms → 0.272ms, 중앙값 0.037ms → 0.037ms, p99 1.312ms → 14.336ms
+
+나빠진 SQL
+        횟수       평균 앞       평균 뒤       변화      p99 앞      p99 뒤  모양
+       418    0.081ms   15.840ms +19372.2%    0.172ms   18.944ms  SELECT id, k, c, pad FROM sbtest1 WHERE k IN (?+)
+       532    0.071ms    0.095ms   +34.7%    0.228ms    0.328ms  UPDATE sbtest2 SET k=k+? WHERE id=?
+       500    0.050ms    0.063ms   +26.6%    0.086ms    0.132ms  INSERT INTO sbtest3 (id, k, c, pad) VALUES (?+)
+       505    0.041ms    0.050ms   +20.5%    0.068ms    0.126ms  DELETE FROM sbtest4 WHERE id=?
+       491    0.068ms    0.074ms    +9.0%    0.296ms    0.296ms  UPDATE sbtest3 SET k=k+? WHERE id=?
+
+좋아진 SQL
+===== B 버전 업그레이드 (8.0 -> 8.4) =====
+오류: 원본 0개, 재생 0개
+오류: 원본 0개, 재생 120개
+--- B 1
+전체: 문장 40552 → 40658개, 실패 0 → 0개
+      실행 시간 평균 0.129ms → 0.105ms, 중앙값 0.043ms → 0.036ms, p99 2.176ms → 1.408ms
+
+오류가 달라진 SQL
+  없음
+
+한쪽에만 있는 모양: 앞 1개, 뒤 0개
+오류: 원본 0개, 재생 0개
+오류: 원본 0개, 재생 120개
+--- B 2
+전체: 문장 40556 → 40644개, 실패 0 → 0개
+      실행 시간 평균 0.158ms → 0.110ms, 중앙값 0.044ms → 0.038ms, p99 2.432ms → 1.472ms
+
+오류가 달라진 SQL
+  없음
+
+한쪽에만 있는 모양: 앞 1개, 뒤 0개
+오류: 원본 0개, 재생 0개
+오류: 원본 0개, 재생 120개
+--- B 3
+전체: 문장 40552 → 40630개, 실패 0 → 0개
+      실행 시간 평균 0.136ms → 0.105ms, 중앙값 0.043ms → 0.037ms, p99 2.240ms → 1.376ms
+
+오류가 달라진 SQL
+  없음
+
+한쪽에만 있는 모양: 앞 1개, 뒤 0개
+===== C 파라미터 변경 (innodb_flush_log_at_trx_commit 1 -> 2): 1배속 =====
+오류: 원본 0개, 재생 0개
+오류: 원본 0개, 재생 0개
+--- C 1
+전체: 문장 40525 → 40523개, 실패 0 → 0개
+      실행 시간 평균 0.111ms → 0.091ms, 중앙값 0.037ms → 0.038ms, p99 1.376ms → 0.976ms
+
+      2003    1.266ms    0.917ms   -27.5%    7.168ms    3.136ms  COMMIT
+오류: 원본 0개, 재생 0개
+오류: 원본 0개, 재생 0개
+--- C 2
+전체: 문장 40523 → 40523개, 실패 0 → 0개
+      실행 시간 평균 0.104ms → 0.090ms, 중앙값 0.037ms → 0.037ms, p99 1.312ms → 0.976ms
+
+      2003    1.197ms    0.924ms   -22.8%    5.376ms    3.840ms  COMMIT
+오류: 원본 0개, 재생 0개
+오류: 원본 0개, 재생 0개
+--- C 3
+전체: 문장 40525 → 40523개, 실패 0 → 0개
+      실행 시간 평균 0.108ms → 0.089ms, 중앙값 0.038ms → 0.036ms, p99 1.408ms → 0.960ms
+
+      2003    1.236ms    0.912ms   -26.2%    5.760ms    3.776ms  COMMIT
+===== C 파라미터 변경: 상한 =====
+--- C 상한 flush=1 1: 상한: 30.00배속
+--- C 상한 flush=2 1: 상한: 28.00배속
+--- C 상한 flush=1 2: 상한: 26.00배속
+--- C 상한 flush=2 2: 상한: 22.00배속
+--- C 상한 flush=1 3: 상한: 32.00배속 이상 (이 배속까지 알람이 울리지 않았다)
+--- C 상한 flush=2 3: 상한: 30.00배속
+끝
+exit=0
