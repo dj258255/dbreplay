@@ -1,0 +1,4 @@
+statements=20795804
+closes=1586
+sessions=1650
+tagged=14397924

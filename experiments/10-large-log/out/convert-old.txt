@@ -1,0 +1,5 @@
+Exception in thread "main" java.lang.OutOfMemoryError: Java heap space
+	at io.dbreplay.mysql.SlowLogConverter.convert(SlowLogConverter.java:74)
+	at io.dbreplay.mysql.SlowLogConverter.convert(SlowLogConverter.java:30)
+	at io.dbreplay.cli.Main.convert(Main.java:163)
+	at io.dbreplay.cli.Main.main(Main.java:144)
