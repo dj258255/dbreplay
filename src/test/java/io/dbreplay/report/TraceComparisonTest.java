@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.io.StringReader;
 import java.io.StringWriter;
 import java.util.List;
+import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 
@@ -35,6 +36,66 @@ class TraceComparisonTest {
 			w.write(TraceRecord.close("A", 1_000_000));
 		}
 		return new TraceReader(new StringReader(out.toString()));
+	}
+
+	/** 실행 시간은 같아도 읽은 행 수가 늘었으면 실행 계획이 바뀐 것이다. 실험 02에서 통계가 틀어져 범위 조회가 풀 스캔이 됐다. */
+	@Test
+	void findsShapesThatStartedReadingManyMoreRows() throws IOException {
+		TraceComparison c = TraceComparison.of(
+				trace(w -> {
+					for (int i = 0; i < 30; i++) {
+						w.write(new TraceRecord("A", i, 100, "SELECT c FROM t WHERE id BETWEEN " + i + " AND 99", null, 0, null, null, 100L, 100L, null));
+						w.write(new TraceRecord("A", i, 100, "SELECT c FROM t WHERE id = " + i, null, 0, null, null, 1L, 1L, null));
+					}
+				}),
+				trace(w -> {
+					for (int i = 0; i < 30; i++) {
+						w.write(new TraceRecord("A", i, 100, "SELECT c FROM t WHERE id BETWEEN " + i + " AND 99", null, 0, null, null, 100L, 100_000L, null));
+						w.write(new TraceRecord("A", i, 100, "SELECT c FROM t WHERE id = " + i, null, 0, null, null, 1L, 1L, null));
+					}
+				}));
+
+		List<TraceComparison.Row> more = c.moreRowsExamined(3, 20, 2);
+		assertEquals(List.of("SELECT c FROM t WHERE id BETWEEN ? AND ?"), more.stream().map(TraceComparison.Row::shape).toList());
+		assertEquals(1_000.0, more.getFirst().rowsRatio(), 1e-9);
+		assertEquals(1.0, more.getFirst().ratio(), 1e-9, "실행 시간은 그대로다");
+	}
+
+	@Test
+	void saysNothingAboutRowsWhenTheRecordingHasNone() throws IOException {
+		TraceComparison c = TraceComparison.of(
+				trace(w -> add(w, "SELECT c FROM t WHERE id = %d", 30, 100, 0)),
+				trace(w -> add(w, "SELECT c FROM t WHERE id = %d", 30, 100, 0)));
+
+		assertTrue(c.moreRowsExamined(3, 20, 2).isEmpty());
+		assertEquals(false, c.totalBefore().knowsRows());
+	}
+
+	/** 뒤에서만 난 오류와 앞에서만 난 오류를 나눠 본다. 번호가 바뀐 것은 양쪽에 다 나온다. */
+	@Test
+	void tellsNewErrorsFromGoneAndChangedOnes() throws IOException {
+		TraceComparison c = TraceComparison.of(
+				trace(w -> {
+					add(w, "INSERT INTO a VALUES (%d)", 3, 100, 0);
+					add(w, "INSERT INTO b VALUES (%d)", 3, 100, 1062);
+					add(w, "INSERT INTO c VALUES (%d)", 3, 100, 1213);
+					add(w, "INSERT INTO d VALUES (%d)", 3, 100, 1062);
+				}),
+				trace(w -> {
+					add(w, "INSERT INTO a VALUES (%d)", 3, 100, 1146);
+					add(w, "INSERT INTO b VALUES (%d)", 3, 100, 0);
+					add(w, "INSERT INTO c VALUES (%d)", 3, 100, 1205);
+					add(w, "INSERT INTO d VALUES (%d)", 3, 100, 1062);
+				}));
+
+		Map<String, TraceComparison.Row> changed = new java.util.HashMap<>();
+		c.errorChanges().forEach(r -> changed.put(r.shape(), r));
+		assertEquals(java.util.Set.of("INSERT INTO a VALUES (?)", "INSERT INTO b VALUES (?)", "INSERT INTO c VALUES (?)"), changed.keySet());
+		assertEquals(java.util.Set.of(1146), changed.get("INSERT INTO a VALUES (?)").newErrors());
+		assertEquals(java.util.Set.of(1062), changed.get("INSERT INTO b VALUES (?)").goneErrors());
+		assertEquals(java.util.Set.of(1205), changed.get("INSERT INTO c VALUES (?)").newErrors());
+		assertEquals(java.util.Set.of(1213), changed.get("INSERT INTO c VALUES (?)").goneErrors());
+		assertEquals(9, c.totalAfter().errors());
 	}
 
 	@Test

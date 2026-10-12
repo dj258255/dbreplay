@@ -221,6 +221,35 @@ public final class Main {
 		printRows("나빠진 SQL", c.worst(top, minCount));
 		printRows("좋아진 SQL", c.best(top, minCount));
 		printRows("실행 시간을 많이 쓴 순서", c.rows(minCount).stream().limit(15).toList());
+
+		// 읽은 행 수: 실행 시간이 비슷해도 실행 계획이 바뀌면 여기서 드러난다
+		System.out.printf("%n읽은 행 수가 2배 이상 늘어난 SQL%n");
+		if (!b.knowsRows() || !a.knowsRows()) {
+			System.out.println("  이 녹화에는 읽은 행 수가 없다 (PostgreSQL의 로그에는 없다)");
+		}
+		else {
+			List<TraceComparison.Row> more = c.moreRowsExamined(top, minCount, 2);
+			if (more.isEmpty()) {
+				System.out.println("  없음");
+			}
+			else {
+				System.out.printf("  %8s %12s %12s %8s  %s%n", "횟수", "행 수 앞", "행 수 뒤", "배율", "모양");
+				for (TraceComparison.Row r : more) {
+					System.out.printf("  %8d %12.1f %12.1f %7.1f배  %s%n", r.after().count(), r.before().meanRowsExamined(),
+							r.after().meanRowsExamined(), r.rowsRatio(), shorten(r.shape()));
+				}
+			}
+		}
+
+		System.out.printf("%n오류가 달라진 SQL%n");
+		List<TraceComparison.Row> errorChanges = c.errorChanges();
+		if (errorChanges.isEmpty()) {
+			System.out.println("  없음");
+		}
+		for (TraceComparison.Row r : errorChanges) {
+			System.out.printf("  새로 난 오류 %s, 사라진 오류 %s (실패 %d → %d)  %s%n", r.newErrors(), r.goneErrors(),
+					r.before().errors(), r.after().errors(), shorten(r.shape()));
+		}
 		if (!c.onlyBefore().isEmpty() || !c.onlyAfter().isEmpty()) {
 			System.out.printf("%n한쪽에만 있는 모양: 앞 %d개, 뒤 %d개%n", c.onlyBefore().size(), c.onlyAfter().size());
 		}
@@ -234,11 +263,14 @@ public final class Main {
 		}
 		System.out.printf("  %8s %10s %10s %8s %10s %10s  %s%n", "횟수", "평균 앞", "평균 뒤", "변화", "p99 앞", "p99 뒤", "모양");
 		for (TraceComparison.Row r : rows) {
-			String shape = r.shape().length() > 90 ? r.shape().substring(0, 87) + "..." : r.shape();
 			System.out.printf("  %8d %10s %10s %+7.1f%% %10s %10s  %s%n", r.after().count(),
 					ms(r.before().meanMicros()), ms(r.after().meanMicros()), (r.ratio() - 1) * 100,
-					ms(r.before().quantile(0.99)), ms(r.after().quantile(0.99)), shape);
+					ms(r.before().quantile(0.99)), ms(r.after().quantile(0.99)), shorten(r.shape()));
 		}
+	}
+
+	private static String shorten(String shape) {
+		return shape.length() > 90 ? shape.substring(0, 87) + "..." : shape;
 	}
 
 	private static void explore(Map<String, String> options) throws Exception {
