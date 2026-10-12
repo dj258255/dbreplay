@@ -32,6 +32,10 @@
 - 읽기와 쓰기의 상한과 수위(#17). `explore`가 상한 배속을 읽기 QPS와 쓰기 QPS에 나눠 곱한 값을 낸다.
   `--only reads`를 주면 읽기 문장만 하나씩 독립으로 틀어 읽기만 늘 때의 상한을 탐색한다.
 
+- 확장·축소 권고(#7). `explore --read-nodes N`을 주면 읽기 수위에서 필요한 노드 수를, 쓰기 수위에서 주 DB에 필요한
+  용량의 배수를 낸다. 읽기 상한이 노드 수에 비례한다는 가정이고 확인된 것이 아니다. `--scale-command`는
+  `--apply-scale yes`를 함께 줘야 실행된다.
+
 ### 바뀐 것
 
 - `--alarm-active-sessions <개수>`는 `--alarm-metric active_sessions>=<개수>`의 줄임으로 남는다.
