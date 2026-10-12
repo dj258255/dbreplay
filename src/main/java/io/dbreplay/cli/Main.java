@@ -54,7 +54,7 @@ public final class Main {
 			                   [--speed 1] [--unit transaction|statement|session] [--max-connections 500]
 			                   [--only reads] [--out <결과 파일>] [--run-out <재생 기록 파일>] [--metrics on] [지표 옵션]
 
-			  dbreplay compare --before <트래픽 파일> --after <트래픽 파일> [--top 3] [--min-count 100]
+			  dbreplay compare --before <트래픽 파일> --after <트래픽 파일> [--top 3] [--min-count 100] [--rows 15]
 
 			  dbreplay report  --before <트래픽 파일> --after <트래픽 파일> --out <리포트.md> [--title <제목>]
 			                   [--before-run <재생 기록>] [--after-run <재생 기록>]
@@ -275,7 +275,7 @@ public final class Main {
 
 		printRows("나빠진 SQL", c.worst(top, minCount));
 		printRows("좋아진 SQL", c.best(top, minCount));
-		printRows("실행 시간을 많이 쓴 순서", c.rows(minCount).stream().limit(15).toList());
+		printRows("실행 시간을 많이 쓴 순서", c.rows(minCount).stream().limit((long) number(options, "--rows", 15)).toList());
 
 		// 읽은 행 수: 실행 시간이 비슷해도 실행 계획이 바뀌면 여기서 드러난다
 		System.out.printf("%n읽은 행 수가 2배 이상 늘어난 SQL%n");
