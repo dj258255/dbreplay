@@ -53,16 +53,15 @@ class SandboxTest {
 		assertThrows(IllegalArgumentException.class, () -> new JdbcTarget("jdbc:h2:mem:x", "u", "p").endpoint());
 	}
 
-	/** JDBC URL에는 암호를 넣어 쓸 수 있다. 읽지 못한 URL을 알려 줄 때 그 부분이 따라 나오면 안 된다. */
+	/** JDBC URL에는 암호를 넣어 쓸 수 있다. 읽지 못한 URL을 알려 줄 때 URL의 어느 부분도 따라 나오면 안 된다. */
 	@Test
-	void keepsTheQueryPartOfTheUrlOutOfTheErrorMessage() {
-		IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
-				() -> new JdbcTarget("jdbc:h2:mem:x?user=root&password=secret", "u", "p").endpoint());
+	void keepsTheUrlOutOfTheErrorMessage() {
+		for (String url : List.of("jdbc:h2:mem:x?user=root&password=secret", "jdbc:h2://root:secret@host:9092/x",
+				"jdbc:h2://root:p?secret@host/x")) {
+			IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> new JdbcTarget(url, "u", "p").endpoint());
 
-		assertEquals("접속 위치를 읽을 수 없는 URL이다: jdbc:h2:mem:x", e.getMessage());
-
-		IllegalArgumentException withUserInfo = assertThrows(IllegalArgumentException.class,
-				() -> new JdbcTarget("jdbc:h2://root:secret@host:9092/x?password=also", "u", "p").endpoint());
-		assertEquals("접속 위치를 읽을 수 없는 URL이다: jdbc:h2://host:9092/x", withUserInfo.getMessage());
+			assertFalse(e.getMessage().contains("secret"), url);
+			assertFalse(e.getMessage().contains("h2"), "URL의 어느 부분도 싣지 않는다");
+		}
 	}
 }
