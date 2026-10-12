@@ -36,6 +36,8 @@ import io.dbreplay.replay.JdbcTarget;
 import io.dbreplay.replay.ReplaySummary;
 import io.dbreplay.replay.Replayer;
 import io.dbreplay.replay.ResultWriter;
+import io.dbreplay.report.MarkdownReport;
+import io.dbreplay.report.RunRecord;
 import io.dbreplay.report.TraceComparison;
 import io.dbreplay.sandbox.Sandbox;
 import io.dbreplay.trace.TraceReader;
@@ -48,9 +50,15 @@ public final class Main {
 
 			  dbreplay replay  --trace <트래픽 파일> --url <JDBC URL> --user <계정> [--password <암호>]
 			                   [--speed 1] [--unit transaction|statement|session] [--max-connections 500]
-			                   [--out <결과 파일>] [--metrics on] [지표 옵션]
+			                   [--out <결과 파일>] [--run-out <재생 기록 파일>] [--metrics on] [지표 옵션]
 
 			  dbreplay compare --before <트래픽 파일> --after <트래픽 파일> [--top 3] [--min-count 100]
+
+			  dbreplay report  --before <트래픽 파일> --after <트래픽 파일> --out <리포트.md> [--title <제목>]
+			                   [--before-run <재생 기록>] [--after-run <재생 기록>]
+			                   [--before-evaluation <평가 파일>] [--after-evaluation <평가 파일>]
+			                   [--top 3] [--min-count 100]
+			                   변경 전후의 SQL 비교, 부하 지표, 파라미터, 용량을 한 문서로 낸다
 
 			  dbreplay explore --trace <트래픽 파일> --url <JDBC URL> --user <계정> [--password <암호>]
 			                   (--snapshot <덤프 파일> [되돌리기 옵션] | --reset-command <데이터 되돌리기 명령>)
@@ -120,6 +128,7 @@ public final class Main {
 			case "replay" -> replay(options);
 			case "compare" -> compare(options);
 			case "explore" -> explore(options);
+			case "report" -> report(options);
 			case "check" -> check(options);
 			case "sample" -> sample(options);
 			case "reset" -> reset(options);
@@ -152,7 +161,9 @@ public final class Main {
 		Replayer.Options replayOptions = replayOptions(options, number(options, "--speed", 1));
 		String out = options.get("--out");
 
-		boolean withMetrics = options.getOrDefault("--metrics", "off").equals("on") || options.containsKey("--metric-command");
+		String runOut = options.get("--run-out");
+		boolean withMetrics = options.getOrDefault("--metrics", "off").equals("on") || options.containsKey("--metric-command")
+				|| runOut != null;
 		ReplaySummary s;
 		Map<String, double[]> metrics = Map.of();
 		try (MetricSampler sampler = withMetrics ? sampler(target, options) : new MetricSampler();
@@ -169,6 +180,32 @@ public final class Main {
 		}
 		print(s, replayOptions);
 		printMetrics(metrics);
+		if (runOut != null) {
+			JSON.writeValue(Path.of(runOut).toFile(), RunRecord.of(Instant.now().truncatedTo(ChronoUnit.SECONDS).toString(),
+					unit(options).name().toLowerCase(Locale.ROOT), s, TargetProfile.read(target), metrics));
+		}
+	}
+
+	private static void report(Map<String, String> options) throws IOException {
+		TraceComparison comparison;
+		try (TraceReader before = openTrace(required(options, "--before"));
+				TraceReader after = openTrace(required(options, "--after"))) {
+			comparison = TraceComparison.of(before, after);
+		}
+		MarkdownReport.Inputs inputs = new MarkdownReport.Inputs(options.getOrDefault("--title", "변경 전후 비교"), comparison,
+				read(options, "--before-run", RunRecord.class), read(options, "--after-run", RunRecord.class),
+				read(options, "--before-evaluation", Evaluation.class), read(options, "--after-evaluation", Evaluation.class),
+				(int) number(options, "--top", 3), (long) number(options, "--min-count", 100));
+		String out = required(options, "--out");
+		try (Writer writer = Files.newBufferedWriter(Path.of(out), StandardCharsets.UTF_8)) {
+			MarkdownReport.write(writer, inputs);
+		}
+		System.out.println("리포트를 " + out + "에 썼다");
+	}
+
+	private static <T> T read(Map<String, String> options, String name, Class<T> type) throws IOException {
+		String path = options.get(name);
+		return path == null ? null : JSON.readValue(Path.of(path).toFile(), type);
 	}
 
 	private static void sample(Map<String, String> options) throws Exception {
