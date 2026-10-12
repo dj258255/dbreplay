@@ -59,7 +59,8 @@ public final class Main {
 			                   [--sort-memory-mb <힙의 4분의 1>] [--tmp-dir <출력 파일의 폴더>] [--mask none|strings|all]
 			                   메모리에 다 들어가지 않는 로그는 임시 파일로 나눠 정렬한다. 로그만큼의 디스크가 더 든다
 			                   --mask strings는 글자로 된 값과 10자리 이상의 숫자를, all은 숫자까지 전부 가린다.
-			                   길이와 글자의 종류를 지키고 같은 값은 같은 값으로 바꾼다. 날짜 모양의 값은 가리지 않는다
+			                   길이와 글자의 종류를 지키고 같은 값은 같은 값으로 바꾼다. 날짜 모양의 값은 가리지 않는다.
+			                   all은 값들 사이의 관계를 지키지 못한다. 범위 조회의 폭이 달라져 재생이 다른 부하가 된다(실험 13)
 
 			  dbreplay replay  --trace <트래픽 파일> --url <JDBC URL> --user <계정> [--password <암호>]
 			                   [--speed 1] [--unit transaction|statement|session] [--max-connections 500]
