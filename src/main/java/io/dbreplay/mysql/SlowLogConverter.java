@@ -10,6 +10,7 @@ import io.dbreplay.convert.ConvertSummary;
 import io.dbreplay.convert.HeadPolicy;
 import io.dbreplay.convert.RecordBuffer;
 import io.dbreplay.convert.SessionHead;
+import io.dbreplay.convert.SqlWords;
 import io.dbreplay.trace.TraceHeader;
 import io.dbreplay.trace.TraceRecord;
 
@@ -63,7 +64,7 @@ public final class SlowLogConverter {
 			}
 
 			StatementKind kind = StatementKind.of(e.sql());
-			if (kind == StatementKind.PREPARE) {
+			if (kind == StatementKind.PREPARE || SqlWords.ownStatement(e.sql())) {
 				ignored++;
 				continue;
 			}
