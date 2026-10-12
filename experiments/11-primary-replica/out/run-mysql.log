@@ -1,0 +1,31 @@
+===== MySQL 8.4: 주종 세우기 =====
+           Replica_IO_Running: Yes
+          Replica_SQL_Running: Yes
+                   Last_Error: 
+되돌리기 4.3초: 덤프 되붓기 3.7, 변경 0.0, 통계 0.2, 조용해질 때까지 0.5 (조용해짐)
+  그중 종 DB가 주 DB를 따라올 때까지 0.0초
+===== MySQL: 녹화 (주에는 읽기와 쓰기, 종에는 읽기) =====
+로그 항목 121764개를 읽어 문장 121142개, 연결 종료 16개를 썼다 (연결 20개)
+뺀 것: 재생에 쓰지 않는 항목 606, 머리에서 잘린 트랜잭션의 문장 0
+로그 항목 95028개를 읽어 문장 94658개, 연결 종료 15개를 썼다 (연결 21개)
+뺀 것: 재생에 쓰지 않는 항목 355, 머리에서 잘린 트랜잭션의 문장 0
+===== MySQL: 1배속 (주만 p, 종만 r, 함께 b) =====
+--- mysql p 1: replication_lag_seconds      159       0.00       0.00       0.02
+--- mysql r 1: 복제 지연 없음
+--- mysql b 1: replication_lag_seconds      160       0.00       0.00       0.09
+--- mysql p 2: replication_lag_seconds      159       0.00       0.00       0.02
+--- mysql r 2: 복제 지연 없음
+--- mysql b 2: replication_lag_seconds      159       0.00       0.00       0.08
+--- mysql p 3: replication_lag_seconds      159       0.00       0.00       0.02
+--- mysql r 3: 복제 지연 없음
+--- mysql b 3: replication_lag_seconds      159       0.00       0.00       0.02
+되돌리기 4.7초: 덤프 되붓기 4.1, 변경 0.0, 통계 0.2, 조용해질 때까지 0.5 (조용해짐)
+  그중 종 DB가 주 DB를 따라올 때까지 0.0초
+===== MySQL: 탐색 =====
+--- mysql 함께 1: 상한: 3.75배속
+--- mysql 주만 1: 상한: 4.25배속
+--- mysql 함께 2: 상한: 3.50배속
+--- mysql 주만 2: 상한: 5.00배속
+--- mysql 함께 3: 상한: 2.75배속
+--- mysql 주만 3: 상한: 4.50배속
+===== PostgreSQL 16: 주종 확인 =====

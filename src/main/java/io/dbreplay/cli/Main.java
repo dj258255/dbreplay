@@ -1,6 +1,7 @@
 package io.dbreplay.cli;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.io.Reader;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
@@ -14,6 +15,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.concurrent.CompletableFuture;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
@@ -34,6 +36,7 @@ import io.dbreplay.explore.WaterLevel;
 import io.dbreplay.metrics.CommandMetricSource;
 import io.dbreplay.metrics.DbMetricSource;
 import io.dbreplay.metrics.MetricSampler;
+import io.dbreplay.metrics.ReplicationLagSource;
 import io.dbreplay.mysql.SlowLogConverter;
 import io.dbreplay.postgres.CsvLogConverter;
 import io.dbreplay.replay.JdbcTarget;
@@ -58,6 +61,7 @@ public final class Main {
 			  dbreplay replay  --trace <트래픽 파일> --url <JDBC URL> --user <계정> [--password <암호>]
 			                   [--speed 1] [--unit transaction|statement|session] [--max-connections 500]
 			                   [--only reads] [--out <결과 파일>] [--run-out <재생 기록 파일>] [--metrics on] [지표 옵션]
+			                   [주종 옵션]
 
 			  dbreplay compare --before <트래픽 파일> --after <트래픽 파일> [--top 3] [--min-count 100] [--rows 15]
 
@@ -71,7 +75,7 @@ public final class Main {
 			                   (--snapshot <덤프 파일> [되돌리기 옵션] | --reset-command <데이터 되돌리기 명령>)
 			                   [--alarm-command <알람 확인 명령>] [--alarm-metric <이름>=<값>,...]
 			                   [--alarm-active-sessions <개수>] [--alarm-sustain 3] [--max-distortion 0.2]
-			                   [지표 옵션]
+			                   [지표 옵션] [주종 옵션]
 			                   [--unit transaction|statement|session] [--only reads] [--max-connections 500]
 			                   [--start-speed 1] [--max-speed 64] [--precision 0.1]
 			                   [--current-qps <지금의 초당 문장 수>] [--current-read-qps <읽기>] [--current-write-qps <쓰기>]
@@ -108,6 +112,13 @@ public final class Main {
 			  --slow-ms 100              실행 중인 문장을 느리다고 볼 기준 시간
 			  --metric-command <명령>    DB 접속으로 못 읽는 지표(CPU, Load Average)를 받는다.
 			                             한 줄에 '이름 값'을 내는 명령을 --metric-command-ms(기본 1000)마다 실행한다
+
+			주종 옵션:
+			  --replica-url <JDBC URL>   주 DB(--url)를 복제로 따라오는 종 DB. 주면 복제 지연을 replication_lag_seconds로 뜨고
+			                             (알람은 --alarm-metric 'replication_lag_seconds>=1'), 되돌린 뒤 종 DB가 따라올 때까지 기다린다.
+			                             MySQL은 GTID가 켜져 있어야 한다. 계정이 다르면 --replica-user, --replica-password
+			  --replica-trace <파일>     종 DB에서 녹화한 트래픽. 주 DB의 재생과 같은 배속으로 종 DB에 함께 튼다.
+			                             문장 하나씩 독립으로 나간다
 
 			재생 단위(--unit):
 			  transaction  트랜잭션 하나가 한 단위다. 주 DB의 트래픽에 쓴다 (기본)
@@ -200,17 +211,24 @@ public final class Main {
 				|| runOut != null;
 		ReplaySummary s;
 		NewErrors newErrors;
+		ReplaySummary replicaSummary;
 		Map<String, double[]> metrics = Map.of();
 		try (MetricSampler sampler = withMetrics ? sampler(target, options) : new MetricSampler();
 				TraceReader trace = openTrace(required(options, "--trace"));
 				ResultWriter results = out == null ? null
 						: new ResultWriter(Files.newBufferedWriter(Path.of(out), StandardCharsets.UTF_8))) {
 			newErrors = new NewErrors(results == null ? result -> { } : results);
+			ReplicaRun replicaRun = ReplicaRun.start(options, replayOptions.speed());
 			s = Replayer.run(trace, target, newErrors, replayOptions);
+			replicaSummary = replicaRun == null ? null : replicaRun.join();
 			metrics = sampler.stop();
 		}
 		print(s, replayOptions);
 		printNewErrors(newErrors, required(options, "--trace"));
+		if (replicaSummary != null) {
+			System.out.printf("%n종 DB에 함께 튼 트래픽%n");
+			print(replicaSummary, replicaOptions(options, replayOptions.speed()));
+		}
 		printMetrics(metrics);
 		if (runOut != null) {
 			JSON.writeValue(Path.of(runOut).toFile(), RunRecord.of(Instant.now().truncatedTo(ChronoUnit.SECONDS).toString(),
@@ -257,6 +275,10 @@ public final class Main {
 				.add(new DbMetricSource(target, (long) number(options, "--slow-ms", 100)), (long) number(options, "--sample-ms", 200));
 		if (options.containsKey("--metric-command")) {
 			sampler.add(new CommandMetricSource(options.get("--metric-command")), (long) number(options, "--metric-command-ms", 1_000));
+		}
+		JdbcTarget replica = replica(options);
+		if (replica != null) {
+			sampler.add(new ReplicationLagSource(target, replica), (long) number(options, "--sample-ms", 200));
 		}
 		return sampler;
 	}
@@ -406,17 +428,20 @@ public final class Main {
 			}
 			long started = System.currentTimeMillis();
 			ReplaySummary s;
+			ReplaySummary replicaSummary;
 			Map<String, double[]> metrics;
 			try (MetricSampler sampler = sampler(target, options); TraceReader trace = openTrace(tracePath)) {
+				ReplicaRun replicaRun = ReplicaRun.start(options, speed);
 				s = Replayer.run(trace, target, r -> { }, replayOptions(options, speed));
+				replicaSummary = replicaRun == null ? null : replicaRun.join();
 				metrics = sampler.stop();
 			}
-			return new RoundData(speed, started, System.currentTimeMillis(), s, metrics);
+			return new RoundData(speed, started, System.currentTimeMillis(), s, replicaSummary, metrics);
 		}, judge, exploreOptions, round -> {
 			ReplaySummary s = round.data().summary();
 			System.out.printf("%-6d %7.2f %9.2f %9.2f %10s %8.1f%% %9d  %s%n", round.number(), round.speed(),
 					s.traceSpanMicros() / round.speed() / 1e6, s.elapsedMicros() / 1e6, ms(s.lag().quantile(0.99)),
-					s.replayerLateRatio() * 100, round.data().maxActiveSessions(),
+					round.data().distortion() * 100, round.data().maxActiveSessions(),
 					switch (round.verdict().state()) {
 						case HELD -> "버팀";
 						case OVERLOADED -> "과부하: " + round.verdict().reason();
@@ -455,6 +480,15 @@ public final class Main {
 		WaterLevel level = new WaterLevel(currentQps, ceilingQps,
 				number(options, "--level-low", 0.30), number(options, "--level-high", 0.50));
 		printLevel(level, recordedQps);
+		if (options.containsKey("--replica-trace")) {
+			TrafficModel replicaTraffic;
+			try (TraceReader trace = openTrace(options.get("--replica-trace"))) {
+				replicaTraffic = TrafficModel.of(trace);
+			}
+			// 위의 수위는 주 DB의 트래픽만 센 것이다. 종 DB의 것은 같은 배속을 곱해 따로 보여 준다
+			System.out.printf("종 DB에 함께 튼 트래픽: 녹화 구간의 초당 문장 수 %.0f, 상한 배속에서 %.0f%n",
+					replicaTraffic.qps(), replicaTraffic.qps() * result.ceilingSpeed());
+		}
 		ScaleAdvice advice = printReadWrite(options, traffic, result.ceilingSpeed(), level);
 
 		String out = options.get("--out");
@@ -474,7 +508,7 @@ public final class Main {
 	}
 
 	private static Sandbox sandbox(JdbcTarget target, Map<String, String> options) {
-		return new Sandbox(target, new Sandbox.Options(required(options, "--snapshot"), options.get("--snapshot-db"),
+		return new Sandbox(target, replica(options), new Sandbox.Options(required(options, "--snapshot"), options.get("--snapshot-db"),
 				options.get("--change-command"), options.get("--ready-command"), (long) number(options, "--settle-seconds", 60)));
 	}
 
@@ -483,6 +517,9 @@ public final class Main {
 		System.out.printf("되돌리기 %.1f초: 덤프 되붓기 %.1f, 변경 %.1f, 통계 %.1f, 조용해질 때까지 %.1f (%s)%n",
 				t.totalMillis() / 1e3, t.restoreMillis() / 1e3, t.changeMillis() / 1e3, t.analyzeMillis() / 1e3,
 				t.settleMillis() / 1e3, t.settled() ? "조용해짐" : "기다리지 않았거나 시간 안에 조용해지지 않음");
+		if (options.containsKey("--replica-url")) {
+			System.out.printf("  그중 종 DB가 주 DB를 따라올 때까지 %.1f초%n", t.replicaMillis() / 1e3);
+		}
 	}
 
 	private static void printLevel(WaterLevel level, double recordedQps) {
@@ -837,6 +874,59 @@ public final class Main {
 	private static JdbcTarget target(Map<String, String> options) {
 		String password = options.getOrDefault("--password", System.getenv().getOrDefault("DBREPLAY_PASSWORD", ""));
 		return new JdbcTarget(required(options, "--url"), required(options, "--user"), password);
+	}
+
+	/** 종 DB. --replica-url을 주지 않았으면 null. 계정과 암호를 따로 주지 않으면 주 DB의 것을 쓴다. */
+	private static JdbcTarget replica(Map<String, String> options) {
+		String url = options.get("--replica-url");
+		if (url == null) {
+			return null;
+		}
+		String password = options.getOrDefault("--replica-password",
+				options.getOrDefault("--password", System.getenv().getOrDefault("DBREPLAY_PASSWORD", "")));
+		return new JdbcTarget(url, options.getOrDefault("--replica-user", required(options, "--user")), password);
+	}
+
+	/** 종 DB의 트래픽은 글대로 문장 하나씩 독립으로 내보낸다. */
+	private static Replayer.Options replicaOptions(Map<String, String> options, double speed) {
+		Replayer.Options defaults = Replayer.Options.atSpeed(speed);
+		return defaults.withUnit(Replayer.Unit.STATEMENT)
+				.withMaxConnections((int) number(options, "--max-connections", defaults.maxConnections()));
+	}
+
+	/** 종 DB의 트래픽을 주 DB의 재생과 나란히 튼다. 두 재생은 각자의 첫 문장을 기준으로 시각을 맞춘다. */
+	private static final class ReplicaRun {
+
+		private final CompletableFuture<ReplaySummary> summary;
+
+		private ReplicaRun(CompletableFuture<ReplaySummary> summary) {
+			this.summary = summary;
+		}
+
+		/** @return --replica-trace를 주지 않았으면 null */
+		static ReplicaRun start(Map<String, String> options, double speed) {
+			String tracePath = options.get("--replica-trace");
+			if (tracePath == null) {
+				return null;
+			}
+			JdbcTarget replica = replica(options);
+			if (replica == null) {
+				throw new IllegalArgumentException("--replica-trace에는 --replica-url이 있어야 한다");
+			}
+			Replayer.Options replicaOptions = replicaOptions(options, speed);
+			return new ReplicaRun(CompletableFuture.supplyAsync(() -> {
+				try (TraceReader trace = openTrace(tracePath)) {
+					return Replayer.run(trace, replica, r -> { }, replicaOptions);
+				}
+				catch (IOException e) {
+					throw new UncheckedIOException(e);
+				}
+			}, task -> Thread.ofPlatform().name("dbreplay-replica").start(task)));
+		}
+
+		ReplaySummary join() {
+			return summary.join();
+		}
 	}
 
 	private static TraceReader openTrace(String path) throws IOException {

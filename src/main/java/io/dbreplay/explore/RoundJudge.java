@@ -42,7 +42,7 @@ public final class RoundJudge {
 				return new Verdict(State.OVERLOADED, reason);
 			}
 		}
-		double distortion = round.summary().replayerLateRatio();
+		double distortion = round.distortion();
 		if (distortion > maxDistortion) {
 			return new Verdict(State.DISTORTED, String.format("재생기가 늦은 문장이 %.1f%%", distortion * 100));
 		}

@@ -47,6 +47,7 @@ dbreplay explore --trace prod.trace.jsonl --url jdbc:mysql://sandbox:3306/ --use
 | [08](experiments/08-managed/README.md) | 위탁해 둔 대상을 훑어 필요한 것만 다시 평가하는가 |
 | [09](experiments/09-use-cases/README.md) | 인덱스 삭제, 8.0 → 8.4, 파라미터 변경에서 도구가 차이를 잡는가 |
 | [10](experiments/10-large-log/README.md) | 메모리에 들어가지 않는 로그를 변환할 수 있는가 |
+| [11](experiments/11-primary-replica/README.md) | 주종 구성에서 함께 틀고 복제 지연을 알람으로 걸면 상한이 어디서 잡히는가 |
 
 ## 문서
 
