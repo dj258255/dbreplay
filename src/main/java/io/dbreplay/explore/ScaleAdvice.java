@@ -22,6 +22,10 @@ public record ScaleAdvice(int readNodes, int recommendedReadNodes, double writeC
 	 * @param maxReadNodes 이보다 많이는 권하지 않는다. 상한이 0에 가깝게 나오면 계산한 수가 터무니없이 커진다
 	 */
 	public static ScaleAdvice of(WaterLevel read, WaterLevel write, int readNodes, int minReadNodes, int maxReadNodes) {
+		checkNodes(readNodes, minReadNodes, maxReadNodes);
+		if (read.level() < 0) {
+			throw new IllegalArgumentException("수위가 음수다. 지금의 QPS와 상한을 확인한다");
+		}
 		double needed = readNodes;
 		if (read.verdict() != WaterLevel.Verdict.HEALTHY) {
 			// 수위는 노드 수에 반비례한다고 본다. 위 끝에 맞는 노드 수를 올림해 여유를 둔다
@@ -33,7 +37,37 @@ public record ScaleAdvice(int readNodes, int recommendedReadNodes, double writeC
 		return new ScaleAdvice(readNodes, recommended, write.capacityFactor(), capped, read.verdict(), write.verdict());
 	}
 
+	/** 노드 수는 1 이상이고 최소가 한도보다 크지 않아야 한다. 탐색을 시작하기 전에도 부른다. */
+	public static void checkNodes(int readNodes, int minReadNodes, int maxReadNodes) {
+		if (readNodes < 1 || minReadNodes < 1 || maxReadNodes < 1) {
+			throw new IllegalArgumentException("노드 수는 1 이상이어야 한다");
+		}
+		if (minReadNodes > maxReadNodes) {
+			throw new IllegalArgumentException("최소 노드 수가 한도보다 크다");
+		}
+	}
+
 	public int readNodeChange() {
 		return recommendedReadNodes - readNodes;
+	}
+
+	/**
+	 * 확장·축소 명령을 실행하면 안 되는 이유. 실행해도 되면 null이다.
+	 * 권고는 가정 위의 계산이다. 하나라도 의심스러우면 실행하지 않는 쪽으로 둔다.
+	 *
+	 * @param limitGiven       사용자가 노드 수의 한도를 줬는가
+	 * @param ceilingConfirmed 상한이 알람으로 확인된 값인가. 아니면 "그 이상"이라는 아래쪽 값일 뿐이다
+	 */
+	public String whyNotApplied(boolean limitGiven, boolean ceilingConfirmed) {
+		if (!limitGiven) {
+			return "--max-read-nodes로 한도를 주지 않았다";
+		}
+		if (capped) {
+			return "계산한 노드 수가 한도를 넘었다. 한도에 맞춘 값으로는 실행하지 않는다";
+		}
+		if (!ceilingConfirmed) {
+			return "상한이 알람으로 확인된 값이 아니다";
+		}
+		return null;
 	}
 }

@@ -173,9 +173,34 @@ class ExplorerTest {
 		assertTrue(noCeiling.capped());
 
 		ScaleAdvice unlimited = ScaleAdvice.of(WaterLevel.of(1_000_000, 1), write, 6, 2, Integer.MAX_VALUE);
-		assertEquals(Integer.MAX_VALUE, unlimited.recommendedReadNodes(), "한도를 주지 않으면 잘린 값이 그대로 보이고, 명령은 실행되지 않는다");
+		assertEquals(12_000_000, unlimited.recommendedReadNodes(), "한도를 주지 않으면 계산한 값이 그대로 보인다. 명령은 실행되지 않는다");
 
 		assertEquals(false, ScaleAdvice.of(WaterLevel.of(6_200, 10_000), write, 6, 2, 12).capped());
+	}
+
+	/** 권고는 가정 위의 계산이다. 하나라도 의심스러우면 확장 명령을 실행하지 않는다. */
+	@Test
+	void refusesToApplyDoubtfulAdvice() {
+		WaterLevel write = WaterLevel.of(800, 4_000);
+		ScaleAdvice sound = ScaleAdvice.of(WaterLevel.of(6_200, 10_000), write, 6, 2, 12);
+		ScaleAdvice capped = ScaleAdvice.of(WaterLevel.of(1_000_000, 1), write, 6, 2, 12);
+
+		assertEquals(null, sound.whyNotApplied(true, true));
+		assertTrue(sound.whyNotApplied(false, true).contains("--max-read-nodes"), "한도를 주지 않았다");
+		assertTrue(sound.whyNotApplied(true, false).contains("알람"), "상한이 '그 이상'이라는 아래쪽 값이다");
+		assertTrue(capped.whyNotApplied(true, true).contains("한도"), "한도에 걸린 값은 계산이 이상하다는 신호다");
+	}
+
+	@Test
+	void rejectsNodeCountsAndLevelsThatMakeNoSense() {
+		WaterLevel read = WaterLevel.of(6_200, 10_000);
+		WaterLevel write = WaterLevel.of(800, 4_000);
+
+		assertThrows(IllegalArgumentException.class, () -> ScaleAdvice.of(read, write, 0, 1, 12));
+		assertThrows(IllegalArgumentException.class, () -> ScaleAdvice.of(read, write, 6, 0, 12));
+		assertThrows(IllegalArgumentException.class, () -> ScaleAdvice.of(read, write, 6, 8, 4), "최소가 한도보다 크다");
+		// 음수 QPS는 '남는다'로 읽혀 최소 노드 수까지 줄이라는 권고가 됐다
+		assertThrows(IllegalArgumentException.class, () -> ScaleAdvice.of(WaterLevel.of(-500, 10_000), write, 6, 2, 12));
 	}
 
 	@Test

@@ -114,6 +114,7 @@ public final class Main {
 			  읽기 수위가 건강 구간을 벗어나면 필요한 노드 수를 낸다. 읽기 상한이 노드 수에 비례한다는 가정이고 확인된 것이 아니다.
 			  쓰기는 주 DB 하나가 받으므로 노드 수 대신 필요한 용량의 배수를 낸다.
 			  --scale-command는 --apply-scale yes와 --max-read-nodes를 함께 줘야 실행된다. 권한 노드 수를 DBREPLAY_READ_NODES로 받는다
+			  권한 수가 한도에 걸렸거나 상한이 알람으로 확인된 값이 아니면 실행하지 않는다. 명령이 실패하면 0이 아닌 값으로 끝난다
 
 			과부하는 알람으로 판정한다. explore에는 알람이 하나는 있어야 한다.
 			  --alarm-command          라운드가 끝날 때 sh -c로 실행한다. 0이 아닌 값으로 끝나면 알람이 울린 것이다.
@@ -328,6 +329,8 @@ public final class Main {
 	}
 
 	private static void explore(Map<String, String> options) throws Exception {
+		// 탐색은 몇 분이 걸린다. 잘못 준 값은 시작하기 전에 거른다
+		checkScaleOptions(options);
 		JdbcTarget target = target(options);
 		String tracePath = required(options, "--trace");
 		Sandbox sandbox = options.containsKey("--snapshot") ? sandbox(target, options) : null;
@@ -406,7 +409,7 @@ public final class Main {
 		WaterLevel level = new WaterLevel(currentQps, ceilingQps,
 				number(options, "--level-low", 0.30), number(options, "--level-high", 0.50));
 		printLevel(level, recordedQps);
-		printReadWrite(options, traffic, result.ceilingSpeed(), level);
+		ScaleAdvice advice = printReadWrite(options, traffic, result.ceilingSpeed(), level);
 
 		String out = options.get("--out");
 		if (out != null) {
@@ -417,6 +420,10 @@ public final class Main {
 					level.low(), level.high());
 			JSON.writeValue(Path.of(out).toFile(), evaluation);
 			System.out.printf("평가를 %s에 적었다. %d일 동안 유효하다%n", out, evaluation.validDays());
+		}
+		// 평가를 적은 뒤에 한다. 명령이 실패해도 잰 값은 남는다
+		if (advice != null) {
+			applyScale(options, advice, result.stoppedBy() == RoundJudge.State.OVERLOADED);
 		}
 	}
 
@@ -454,13 +461,14 @@ public final class Main {
 	 * 읽기와 쓰기의 상한과 수위를 따로 낸다. 메이투안 글은 읽기 QPS 상한과 쓰기 QPS 상한을 따로 보여 준다.
 	 * 상한 배속 하나를 각각의 QPS에 곱한 값이다. 읽기와 쓰기가 지금의 비율로 함께 늘 때의 상한이라는 뜻이다.
 	 */
-	private static void printReadWrite(Map<String, String> options, TrafficModel traffic, double ceilingSpeed, WaterLevel level) {
+	/** @return 확장·축소 권고. --read-nodes를 주지 않았거나 읽기와 쓰기를 나눠 볼 수 없으면 null */
+	private static ScaleAdvice printReadWrite(Map<String, String> options, TrafficModel traffic, double ceilingSpeed, WaterLevel level) {
 		if (traffic.reads() + traffic.writes() == 0) {
-			return;
+			return null;
 		}
 		if (readsOnly(options)) {
 			System.out.println("읽기만 튼 탐색이다. 위의 초당 문장 수와 상한, 수위는 읽기 문장만 센 것이다");
-			return;
+			return null;
 		}
 		System.out.printf("%n읽기와 쓰기가 지금의 비율(읽기 %.0f%%)로 함께 늘 때:%n",
 				100.0 * traffic.reads() / (traffic.reads() + traffic.writes()));
@@ -474,13 +482,40 @@ public final class Main {
 			System.out.printf("  %s: 초당 %.0f, 상한 %.0f, 수위 %.0f%%%n", kind, current, l.ceilingQps(), l.level() * 100);
 		}
 		System.out.println("  읽기만 늘 때의 상한은 --only reads로 따로 탐색한다");
-		if (options.containsKey("--read-nodes")) {
-			printScaleAdvice(options, ScaleAdvice.of(levels[0], levels[1], (int) number(options, "--read-nodes", 1),
-					(int) number(options, "--min-read-nodes", 1), (int) number(options, "--max-read-nodes", Integer.MAX_VALUE)));
+		if (!options.containsKey("--read-nodes")) {
+			return null;
+		}
+		ScaleAdvice advice = ScaleAdvice.of(levels[0], levels[1], nodes(options, "--read-nodes", 1),
+				nodes(options, "--min-read-nodes", 1), nodes(options, "--max-read-nodes", Integer.MAX_VALUE));
+		printScaleAdvice(advice);
+		return advice;
+	}
+
+	private static void checkScaleOptions(Map<String, String> options) {
+		ScaleAdvice.checkNodes(nodes(options, "--read-nodes", 1), nodes(options, "--min-read-nodes", 1),
+				nodes(options, "--max-read-nodes", Integer.MAX_VALUE));
+		for (String name : List.of("--current-qps", "--current-read-qps", "--current-write-qps")) {
+			double qps = number(options, name, 0);
+			if (!(qps >= 0) || Double.isInfinite(qps)) {
+				throw new IllegalArgumentException(name + "에는 0 이상의 수를 준다");
+			}
 		}
 	}
 
-	private static void printScaleAdvice(Map<String, String> options, ScaleAdvice advice) {
+	private static int nodes(Map<String, String> options, String name, int fallback) {
+		String value = options.get(name);
+		if (value == null) {
+			return fallback;
+		}
+		try {
+			return Integer.parseInt(value);
+		}
+		catch (NumberFormatException e) {
+			throw new IllegalArgumentException(name + "에는 정수를 준다");
+		}
+	}
+
+	private static void printScaleAdvice(ScaleAdvice advice) {
 		System.out.printf("%n확장·축소 권고 (읽기 상한이 노드 수에 비례한다는 가정이다. 확인된 것이 아니다)%n");
 		if (advice.readNodeChange() == 0) {
 			System.out.printf("  읽기: 노드 %d개를 그대로 둔다%n", advice.readNodes());
@@ -497,28 +532,46 @@ public final class Main {
 		if (advice.capped()) {
 			System.out.println("  계산한 노드 수가 한도를 넘어 한도로 잘랐다. 상한이나 지금의 QPS를 다시 확인한다");
 		}
+	}
+
+	/** 확장·축소 명령이 실패했다. 실행됐다고 믿고 다음 일을 하면 안 되므로 예외로 올린다. */
+	private static final class ScaleCommandFailed extends IOException {
+		ScaleCommandFailed(String message) {
+			super(message);
+		}
+	}
+
+	/** 권고대로 확장·축소 명령을 실행한다. 의심스러운 권고는 실행하지 않고, 실패는 삼키지 않는다. */
+	private static void applyScale(Map<String, String> options, ScaleAdvice advice, boolean ceilingConfirmed)
+			throws IOException, InterruptedException {
 		String command = options.get("--scale-command");
 		if (command == null || advice.readNodeChange() == 0) {
 			return;
 		}
-		if (!options.containsKey("--max-read-nodes")) {
-			System.out.println("  실행하지 않았다. --max-read-nodes로 한도를 주지 않으면 확장 명령을 실행하지 않는다");
+		String refused = advice.whyNotApplied(options.containsKey("--max-read-nodes"), ceilingConfirmed);
+		if (refused == null && !"yes".equals(options.get("--apply-scale"))) {
+			refused = "--apply-scale yes를 주면 실행한다";
+		}
+		if (refused != null) {
+			System.out.println("확장·축소 명령을 실행하지 않았다. " + refused);
 			return;
 		}
-		if (!"yes".equals(options.get("--apply-scale"))) {
-			System.out.println("  실행하지 않았다. --apply-scale yes를 주면 --scale-command를 실행한다");
-			return;
-		}
+		ProcessBuilder builder = new ProcessBuilder("sh", "-c", command).inheritIO();
+		builder.environment().put("DBREPLAY_READ_NODES", Integer.toString(advice.recommendedReadNodes()));
+		builder.environment().put("DBREPLAY_READ_NODES_BEFORE", Integer.toString(advice.readNodes()));
+		int exit;
 		try {
-			ProcessBuilder builder = new ProcessBuilder("sh", "-c", command).inheritIO();
-			builder.environment().put("DBREPLAY_READ_NODES", Integer.toString(advice.recommendedReadNodes()));
-			builder.environment().put("DBREPLAY_READ_NODES_BEFORE", Integer.toString(advice.readNodes()));
-			int exit = builder.start().waitFor();
-			System.out.println(exit == 0 ? "  확장·축소 명령을 실행했다" : "  확장·축소 명령이 실패했다 (종료 코드 " + exit + ")");
+			exit = builder.start().waitFor();
 		}
-		catch (IOException | InterruptedException e) {
-			System.out.println("  확장·축소 명령을 실행하지 못했다");
+		catch (IOException e) {
+			// 명령에는 암호가 들어 있을 수 있다. 메시지에 싣지 않는다
+			throw new ScaleCommandFailed("확장·축소 명령을 실행하지 못했다");
 		}
+		if (exit != 0) {
+			throw new ScaleCommandFailed("확장·축소 명령이 실패했다 (종료 코드 " + exit + ")");
+		}
+		// 도구는 실제 노드 수를 모른다. 받은 값이 낡으면 다음 권고가 틀어진다
+		System.out.printf("확장·축소 명령을 실행했다. 다음부터는 --read-nodes %d로 준다%n", advice.recommendedReadNodes());
 	}
 
 	private static boolean readsOnly(Map<String, String> options) {
@@ -598,7 +651,7 @@ public final class Main {
 						case SURPLUS -> "과잉";
 						case HEALTHY -> "적정";
 						case SHORT -> "부족";
-					}, e.evaluatedAt());
+					}, e.evaluatedAt() + (actions.get(t.name()) == ManagedTargets.Action.FAILED ? " (" + why.get(t.name()) + ")" : ""));
 		}
 		if (actions.containsValue(ManagedTargets.Action.FAILED)) {
 			System.exit(1);
