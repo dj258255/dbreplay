@@ -30,13 +30,23 @@ public final class JdbcTarget implements Target {
 	public Endpoint endpoint() {
 		java.util.regex.Matcher m = ENDPOINT.matcher(url);
 		if (!m.matches()) {
-			// URL의 ? 뒤에는 암호가 들어 있을 수 있다. 메시지에 싣지 않는다
-			int query = url.indexOf('?');
-			throw new IllegalArgumentException("접속 위치를 읽을 수 없는 URL이다: " + (query < 0 ? url : url.substring(0, query)));
+			throw new IllegalArgumentException("접속 위치를 읽을 수 없는 URL이다: " + redact(url));
 		}
 		int port = m.group(3) != null ? Integer.parseInt(m.group(3)) : m.group(1).equals("mysql") ? 3306 : 5432;
 		String database = m.group(4) == null || m.group(4).isEmpty() ? null : m.group(4);
 		return new Endpoint(m.group(2), port, database);
+	}
+
+	/**
+	 * URL에서 암호가 들어 있을 수 있는 두 곳을 뺀다. {@code ?} 뒤의 속성과, {@code //계정:암호@} 꼴의 호스트 앞부분이다.
+	 * 메시지나 로그에 URL을 실을 때는 이것을 거친다.
+	 */
+	static String redact(String url) {
+		int query = url.indexOf('?');
+		String base = query < 0 ? url : url.substring(0, query);
+		int authority = base.indexOf("//");
+		int at = base.lastIndexOf('@');
+		return authority >= 0 && at > authority ? base.substring(0, authority + 2) + base.substring(at + 1) : base;
 	}
 
 	public String user() {

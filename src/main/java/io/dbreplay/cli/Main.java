@@ -403,6 +403,7 @@ public final class Main {
 				current = TrafficModel.of(trace);
 			}
 		}
+		evaluation = withoutRawCommand(evaluation);
 		List<String> reasons = evaluation.invalidReasons(Instant.now(), TargetProfile.read(target),
 				alarmSettings(options), current, number(options, "--max-traffic-distance", 0.2));
 
@@ -439,6 +440,21 @@ public final class Main {
 			settings.put("slow-ms", options.getOrDefault("--slow-ms", "100"));
 		}
 		return settings;
+	}
+
+	/**
+	 * 예전 평가 파일에는 알람 확인 명령의 원문이 들어 있다. 비교하기 전에 지문으로 바꿔서, 달라졌다고 알릴 때
+	 * 원문이 화면에 찍히지 않게 한다.
+	 */
+	static Evaluation withoutRawCommand(Evaluation e) {
+		String command = e.alarms().get("alarm-command");
+		if (command == null || command.startsWith("sha256:")) {
+			return e;
+		}
+		Map<String, String> alarms = new TreeMap<>(e.alarms());
+		alarms.put("alarm-command", fingerprint(command));
+		return new Evaluation(e.evaluatedAt(), e.validDays(), e.profile(), alarms, e.unit(), e.traffic(), e.ceilingSpeed(),
+				e.stoppedBy(), e.ceilingQps(), e.currentQps(), e.low(), e.high());
 	}
 
 	static String fingerprint(String text) {
