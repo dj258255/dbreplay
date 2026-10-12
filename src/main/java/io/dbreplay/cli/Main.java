@@ -24,6 +24,7 @@ import io.dbreplay.explore.Evaluation;
 import io.dbreplay.explore.Explorer;
 import io.dbreplay.explore.RoundData;
 import io.dbreplay.explore.RoundJudge;
+import io.dbreplay.explore.ScaleAdvice;
 import io.dbreplay.explore.TargetProfile;
 import io.dbreplay.explore.TrafficModel;
 import io.dbreplay.explore.WaterLevel;
@@ -69,6 +70,8 @@ public final class Main {
 			                   [--start-speed 1] [--max-speed 64] [--precision 0.1]
 			                   [--current-qps <지금의 초당 문장 수>] [--current-read-qps <읽기>] [--current-write-qps <쓰기>]
 			                   [--level-low 0.3] [--level-high 0.5]
+			                   [--read-nodes <읽기를 받는 노드 수>] [--min-read-nodes 1]
+			                   [--scale-command <명령> --apply-scale yes]
 			                   [--out <평가 파일>] [--valid-days 30]
 
 			  dbreplay check   --evaluation <평가 파일> --url <JDBC URL> --user <계정> [--password <암호>]
@@ -100,6 +103,11 @@ public final class Main {
 			  statement    문장 하나가 한 단위다. 종 DB의 읽기 트래픽에 쓴다
 			  session      원본의 연결을 그대로 옮긴다. 세션 상태에 기대는 트래픽에 쓴다
 			--only reads를 주면 읽기 문장만 하나씩 독립으로 튼다. 읽기만 늘 때의 상한을 볼 때 쓴다
+
+			확장·축소 권고(--read-nodes):
+			  읽기 수위가 건강 구간을 벗어나면 필요한 노드 수를 낸다. 읽기 상한이 노드 수에 비례한다는 가정이고 확인된 것이 아니다.
+			  쓰기는 주 DB 하나가 받으므로 노드 수 대신 필요한 용량의 배수를 낸다.
+			  --scale-command는 --apply-scale yes를 함께 줘야 실행된다. 권한 노드 수를 DBREPLAY_READ_NODES로 받는다
 
 			과부하는 알람으로 판정한다. explore에는 알람이 하나는 있어야 한다.
 			  --alarm-command          라운드가 끝날 때 sh -c로 실행한다. 0이 아닌 값으로 끝나면 알람이 울린 것이다.
@@ -449,14 +457,54 @@ public final class Main {
 		}
 		System.out.printf("%n읽기와 쓰기가 지금의 비율(읽기 %.0f%%)로 함께 늘 때:%n",
 				100.0 * traffic.reads() / (traffic.reads() + traffic.writes()));
+		WaterLevel[] levels = new WaterLevel[2];
 		for (String kind : List.of("읽기", "쓰기")) {
 			boolean read = kind.equals("읽기");
 			double recorded = read ? traffic.readQps() : traffic.writeQps();
 			double current = number(options, read ? "--current-read-qps" : "--current-write-qps", recorded);
 			WaterLevel l = new WaterLevel(current, recorded * ceilingSpeed, level.low(), level.high());
+			levels[read ? 0 : 1] = l;
 			System.out.printf("  %s: 초당 %.0f, 상한 %.0f, 수위 %.0f%%%n", kind, current, l.ceilingQps(), l.level() * 100);
 		}
 		System.out.println("  읽기만 늘 때의 상한은 --only reads로 따로 탐색한다");
+		if (options.containsKey("--read-nodes")) {
+			printScaleAdvice(options, ScaleAdvice.of(levels[0], levels[1], (int) number(options, "--read-nodes", 1),
+					(int) number(options, "--min-read-nodes", 1)));
+		}
+	}
+
+	private static void printScaleAdvice(Map<String, String> options, ScaleAdvice advice) {
+		System.out.printf("%n확장·축소 권고 (읽기 상한이 노드 수에 비례한다는 가정이다. 확인된 것이 아니다)%n");
+		if (advice.readNodeChange() == 0) {
+			System.out.printf("  읽기: 노드 %d개를 그대로 둔다%n", advice.readNodes());
+		}
+		else {
+			System.out.printf("  읽기: 노드 %d개 → %d개 (%s)%n", advice.readNodes(), advice.recommendedReadNodes(),
+					advice.readNodeChange() > 0 ? advice.readNodeChange() + "개 늘린다" : -advice.readNodeChange() + "개 줄일 수 있다");
+		}
+		switch (advice.writeVerdict()) {
+			case SHORT -> System.out.printf("  쓰기: 주 DB의 용량이 지금의 %.2f배 필요하다. 노드를 늘려서는 풀리지 않는다%n", advice.writeCapacityFactor());
+			case SURPLUS -> System.out.printf("  쓰기: 주 DB의 용량을 지금의 %.2f배까지 줄여도 된다%n", advice.writeCapacityFactor());
+			case HEALTHY -> System.out.println("  쓰기: 그대로 둔다");
+		}
+		String command = options.get("--scale-command");
+		if (command == null || advice.readNodeChange() == 0) {
+			return;
+		}
+		if (!"yes".equals(options.get("--apply-scale"))) {
+			System.out.println("  실행하지 않았다. --apply-scale yes를 주면 --scale-command를 실행한다");
+			return;
+		}
+		try {
+			ProcessBuilder builder = new ProcessBuilder("sh", "-c", command).inheritIO();
+			builder.environment().put("DBREPLAY_READ_NODES", Integer.toString(advice.recommendedReadNodes()));
+			builder.environment().put("DBREPLAY_READ_NODES_BEFORE", Integer.toString(advice.readNodes()));
+			int exit = builder.start().waitFor();
+			System.out.println(exit == 0 ? "  확장·축소 명령을 실행했다" : "  확장·축소 명령이 실패했다 (종료 코드 " + exit + ")");
+		}
+		catch (IOException | InterruptedException e) {
+			System.out.println("  확장·축소 명령을 실행하지 못했다");
+		}
 	}
 
 	private static boolean readsOnly(Map<String, String> options) {
