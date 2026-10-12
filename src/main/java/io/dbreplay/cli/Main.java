@@ -393,16 +393,30 @@ public final class Main {
 	/** 평가 파일에 적어 두고 나중에 바뀌었는지 볼 알람 설정. */
 	private static Map<String, String> alarmSettings(Map<String, String> options) {
 		Map<String, String> settings = new TreeMap<>();
-		for (String name : List.of("--alarm-command", "--alarm-metric", "--alarm-active-sessions")) {
+		for (String name : List.of("--alarm-metric", "--alarm-active-sessions")) {
 			if (options.containsKey(name)) {
 				settings.put(name.substring(2), options.get(name));
 			}
+		}
+		if (options.containsKey("--alarm-command")) {
+			// 명령에는 암호가 들어 있을 수 있다. 바뀌었는지만 알면 되므로 지문만 적는다
+			settings.put("alarm-command", fingerprint(options.get("--alarm-command")));
 		}
 		if (options.containsKey("--alarm-active-sessions") || options.containsKey("--alarm-metric")) {
 			settings.put("alarm-sustain", options.getOrDefault("--alarm-sustain", "3"));
 			settings.put("slow-ms", options.getOrDefault("--slow-ms", "100"));
 		}
 		return settings;
+	}
+
+	static String fingerprint(String text) {
+		try {
+			byte[] digest = java.security.MessageDigest.getInstance("SHA-256").digest(text.getBytes(StandardCharsets.UTF_8));
+			return "sha256:" + java.util.HexFormat.of().formatHex(digest, 0, 8);
+		}
+		catch (java.security.NoSuchAlgorithmException e) {
+			throw new IllegalStateException(e);
+		}
 	}
 
 	private static RoundJudge judge(Map<String, String> options) {
@@ -429,7 +443,8 @@ public final class Main {
 				.redirectOutput(ProcessBuilder.Redirect.DISCARD).start();
 		int exit = process.waitFor();
 		if (exit != 0) {
-			throw new IOException("되돌리기 명령이 실패했다 (종료 코드 " + exit + "): " + command);
+			// 명령에는 암호가 들어 있을 수 있다. 메시지에 싣지 않는다
+			throw new IOException("되돌리기 명령이 실패했다 (종료 코드 " + exit + ")");
 		}
 	}
 

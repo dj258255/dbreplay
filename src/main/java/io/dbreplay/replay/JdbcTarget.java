@@ -30,7 +30,9 @@ public final class JdbcTarget implements Target {
 	public Endpoint endpoint() {
 		java.util.regex.Matcher m = ENDPOINT.matcher(url);
 		if (!m.matches()) {
-			throw new IllegalArgumentException("접속 위치를 읽을 수 없는 URL이다: " + url);
+			// URL의 ? 뒤에는 암호가 들어 있을 수 있다. 메시지에 싣지 않는다
+			int query = url.indexOf('?');
+			throw new IllegalArgumentException("접속 위치를 읽을 수 없는 URL이다: " + (query < 0 ? url : url.substring(0, query)));
 		}
 		int port = m.group(3) != null ? Integer.parseInt(m.group(3)) : m.group(1).equals("mysql") ? 3306 : 5432;
 		String database = m.group(4) == null || m.group(4).isEmpty() ? null : m.group(4);
