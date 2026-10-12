@@ -71,7 +71,7 @@ public final class Main {
 			                   [--start-speed 1] [--max-speed 64] [--precision 0.1]
 			                   [--current-qps <지금의 초당 문장 수>] [--current-read-qps <읽기>] [--current-write-qps <쓰기>]
 			                   [--level-low 0.3] [--level-high 0.5]
-			                   [--read-nodes <읽기를 받는 노드 수>] [--min-read-nodes 1]
+			                   [--read-nodes <읽기를 받는 노드 수>] [--min-read-nodes 1] [--max-read-nodes <한도>]
 			                   [--scale-command <명령> --apply-scale yes]
 			                   [--out <평가 파일>] [--valid-days 30]
 
@@ -113,7 +113,7 @@ public final class Main {
 			확장·축소 권고(--read-nodes):
 			  읽기 수위가 건강 구간을 벗어나면 필요한 노드 수를 낸다. 읽기 상한이 노드 수에 비례한다는 가정이고 확인된 것이 아니다.
 			  쓰기는 주 DB 하나가 받으므로 노드 수 대신 필요한 용량의 배수를 낸다.
-			  --scale-command는 --apply-scale yes를 함께 줘야 실행된다. 권한 노드 수를 DBREPLAY_READ_NODES로 받는다
+			  --scale-command는 --apply-scale yes와 --max-read-nodes를 함께 줘야 실행된다. 권한 노드 수를 DBREPLAY_READ_NODES로 받는다
 
 			과부하는 알람으로 판정한다. explore에는 알람이 하나는 있어야 한다.
 			  --alarm-command          라운드가 끝날 때 sh -c로 실행한다. 0이 아닌 값으로 끝나면 알람이 울린 것이다.
@@ -476,7 +476,7 @@ public final class Main {
 		System.out.println("  읽기만 늘 때의 상한은 --only reads로 따로 탐색한다");
 		if (options.containsKey("--read-nodes")) {
 			printScaleAdvice(options, ScaleAdvice.of(levels[0], levels[1], (int) number(options, "--read-nodes", 1),
-					(int) number(options, "--min-read-nodes", 1)));
+					(int) number(options, "--min-read-nodes", 1), (int) number(options, "--max-read-nodes", Integer.MAX_VALUE)));
 		}
 	}
 
@@ -494,8 +494,15 @@ public final class Main {
 			case SURPLUS -> System.out.printf("  쓰기: 주 DB의 용량을 지금의 %.2f배까지 줄여도 된다%n", advice.writeCapacityFactor());
 			case HEALTHY -> System.out.println("  쓰기: 그대로 둔다");
 		}
+		if (advice.capped()) {
+			System.out.println("  계산한 노드 수가 한도를 넘어 한도로 잘랐다. 상한이나 지금의 QPS를 다시 확인한다");
+		}
 		String command = options.get("--scale-command");
 		if (command == null || advice.readNodeChange() == 0) {
+			return;
+		}
+		if (!options.containsKey("--max-read-nodes")) {
+			System.out.println("  실행하지 않았다. --max-read-nodes로 한도를 주지 않으면 확장 명령을 실행하지 않는다");
 			return;
 		}
 		if (!"yes".equals(options.get("--apply-scale"))) {
