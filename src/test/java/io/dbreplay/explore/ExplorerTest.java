@@ -26,6 +26,19 @@ class ExplorerTest {
 		return new RoundData(speed, 1_000_000, 1_030_000, summary, metrics);
 	}
 
+	/** 주와 종을 함께 튼 라운드는 둘 중 하나만 재생기가 못 따라가도 왜곡이다. 종 DB 쪽만 밀린 것을 놓치면 상한을 대상의 한계로 잘못 읽는다. */
+	@Test
+	void aRoundIsDistortedWhenOnlyTheReplicaReplayFellBehind() throws Exception {
+		RoundData primaryOnly = round(4, 0);
+		ReplaySummary lateReplica = new ReplaySummary(1_000, 8, 0, 0, 0, 400, 0, 4, 30_000_000, 7_500_000,
+				new Histogram(), new Histogram(), new Histogram());
+		RoundData both = new RoundData(4, 1_000_000, 1_030_000, primaryOnly.summary(), lateReplica, primaryOnly.metrics());
+
+		assertEquals(RoundJudge.State.HELD, alarmAbove(100).judge(primaryOnly).state());
+		assertEquals(0.4, both.distortion(), 1e-9);
+		assertEquals(RoundJudge.State.DISTORTED, alarmAbove(100).judge(both).state());
+	}
+
 	/** limit 배속을 넘으면 알람이 울리는 대상. */
 	private static RoundJudge alarmAbove(double limit) {
 		return new RoundJudge(List.of(r -> r.speed() > limit ? "알람" : null), 0.2);

@@ -14,8 +14,8 @@ import io.dbreplay.replay.JdbcTarget;
 /**
  * 샌드박스를 녹화 시작 시점으로 되돌린다. 메이투안의 시스템이 라운드마다 자동으로 하는 일이다.
  *
- * <p>순서는 덤프 되붓기, 변경 넣기, 통계 다시 잡기, 조용해질 때까지 기다리기다. 뒤의 둘은 실험에서 틀렸던
- * 자리다. 되돌린 직후에는 통계가 적재 도중의 값으로 남아 실행 계획이 바뀌었고(실험 02), 서버가 되부은 쓰기를
+ * <p>순서는 덤프 되붓기, 변경 넣기, 통계 다시 잡기, (종 DB가 있으면 따라올 때까지 기다리기,) 조용해질 때까지
+ * 기다리기다. 통계와 조용해지기는 실험에서 틀렸던 자리다. 되돌린 직후에는 통계가 적재 도중의 값으로 남아 실행 계획이 바뀌었고(실험 02), 서버가 되부은 쓰기를
  * 디스크에 내리는 동안에는 COMMIT이 느렸다(실험 03).
  *
  * <p>덤프를 되붓는 데는 mysql과 psql 클라이언트를 쓴다. 논리 덤프는 어느 환경에서나 되지만 데이터가 크면
@@ -33,22 +33,36 @@ public final class Sandbox {
 	public record Options(String snapshotFile, String database, String changeCommand, String readyCommand, long settleSeconds) {
 	}
 
-	/** @param settled 시간 안에 조용해졌으면 true. 기다리지 않았으면 false */
-	public record Timing(long restoreMillis, long changeMillis, long analyzeMillis, long settleMillis, boolean settled) {
+	/**
+	 * @param replicaMillis 종 DB가 따라올 때까지 기다린 시간. 종 DB가 없으면 0
+	 * @param settled       시간 안에 조용해졌으면 true. 기다리지 않았으면 false
+	 */
+	public record Timing(long restoreMillis, long changeMillis, long analyzeMillis, long replicaMillis, long settleMillis,
+			boolean settled) {
 
 		public long totalMillis() {
-			return restoreMillis + changeMillis + analyzeMillis + settleMillis;
+			return restoreMillis + changeMillis + analyzeMillis + replicaMillis + settleMillis;
 		}
 	}
+
+	/** 종 DB가 주 DB를 따라오기를 기다리는 시간의 상한. 덤프를 되부은 만큼을 복제로 받아야 한다 */
+	private static final long REPLICA_TIMEOUT_SECONDS = 600;
 
 	private static final String MYSQL_DIRTY_PAGES =
 			"SELECT VARIABLE_VALUE FROM performance_schema.global_status WHERE VARIABLE_NAME = 'Innodb_buffer_pool_pages_dirty'";
 
 	private final JdbcTarget target;
+	private final JdbcTarget replica;
 	private final Options options;
 
 	public Sandbox(JdbcTarget target, Options options) {
+		this(target, null, options);
+	}
+
+	/** @param replica 주 DB를 복제로 따라오는 종 DB. 되돌리기는 주 DB에만 하고, 종 DB가 다 받을 때까지 기다린다. 없으면 null */
+	public Sandbox(JdbcTarget target, JdbcTarget replica, Options options) {
 		this.target = target;
+		this.replica = replica;
 		this.options = options;
 	}
 
@@ -68,19 +82,24 @@ public final class Sandbox {
 		long t2 = System.nanoTime();
 		boolean settled = false;
 		long t3;
-		long t4;
+		long replicaMillis = 0;
+		long settleMillis;
 		try (Connection connection = target.connect(database); Statement statement = connection.createStatement()) {
 			analyze(statement, database);
 			t3 = System.nanoTime();
+			if (replica != null) {
+				replicaMillis = ReplicaSync.await(target, replica, REPLICA_TIMEOUT_SECONDS);
+			}
+			long settleFrom = System.nanoTime();
 			if (options.settleSeconds() > 0) {
 				settled = settle(statement);
 			}
-			t4 = System.nanoTime();
+			settleMillis = (System.nanoTime() - settleFrom) / 1_000_000;
 		}
 		if (options.readyCommand() != null) {
 			run(new ProcessBuilder("sh", "-c", options.readyCommand()), null, "준비 명령");
 		}
-		return new Timing((t1 - t0) / 1_000_000, (t2 - t1) / 1_000_000, (t3 - t2) / 1_000_000, (t4 - t3) / 1_000_000, settled);
+		return new Timing((t1 - t0) / 1_000_000, (t2 - t1) / 1_000_000, (t3 - t2) / 1_000_000, replicaMillis, settleMillis, settled);
 	}
 
 	private void restore(JdbcTarget.Endpoint endpoint, String database) throws IOException, InterruptedException {
