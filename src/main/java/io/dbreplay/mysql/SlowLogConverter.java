@@ -8,6 +8,7 @@ import java.util.Map;
 
 import io.dbreplay.convert.ConvertSummary;
 import io.dbreplay.convert.HeadPolicy;
+import io.dbreplay.convert.LiteralMasker;
 import io.dbreplay.convert.RecordBuffer;
 import io.dbreplay.convert.SessionHead;
 import io.dbreplay.convert.SqlWords;
@@ -39,6 +40,15 @@ public final class SlowLogConverter {
 	/** @param buffer 레코드를 모아 정렬할 곳. 메모리 한도와 임시 폴더를 정해서 넘긴다. 닫는 것은 부른 쪽이 한다 */
 	public static ConvertSummary convert(Reader slowLog, Writer trace, HeadPolicy headPolicy, RecordBuffer buffer)
 			throws IOException {
+		return convert(slowLog, trace, headPolicy, buffer, null, null);
+	}
+
+	/**
+	 * @param masker   리터럴을 가릴 때 쓴다. 가리지 않으면 null. 문장의 종류와 트랜잭션 경계는 가리기 전의 문장으로 본다
+	 * @param maskName 머리말에 적을 가림 수준. 가리지 않으면 null
+	 */
+	public static ConvertSummary convert(Reader slowLog, Writer trace, HeadPolicy headPolicy, RecordBuffer buffer,
+			LiteralMasker masker, String maskName) throws IOException {
 		SlowLogParser parser = new SlowLogParser(slowLog);
 		Map<Long, Session> sessions = new HashMap<>();
 		// use db; 줄은 연결이 아니라 로그 파일 기준으로, 직전 항목과 데이터베이스가 다를 때만 찍힌다
@@ -78,7 +88,8 @@ public final class SlowLogConverter {
 			boolean orphanEnd = (kind == StatementKind.END || kind == StatementKind.END_AND_CHAIN)
 					&& !session.tracker.inTransaction();
 			Long txn = session.tracker.assign(kind, e.failed());
-			long index = buffer.add(new TraceRecord(sessionId, start, e.durationMicros(), e.sql(), currentDb,
+			long index = buffer.add(new TraceRecord(sessionId, start, e.durationMicros(),
+					masker == null ? e.sql() : masker.mask(e.sql()), currentDb,
 					e.errno(), e.lockMicros(), txn, e.rowsSent(), e.rowsExamined(), null));
 			if (isBoundary(kind)) {
 				session.head.boundary(sessionId, index, orphanEnd, e.sql(), headPolicy, buffer);
@@ -88,7 +99,7 @@ public final class SlowLogConverter {
 			}
 		}
 
-		RecordBuffer.Written w = buffer.write(trace, TraceHeader.of("mysql", "slow-log"));
+		RecordBuffer.Written w = buffer.write(trace, TraceHeader.of("mysql", "slow-log").withMask(maskName));
 		return new ConvertSummary(entries, w.statements(), w.closes(), w.sessions(), ignored,
 				buffer.droppedCount(), parser.skipped(), clamped);
 	}
