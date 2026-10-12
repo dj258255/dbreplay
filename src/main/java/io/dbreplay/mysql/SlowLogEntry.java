@@ -7,6 +7,8 @@ package io.dbreplay.mysql;
  * @param startMicros    문장이 시작된 시각 (UTC 에포크 마이크로초)
  * @param durationMicros {@code Query_time}
  * @param lockMicros     {@code Lock_time}
+ * @param rowsSent       {@code Rows_sent}
+ * @param rowsExamined   {@code Rows_examined}
  * @param errno          오류 번호. {@code log_slow_extra}가 꺼져 있으면 null
  * @param useDb          이 항목 앞에 {@code use db;} 줄이 있었으면 그 이름, 없었으면 null
  * @param adminCommand   {@code # administrator command: X;} 항목이면 X, 아니면 null
@@ -17,6 +19,8 @@ public record SlowLogEntry(
 		long startMicros,
 		long durationMicros,
 		long lockMicros,
+		long rowsSent,
+		long rowsExamined,
 		Integer errno,
 		String useDb,
 		String adminCommand,

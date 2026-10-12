@@ -73,6 +73,8 @@ public final class SlowLogParser {
 		long durationMicros = -1;
 		long lockMicros = 0;
 		long startMicros = -1;
+		long rowsSent = 0;
+		long rowsExamined = 0;
 		Integer errno = null;
 		String useDb = null;
 		boolean inBody = false;
@@ -107,6 +109,8 @@ public final class SlowLogParser {
 					switch (m.group(1)) {
 						case "Query_time" -> durationMicros = secondsToMicros(m.group(2));
 						case "Lock_time" -> lockMicros = secondsToMicros(m.group(2));
+						case "Rows_sent" -> rowsSent = Long.parseLong(m.group(2));
+						case "Rows_examined" -> rowsExamined = Long.parseLong(m.group(2));
 						case "Errno" -> errno = Integer.valueOf(m.group(2));
 						case "Start" -> startMicros = parseMicros(m.group(2));
 						default -> { }
@@ -131,9 +135,9 @@ public final class SlowLogParser {
 		String text = body.toString().strip();
 		if (text.startsWith(ADMIN)) {
 			String command = stripSemicolon(text.substring(ADMIN.length()));
-			return new SlowLogEntry(connectionId, startMicros, durationMicros, lockMicros, errno, useDb, command, null);
+			return new SlowLogEntry(connectionId, startMicros, durationMicros, lockMicros, rowsSent, rowsExamined, errno, useDb, command, null);
 		}
-		return new SlowLogEntry(connectionId, startMicros, durationMicros, lockMicros, errno, useDb, null, stripSemicolon(text));
+		return new SlowLogEntry(connectionId, startMicros, durationMicros, lockMicros, rowsSent, rowsExamined, errno, useDb, null, stripSemicolon(text));
 	}
 
 	private static String stripSemicolon(String s) {
