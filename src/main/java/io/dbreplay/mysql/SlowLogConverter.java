@@ -71,7 +71,7 @@ public final class SlowLogConverter {
 					&& !session.tracker.inTransaction();
 			Long txn = session.tracker.assign(kind, e.failed());
 			int index = buffer.add(new TraceRecord(sessionId, start, e.durationMicros(), e.sql(), currentDb,
-					e.errno(), e.lockMicros(), txn, null));
+					e.errno(), e.lockMicros(), txn, e.rowsSent(), e.rowsExamined(), null));
 			if (isBoundary(kind)) {
 				session.head.boundary(index, orphanEnd, e.sql(), headPolicy, buffer);
 			}

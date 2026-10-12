@@ -17,10 +17,13 @@ import com.fasterxml.jackson.annotation.JsonPropertyOrder;
  * @param error          원본의 오류 번호. 0은 성공
  * @param lockMicros     원본에서 락을 기다린 시간. 기종이 내주지 않으면 없다
  * @param txn            세션 안에서의 트랜잭션 순번. 트랜잭션에 속하지 않은 문장이면 없다
+ * @param rowsSent       원본에서 클라이언트에 보낸 행 수. 녹화가 알려 주지 않으면 없다
+ * @param rowsExamined   원본에서 읽은 행 수. 같은 문장인데 이 값이 크게 달라지면 실행 계획이 바뀐 것이다
  * @param close          연결 종료 줄이면 true
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
-@JsonPropertyOrder({"session", "startMicros", "durationMicros", "sql", "db", "error", "lockMicros", "txn", "close"})
+@JsonPropertyOrder({"session", "startMicros", "durationMicros", "sql", "db", "error", "lockMicros", "txn", "rowsSent",
+		"rowsExamined", "close"})
 public record TraceRecord(
 		String session,
 		long startMicros,
@@ -30,7 +33,15 @@ public record TraceRecord(
 		Integer error,
 		Long lockMicros,
 		Long txn,
+		Long rowsSent,
+		Long rowsExamined,
 		Boolean close) {
+
+	/** 행 수를 모르는 녹화에서 온 레코드. */
+	public TraceRecord(String session, long startMicros, long durationMicros, String sql, String db, Integer error,
+			Long lockMicros, Long txn, Boolean close) {
+		this(session, startMicros, durationMicros, sql, db, error, lockMicros, txn, null, null, close);
+	}
 
 	public static TraceRecord close(String session, long startMicros) {
 		return new TraceRecord(session, startMicros, 0, null, null, null, null, null, true);

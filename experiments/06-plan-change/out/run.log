@@ -1,0 +1,50 @@
+== 통계가 맞는 샌드박스 ==
+되돌리기 4.2초: 덤프 되붓기 3.5, 변경 0.0, 통계 0.2, 조용해질 때까지 0.5 (조용해짐)
+문장 38661개를 연결 26개로 1.0배속에 틀었다 (단위: 트랜잭션)
+오류: 원본 0개, 재생 0개
+== 통계가 틀어진 샌드박스 ==
+되돌리기 4.8초: 덤프 되붓기 3.6, 변경 0.0, 통계 0.2, 조용해질 때까지 1.0 (조용해짐)
+  select_type: SIMPLE
+         type: ALL
+         rows: 46
+문장 38661개를 연결 37개로 1.0배속에 틀었다 (단위: 트랜잭션)
+오류: 원본 0개, 재생 0개
+전체: 문장 38715 → 38737개, 실패 0 → 0개
+      실행 시간 평균 0.121ms → 1.370ms, 중앙값 0.040ms → 0.068ms, p99 1.568ms → 24.576ms
+
+나빠진 SQL
+        횟수       평균 앞       평균 뒤       변화      p99 앞      p99 뒤  모양
+       486    0.071ms   15.892ms +22273.6%    0.188ms   51.200ms  SELECT c FROM sbtest1 WHERE id BETWEEN ? AND ?
+       494    0.069ms   15.372ms +22122.2%    0.212ms   64.512ms  SELECT SUM(k) FROM sbtest1 WHERE id BETWEEN ? AND ?
+       445    0.095ms   15.138ms +15885.1%    0.288ms   32.768ms  SELECT c FROM sbtest1 WHERE id BETWEEN ? AND ? ORDER BY c
+
+좋아진 SQL
+  없음
+
+실행 시간을 많이 쓴 순서
+        횟수       평균 앞       평균 뒤       변화      p99 앞      p99 뒤  모양
+      1933    1.412ms    9.310ms  +559.5%    7.296ms   57.344ms  COMMIT
+       492    0.139ms   15.799ms +11282.8%    0.320ms   37.888ms  SELECT DISTINCT c FROM sbtest1 WHERE id BETWEEN ? AND ? ORDER BY c
+       486    0.071ms   15.892ms +22273.6%    0.188ms   51.200ms  SELECT c FROM sbtest1 WHERE id BETWEEN ? AND ?
+       494    0.069ms   15.372ms +22122.2%    0.212ms   64.512ms  SELECT SUM(k) FROM sbtest1 WHERE id BETWEEN ? AND ?
+       445    0.095ms   15.138ms +15885.1%    0.288ms   32.768ms  SELECT c FROM sbtest1 WHERE id BETWEEN ? AND ? ORDER BY c
+      5100    0.035ms    0.121ms  +245.1%    0.128ms    0.672ms  SELECT c FROM sbtest2 WHERE id=?
+      4730    0.036ms    0.118ms  +227.0%    0.152ms    0.512ms  SELECT c FROM sbtest3 WHERE id=?
+      4760    0.035ms    0.114ms  +228.2%    0.116ms    0.416ms  SELECT c FROM sbtest1 WHERE id=?
+      4740    0.037ms    0.106ms  +187.7%    0.136ms    0.592ms  SELECT c FROM sbtest4 WHERE id=?
+       468    0.087ms    0.467ms  +435.5%    0.384ms    8.704ms  UPDATE sbtest3 SET k=k+? WHERE id=?
+       516    0.080ms    0.358ms  +348.4%    0.376ms    3.776ms  UPDATE sbtest1 SET k=k+? WHERE id=?
+       472    0.091ms    0.342ms  +275.3%    0.360ms    6.272ms  UPDATE sbtest2 SET k=k+? WHERE id=?
+       485    0.139ms    0.279ms  +101.3%    0.256ms    2.048ms  SELECT DISTINCT c FROM sbtest3 WHERE id BETWEEN ? AND ? ORDER BY c
+       459    0.137ms    0.295ms  +115.1%    0.280ms    2.304ms  SELECT DISTINCT c FROM sbtest4 WHERE id BETWEEN ? AND ? ORDER BY c
+       497    0.141ms    0.257ms   +82.9%    0.392ms    1.856ms  SELECT DISTINCT c FROM sbtest2 WHERE id BETWEEN ? AND ? ORDER BY c
+
+읽은 행 수가 2배 이상 늘어난 SQL
+        횟수        행 수 앞        행 수 뒤       배율  모양
+       486        100.0     100000.0  1000.0배  SELECT c FROM sbtest1 WHERE id BETWEEN ? AND ?
+       494        100.0     100000.0  1000.0배  SELECT SUM(k) FROM sbtest1 WHERE id BETWEEN ? AND ?
+       492        200.0     100100.0   500.5배  SELECT DISTINCT c FROM sbtest1 WHERE id BETWEEN ? AND ? ORDER BY c
+
+오류가 달라진 SQL
+  없음
+exit=0

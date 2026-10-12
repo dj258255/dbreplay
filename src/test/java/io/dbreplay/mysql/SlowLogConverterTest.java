@@ -111,6 +111,9 @@ class SlowLogConverterTest {
 		assertEquals(407_191, blocked.lockMicros());
 
 		assertEquals(1146, byTag.get("s6.6").error());
+		// s3.4는 기본키로 한 행을 찾는 조회다. 한 행을 읽어 한 행을 보냈다
+		assertEquals(1, byTag.get("s3.4").rowsSent());
+		assertEquals(1, byTag.get("s3.4").rowsExamined());
 		assertEquals(0, byTag.get("s1.2").error());
 		assertEquals("shop", byTag.get("s1.2").db());
 		// EXECUTE는 값이 채워진 본문으로 남고, PREPARE와 DEALLOCATE는 빠진다

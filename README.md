@@ -39,6 +39,7 @@ dbreplay explore --trace prod.trace.jsonl --url jdbc:mysql://sandbox:3306/ --use
 | [03](experiments/03-mysql-compare-explore/README.md) | MySQL에서 테이블 압축 전후 비교와 용량 탐색 |
 | [04](experiments/04-postgres/README.md) | PostgreSQL에서 같은 흐름 |
 | [05](experiments/05-sandbox-reset/README.md) | 되돌린 뒤 기다리면 재생이 원본에 가까워지는가 |
+| [06](experiments/06-plan-change/README.md) | 실행 계획이 바뀐 것이 읽은 행 수로 드러나는가 |
 
 ## 문서
 
