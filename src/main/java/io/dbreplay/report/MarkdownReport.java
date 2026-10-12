@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.Writer;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
@@ -91,7 +92,13 @@ public final class MarkdownReport {
 			out.println();
 		}
 		if (!c.onlyBefore().isEmpty() || !c.onlyAfter().isEmpty()) {
-			out.printf("한쪽에만 있는 SQL 모양이 변경 전에 %d개, 변경 후에 %d개 있다.%n%n", c.onlyBefore().size(), c.onlyAfter().size());
+			out.printf("한쪽에만 있는 SQL 모양이 변경 전에 %d개, 변경 후에 %d개 있다. "
+					+ "실패한 문장을 로그에 적지 않는 서버에서는 새로 실패한 문장이 '변경 전에만'으로 나온다.%n%n",
+					c.onlyBefore().size(), c.onlyAfter().size());
+			out.printf("| 어느 쪽 | SQL 모양 | 횟수 | 실패 |%n|---|---|---|---|%n");
+			oneSided(out, "변경 전에만", c.onlyBefore(), in.top());
+			oneSided(out, "변경 후에만", c.onlyAfter(), in.top());
+			out.println();
 		}
 
 		if (in.runBefore() != null && in.runAfter() != null) {
@@ -178,6 +185,14 @@ public final class MarkdownReport {
 	}
 
 	/** 표의 칸 안에 들어갈 모양. 세로선과 역따옴표가 표를 깨지 않게 한다. */
+	private static void oneSided(PrintWriter out, String label, Map<String, TraceComparison.Side> shapes, int top) {
+		shapes.entrySet().stream()
+				.sorted((x, y) -> Long.compare(y.getValue().count(), x.getValue().count()))
+				.limit(top)
+				.forEach(e -> out.printf("| %s | `%s` | %,d | %,d |%n", label, cell(e.getKey()), e.getValue().count(),
+						e.getValue().errors()));
+	}
+
 	private static String cell(String shape) {
 		String s = shape.length() > 100 ? shape.substring(0, 97) + "..." : shape;
 		return s.replace("|", "\\|").replace("`", "'");

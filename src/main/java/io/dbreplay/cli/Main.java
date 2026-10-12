@@ -39,6 +39,7 @@ import io.dbreplay.replay.ReplaySummary;
 import io.dbreplay.replay.Replayer;
 import io.dbreplay.replay.ResultWriter;
 import io.dbreplay.report.MarkdownReport;
+import io.dbreplay.report.NewErrors;
 import io.dbreplay.report.RunRecord;
 import io.dbreplay.report.TraceComparison;
 import io.dbreplay.sandbox.Sandbox;
@@ -183,20 +184,18 @@ public final class Main {
 		boolean withMetrics = options.getOrDefault("--metrics", "off").equals("on") || options.containsKey("--metric-command")
 				|| runOut != null;
 		ReplaySummary s;
+		NewErrors newErrors;
 		Map<String, double[]> metrics = Map.of();
 		try (MetricSampler sampler = withMetrics ? sampler(target, options) : new MetricSampler();
-				TraceReader trace = openTrace(required(options, "--trace"))) {
-			if (out == null) {
-				s = Replayer.run(trace, target, result -> { }, replayOptions);
-			}
-			else {
-				try (ResultWriter results = new ResultWriter(Files.newBufferedWriter(Path.of(out), StandardCharsets.UTF_8))) {
-					s = Replayer.run(trace, target, results, replayOptions);
-				}
-			}
+				TraceReader trace = openTrace(required(options, "--trace"));
+				ResultWriter results = out == null ? null
+						: new ResultWriter(Files.newBufferedWriter(Path.of(out), StandardCharsets.UTF_8))) {
+			newErrors = new NewErrors(results == null ? result -> { } : results);
+			s = Replayer.run(trace, target, newErrors, replayOptions);
 			metrics = sampler.stop();
 		}
 		print(s, replayOptions);
+		printNewErrors(newErrors, required(options, "--trace"));
 		printMetrics(metrics);
 		if (runOut != null) {
 			JSON.writeValue(Path.of(runOut).toFile(), RunRecord.of(Instant.now().truncatedTo(ChronoUnit.SECONDS).toString(),
@@ -245,6 +244,26 @@ public final class Main {
 			sampler.add(new CommandMetricSource(options.get("--metric-command")), (long) number(options, "--metric-command-ms", 1_000));
 		}
 		return sampler;
+	}
+
+	/** 재생 요약의 오류 수는 숫자뿐이다. 어떤 문장이 무슨 오류로 실패했는지를 트래픽 파일에서 찾아 보여 준다. */
+	private static void printNewErrors(NewErrors newErrors, String tracePath) throws IOException {
+		if (newErrors.count() == 0) {
+			return;
+		}
+		List<NewErrors.Row> rows;
+		try (TraceReader trace = openTrace(tracePath)) {
+			rows = newErrors.rows(trace);
+		}
+		System.out.printf("%n원본에서는 실패하지 않았는데 재생에서 실패한 문장 %d개%n", newErrors.count());
+		System.out.printf("  %8s %8s  %s%n", "오류", "횟수", "모양");
+		rows.stream().limit(10).forEach(r -> System.out.printf("  %8d %8d  %s%n", r.error(), r.count(), shorten(r.shape())));
+		if (rows.size() > 10) {
+			System.out.printf("  그 밖의 모양 %d개%n", rows.size() - 10);
+		}
+		if (newErrors.beyondLimit() > 0) {
+			System.out.printf("  실패 %d개까지만 문장을 찾았다. 나머지 %d개는 개수만 셌다%n", NewErrors.LIMIT, newErrors.beyondLimit());
+		}
 	}
 
 	private static void printMetrics(Map<String, double[]> metrics) {
@@ -306,8 +325,20 @@ public final class Main {
 					r.before().errors(), r.after().errors(), shorten(r.shape()));
 		}
 		if (!c.onlyBefore().isEmpty() || !c.onlyAfter().isEmpty()) {
+			// 실패한 문장을 로그에 적지 않는 서버가 있다(MySQL은 구문 오류로 끝난 문장을 슬로우 로그에 적지 않는다).
+			// 그런 문장은 위의 '오류가 달라진 SQL'에 나오지 않고 여기에 '앞에만 있는 모양'으로 나온다
 			System.out.printf("%n한쪽에만 있는 모양: 앞 %d개, 뒤 %d개%n", c.onlyBefore().size(), c.onlyAfter().size());
+			printOneSided("앞에만", c.onlyBefore(), top);
+			printOneSided("뒤에만", c.onlyAfter(), top);
 		}
+	}
+
+	private static void printOneSided(String label, Map<String, TraceComparison.Side> shapes, int top) {
+		shapes.entrySet().stream()
+				.sorted((a, b) -> Long.compare(b.getValue().count(), a.getValue().count()))
+				.limit(top)
+				.forEach(e -> System.out.printf("  %s %8d번 (실패 %d)  %s%n", label, e.getValue().count(), e.getValue().errors(),
+						shorten(e.getKey())));
 	}
 
 	private static void printRows(String title, List<TraceComparison.Row> rows) {
