@@ -41,6 +41,13 @@ public final class SqlWords {
 		return WRITE_HEADS.contains(first(sql));
 	}
 
+	private static final Set<String> READ_HEADS = Set.of("SELECT", "WITH", "SHOW", "EXPLAIN", "DESCRIBE", "DESC", "TABLE", "VALUES");
+
+	/** 데이터를 읽기만 하는 문장인가. SELECT ... FOR UPDATE도 읽기로 친다. 트랜잭션 제어와 세션 설정은 읽기도 쓰기도 아니다. */
+	public static boolean reads(String sql) {
+		return READ_HEADS.contains(first(sql));
+	}
+
 	/** COMMIT AND CHAIN처럼 끝내면서 곧바로 새 트랜잭션을 여는가. */
 	public static boolean chained(String[] head) {
 		String all = String.join(" ", head);

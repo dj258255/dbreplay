@@ -68,7 +68,7 @@ class ReplayerTest {
 		}
 	}
 
-	private static final Replayer.Options FAST = new Replayer.Options(1, Replayer.Unit.SESSION, 500, 0, 200_000, 50_000);
+	private static final Replayer.Options FAST = new Replayer.Options(1, Replayer.Unit.SESSION, 500, 0, 200_000, 50_000, false);
 	private static final Replayer.Options BY_TRANSACTION = FAST.withUnit(Replayer.Unit.TRANSACTION);
 	private static final Replayer.Options BY_STATEMENT = FAST.withUnit(Replayer.Unit.STATEMENT);
 
@@ -149,7 +149,7 @@ class ReplayerTest {
 
 	@Test
 	void dividesTheOriginalGapsBySpeed() throws IOException {
-		Run run = run(new FakeTarget(), new Replayer.Options(8, Replayer.Unit.SESSION, 500, 0, 200_000, 50_000),
+		Run run = run(new FakeTarget(), new Replayer.Options(8, Replayer.Unit.SESSION, 500, 0, 200_000, 50_000, false),
 				statement("A", 0, "a1"),
 				statement("A", 800, "a2"));
 
@@ -256,13 +256,31 @@ class ReplayerTest {
 	@Test
 	void opensConnectionsBeforeTheClockStarts() throws IOException {
 		FakeTarget target = new FakeTarget();
-		Run run = run(target, new Replayer.Options(1, Replayer.Unit.STATEMENT, 500, 4, 200_000, 50_000),
+		Run run = run(target, new Replayer.Options(1, Replayer.Unit.STATEMENT, 500, 4, 200_000, 50_000, false),
 				statement("A", 0, "SELECT 1"),
 				statement("B", 1, "SELECT 2"));
 
 		assertEquals(4, target.opened.get());
 		assertEquals(4, target.closed.get());
 		assertEquals(4, run.summary().sessions());
+	}
+
+	/** 읽기만 틀면 쓰기와 트랜잭션 제어가 빠지고 남은 읽기는 독립으로 나간다. */
+	@Test
+	void replaysOnlyTheReadsWhenAsked() throws IOException {
+		FakeTarget target = new FakeTarget();
+		Run run = run(target, FAST.onlyReads(),
+				inTransaction("A", 1, 0, "BEGIN"),
+				inTransaction("A", 1, 5, "SELECT a FROM t"),
+				inTransaction("A", 1, 10, "UPDATE t SET a = 1"),
+				inTransaction("A", 1, 15, "COMMIT"),
+				statement("B", 20, "WITH x AS (SELECT 1) SELECT * FROM x"),
+				statement("B", 25, "INSERT INTO t VALUES (1)"));
+
+		List<String> all = target.executed.stream().map(s -> s.substring(s.indexOf(':') + 1)).sorted().toList();
+		assertEquals(List.of("SELECT a FROM t", "WITH x AS (SELECT 1) SELECT * FROM x"), all);
+		assertEquals(4, run.summary().skipped());
+		assertEquals(2, run.summary().statements());
 	}
 
 	@Test
