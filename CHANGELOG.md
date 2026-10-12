@@ -36,6 +36,9 @@
   용량의 배수를 낸다. 읽기 상한이 노드 수에 비례한다는 가정이고 확인된 것이 아니다. `--scale-command`는
   `--apply-scale yes`를 함께 줘야 실행된다.
 
+- `dbreplay manage`(#6). 등록해 둔 대상을 훑어, 평가한 적이 없거나 만료됐거나 무효인 것만 다시 평가하고 수위를 한 표로 낸다.
+  대상별 설정은 `explore`의 옵션을 그대로 적는다. 떠 있는 프로세스가 아니라서 주기 실행은 cron 같은 것에 건다.
+
 ### 바뀐 것
 
 - `--alarm-active-sessions <개수>`는 `--alarm-metric active_sessions>=<개수>`의 줄임으로 남는다.

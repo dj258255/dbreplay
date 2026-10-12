@@ -33,6 +33,7 @@ dbreplay report  --before <트래픽 파일> --after <트래픽 파일> --out <�
 dbreplay explore --trace <트래픽 파일> --url <JDBC URL> --user <계정> --snapshot <덤프 파일> --alarm-command <명령>
 dbreplay reset   --url <JDBC URL> --user <계정> --snapshot <덤프 파일>
 dbreplay check   --evaluation <평가 파일> --url <JDBC URL> --user <계정>
+dbreplay manage  --targets <대상 목록.json>
 dbreplay sample  --url <JDBC URL> --user <계정> --seconds <초>
 ```
 
