@@ -1,0 +1,28 @@
+# 실험 09: 글이 든 활용 장면(인덱스 변경, 버전 업그레이드, 파라미터 변경)에서 도구가 차이를 잡는가
+name: dbreplay-exp09
+
+x-mysql: &mysql
+  environment:
+    MYSQL_ROOT_PASSWORD: replay
+    MYSQL_DATABASE: sbtest
+  command:
+    - --slow-query-log=OFF
+    - --long-query-time=0
+    - --log-output=FILE
+    - --slow-query-log-file=/var/lib/mysql/slow.log
+    - --log-slow-extra=ON
+    - --log-slow-admin-statements=ON
+    - --max-connections=1000
+  healthcheck:
+    test: ["CMD", "mysqladmin", "ping", "-uroot", "-preplay", "--silent"]
+    interval: 2s
+    timeout: 2s
+    retries: 60
+
+services:
+  mysql80:
+    <<: *mysql
+    image: mysql:8.0
+  mysql84:
+    <<: *mysql
+    image: mysql:8.4
