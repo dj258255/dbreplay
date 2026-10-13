@@ -1,11 +1,16 @@
 package io.dbreplay.explore;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
 import java.io.StringReader;
 import java.io.StringWriter;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -13,6 +18,7 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 
 import io.dbreplay.trace.TraceHeader;
 import io.dbreplay.trace.TraceReader;
@@ -105,5 +111,78 @@ class EvaluationTest {
 		Evaluation read = json.readValue(json.writeValueAsString(evaluation()), Evaluation.class);
 
 		assertEquals(evaluation(), read);
+	}
+
+	/**
+	 * 지금 형식의 평가 파일을 그대로 읽어 다시 쓰면 글자가 같아야 한다. 되풀이하지 않은 평가 파일의 JSON이
+	 * 이 묶음 뒤에도 달라지지 않는다는 증거다. 끝의 줄바꿈만 다르면 맞춘다.
+	 */
+	@Test
+	void rewritesTheCurrentEvaluationFileExactly() throws IOException {
+		String original = Files.readString(Path.of("src/test/resources/explore/evaluation-single.json"), StandardCharsets.UTF_8);
+		ObjectMapper json = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
+		Evaluation read = json.readValue(Path.of("src/test/resources/explore/evaluation-single.json").toFile(), Evaluation.class);
+		String rewritten = json.writeValueAsString(read);
+
+		assertEquals(original.stripTrailing(), rewritten.stripTrailing());
+	}
+
+	/** 되풀이한 평가는 상한 목록을 파일에 남기고, 다시 읽어도 범위가 그대로다. */
+	@Test
+	void keepsTheCeilingSpeedsThroughAFile() throws IOException {
+		Evaluation repeated = new Evaluation("2026-10-01T00:00:00Z", 30, PROFILE, ALARMS, "transaction", traffic(80, 20),
+				3.75, "OVERLOADED", 15_000, 4_000, 0.3, 0.5, List.of(8.5, 12.0, 8.5, 3.75, 8.0));
+		ObjectMapper json = new ObjectMapper();
+
+		Evaluation read = json.readValue(json.writeValueAsString(repeated), Evaluation.class);
+
+		assertEquals(repeated, read);
+		CeilingRange range = read.ceilingRange();
+		assertEquals(3.75, range.min(), 1e-9);
+		assertEquals(8.5, range.median(), 1e-9);
+		assertEquals(12.0, range.max(), 1e-9);
+		assertEquals(range.representative(), read.ceilingSpeed(), 1e-9, "상한은 범위의 최솟값이다");
+	}
+
+	/** ceilingRange와 level은 계산 메서드다. 평가 파일의 항목으로 찍히면 다시 읽을 때 깨진다. */
+	@Test
+	void doesNotWriteComputedMethodsAsFields() throws IOException {
+		Evaluation repeated = new Evaluation("2026-10-01T00:00:00Z", 30, PROFILE, ALARMS, "transaction", traffic(80, 20),
+				3.75, "OVERLOADED", 15_000, 4_000, 0.3, 0.5, List.of(8.5, 12.0, 8.5, 3.75, 8.0));
+		String json = new ObjectMapper().writeValueAsString(repeated);
+
+		assertTrue(json.contains("ceilingSpeeds"));
+		assertFalse(json.contains("\"ceilingRange\""), "메서드는 항목이 아니다");
+		assertFalse(json.contains("\"level\""), "메서드는 항목이 아니다");
+	}
+
+	/** 되풀이하지 않은 평가에는 상한 범위가 없다. */
+	@Test
+	void hasNoCeilingRangeWithoutRepeatedExploration() throws IOException {
+		assertNull(evaluation().ceilingRange());
+	}
+
+	/** 손으로 고친 파일에 빈 상한 목록이 들어 있어도 죽지 않는다. 범위가 없는 것으로 본다. */
+	@Test
+	void hasNoCeilingRangeForAnEmptyCeilingSpeedsList() throws IOException {
+		Evaluation empty = new Evaluation("2026-10-01T00:00:00Z", 30, PROFILE, ALARMS, "transaction", traffic(80, 20),
+				5.0, "OVERLOADED", 20_000, 4_000, 0.3, 0.5, List.of());
+
+		assertNull(empty.ceilingRange());
+	}
+
+	/**
+	 * 알람이 울리지 않아 경계를 못 본 평가(stoppedBy null)의 파일 형식이 달라지지 않게 지킨다. stoppedBy가
+	 * null이어도 "stoppedBy" : null 줄이 찍혀야 한다. 클래스 전체에 @JsonInclude(NON_NULL)을 붙이면 이 줄이
+	 * 사라져 지금의 평가 파일과 달라진다.
+	 */
+	@Test
+	void keepsTheStoppedByNullFieldInTheFile() throws IOException {
+		Evaluation noCeiling = new Evaluation("2026-10-01T00:00:00Z", 30, PROFILE, ALARMS, "transaction", traffic(80, 20),
+				5.0, null, 20_000, 4_000, 0.3, 0.5);
+		String json = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT).writeValueAsString(noCeiling);
+
+		assertTrue(json.contains("\"stoppedBy\" : null"), "경계를 못 본 평가도 stoppedBy 줄을 찍는다");
+		assertFalse(json.contains("ceilingSpeeds"), "되풀이하지 않았으면 항목이 없다");
 	}
 }

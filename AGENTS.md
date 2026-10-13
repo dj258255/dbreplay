@@ -30,7 +30,7 @@ dbreplay convert --in <서버 로그> --out <트래픽 파일> [--from mysql-slo
 dbreplay replay  --trace <트래픽 파일> --url <JDBC URL> --user <계정> --speed 1 [--unit transaction|statement|session]
 dbreplay compare --before <트래픽 파일> --after <트래픽 파일>
 dbreplay report  --before <트래픽 파일> --after <트래픽 파일> --out <리포트.md>
-dbreplay explore --trace <트래픽 파일> --url <JDBC URL> --user <계정> --snapshot <덤프 파일> --alarm-command <명령>
+dbreplay explore --trace <트래픽 파일> --url <JDBC URL> --user <계정> --snapshot <덤프 파일> --alarm-command <명령> [--repeat 5]
 dbreplay reset   --url <JDBC URL> --user <계정> --snapshot <덤프 파일>
 dbreplay check   --evaluation <평가 파일> --url <JDBC URL> --user <계정>
 dbreplay manage  --targets <대상 목록.json>
@@ -42,6 +42,8 @@ dbreplay sample  --url <JDBC URL> --user <계정> --seconds <초>
 메이투안 글이 말한 그대로 따른다. 바꾸기 전에 `docs/ORIGIN.md` 13절의 "글의 기준"을 본다.
 
 - 과부하는 알람으로만 판정한다. 재생기가 잰 값은 그 라운드가 왜곡됐는지를 가리는 데만 쓴다.
+- 상한은 한 번의 탐색으로 말하지 않는다. 같은 절차의 상한이 실행마다 다르다(실험 12). `explore --repeat N`으로 되풀이해
+  범위를 내고, 수위 판정과 평가 파일에는 가장 낮은 값을 쓴다(범수 님 결정, 2026-10-13).
 - 기본 재생 단위는 트랜잭션이다. 대상이 느려져도 다음 트랜잭션은 제 시각에 출발한다.
 - 종 DB의 트래픽은 종 DB에서 따로 녹화해 `--replica-trace`로 함께 튼다. 문장 하나씩 독립으로 나간다.
   복제 지연은 `--replica-url`을 주면 뜨고, 알람으로 건다. 주 DB가 버티는 것과 종 DB가 따라오는 것은 다른 한계다(실험 11).

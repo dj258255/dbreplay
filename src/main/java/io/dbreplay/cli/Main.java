@@ -25,6 +25,7 @@ import io.dbreplay.convert.HeadPolicy;
 import io.dbreplay.convert.LiteralMasker;
 import io.dbreplay.convert.RecordBuffer;
 import io.dbreplay.explore.Alarm;
+import io.dbreplay.explore.CeilingRange;
 import io.dbreplay.explore.Evaluation;
 import io.dbreplay.explore.Explorer;
 import io.dbreplay.explore.ManagedTargets;
@@ -81,7 +82,7 @@ public final class Main {
 			                   [--alarm-active-sessions <개수>] [--alarm-sustain 3] [--max-distortion 0.2]
 			                   [지표 옵션] [주종 옵션]
 			                   [--unit transaction|statement|session] [--only reads] [--max-connections 500]
-			                   [--start-speed 1] [--max-speed 64] [--precision 0.1]
+			                   [--start-speed 1] [--max-speed 64] [--precision 0.1] [--repeat 1]
 			                   [--current-qps <지금의 초당 문장 수>] [--current-read-qps <읽기>] [--current-write-qps <쓰기>]
 			                   [--level-low 0.3] [--level-high 0.5]
 			                   [--read-nodes <읽기를 받는 노드 수>] [--min-read-nodes 1] [--max-read-nodes <한도>]
@@ -135,6 +136,10 @@ public final class Main {
 			  쓰기는 주 DB 하나가 받으므로 노드 수 대신 필요한 용량의 배수를 낸다.
 			  --scale-command는 --apply-scale yes와 --max-read-nodes를 함께 줘야 실행된다. 권한 노드 수를 DBREPLAY_READ_NODES로 받는다
 			  권한 수가 한도에 걸렸거나 상한이 알람으로 확인된 값이 아니면 실행하지 않는다. 명령이 실패하면 0이 아닌 값으로 끝난다
+
+			되풀이 탐색(--repeat):
+			  탐색을 N번 되풀이해 상한을 범위로 낸다(최소, 중앙값, 최대, 퍼짐). 수위와 평가 파일에는 가장 낮은 상한을 쓴다.
+			  같은 절차의 상한이 실행마다 다르다(실험 12).
 
 			과부하는 알람으로 판정한다. explore에는 알람이 하나는 있어야 한다.
 			  --alarm-command          라운드가 끝날 때 sh -c로 실행한다. 0이 아닌 값으로 끝나면 알람이 울린 것이다.
@@ -415,6 +420,7 @@ public final class Main {
 	private static void explore(Map<String, String> options) throws Exception {
 		// 탐색은 몇 분이 걸린다. 잘못 준 값은 시작하기 전에 거른다
 		checkScaleOptions(options);
+		int repeat = repeat(options);
 		JdbcTarget target = target(options);
 		String tracePath = required(options, "--trace");
 		Sandbox sandbox = options.containsKey("--snapshot") ? sandbox(target, options) : null;
@@ -433,6 +439,96 @@ public final class Main {
 			traffic = TrafficModel.of(trace);
 		}
 
+		// 상한을 하나로 낼지, 되풀이해 범위로 낼지. 되풀이하지 않았으면 출력이 지금과 글자 하나 다르지 않다
+		CeilingRange range = null;
+		double ceilingSpeed;
+		RoundJudge.State stoppedBy;
+		if (repeat == 1) {
+			Explorer.Result result = exploreOnce(target, sandbox, resetCommand, tracePath, options, judge, exploreOptions);
+			System.out.println();
+			if (result.ceilingSpeed() == 0) {
+				System.out.printf("상한: %.2f배속에서도 버티지 못했다. 녹화한 부하보다 낮다%n", exploreOptions.startSpeed());
+				return;
+			}
+			System.out.printf("상한: %.2f배속%s%n", result.ceilingSpeed(), stoppedBySuffix(result.stoppedBy()));
+			ceilingSpeed = result.ceilingSpeed();
+			stoppedBy = result.stoppedBy();
+		}
+		else {
+			List<Explorer.Result> results = new ArrayList<>();
+			for (int i = 1; i <= repeat; i++) {
+				System.out.printf("=== 탐색 %d/%d ===%n", i, repeat);
+				Explorer.Result one = exploreOnce(target, sandbox, resetCommand, tracePath, options, judge, exploreOptions);
+				results.add(one);
+				System.out.printf("%n탐색 %d/%d의 상한: %s%n%n", i, repeat,
+						ceilingText(one.ceilingSpeed(), one.stoppedBy(), exploreOptions.startSpeed()));
+			}
+			range = CeilingRange.of(results);
+			rangeLines(range).forEach(System.out::println);
+			// 시작 배속에서도 못 버틴 탐색이 있으면 상한이 0이다. 지금 상한이 0일 때와 같이 수위 없이 끝낸다
+			if (range.notHeld() > 0) {
+				System.out.printf("  %d번은 시작 배속(%.2f)에서도 버티지 못했다. 녹화한 부하보다 낮다%n", range.notHeld(),
+						exploreOptions.startSpeed());
+				return;
+			}
+			ceilingSpeed = range.representative();
+			stoppedBy = range.stoppedByAtMin();
+		}
+
+		// 읽기만 튼 탐색이면 상한과 수위도 읽기의 것이다
+		double recordedQps = readsOnly(options) ? traffic.readQps() : traffic.qps();
+		double ceilingQps = recordedQps * ceilingSpeed;
+		double currentQps = number(options, readsOnly(options) ? "--current-read-qps" : "--current-qps", recordedQps);
+		WaterLevel level = new WaterLevel(currentQps, ceilingQps,
+				number(options, "--level-low", 0.30), number(options, "--level-high", 0.50));
+		printLevel(level, recordedQps);
+		if (range != null) {
+			// 최솟값으로 판정한 수위와 최댓값으로 본 수위가 갈리는지 알려 준다. 갈리면 판정을 하나로 말할 수 없다
+			WaterLevel atMax = range.levelAtMax(recordedQps, currentQps, level.low(), level.high());
+			if (range.verdictSplits(recordedQps, currentQps, level.low(), level.high())) {
+				System.out.printf("  가장 높은 상한(%.2f배속)으로 보면 수위 %.0f%%, %s이다. 판정이 갈린다%n",
+						range.max(), atMax.level() * 100, verdictName(atMax.verdict()));
+			}
+			else {
+				System.out.printf("  가장 높은 상한(%.2f배속)으로 봐도 판정은 같다 (수위 %.0f%%)%n", range.max(),
+						atMax.level() * 100);
+			}
+		}
+		if (options.containsKey("--replica-trace")) {
+			TrafficModel replicaTraffic;
+			try (TraceReader trace = openTrace(options.get("--replica-trace"))) {
+				replicaTraffic = TrafficModel.of(trace);
+			}
+			// 위의 수위는 주 DB의 트래픽만 센 것이다. 종 DB의 것은 같은 배속을 곱해 따로 보여 준다
+			System.out.printf("종 DB에 함께 튼 트래픽: 녹화 구간의 초당 문장 수 %.0f, 상한 배속에서 %.0f%n",
+					replicaTraffic.qps(), replicaTraffic.qps() * ceilingSpeed);
+		}
+		ScaleAdvice advice = printReadWrite(options, traffic, ceilingSpeed, level);
+
+		String out = options.get("--out");
+		if (out != null) {
+			Evaluation evaluation = new Evaluation(Instant.now().truncatedTo(ChronoUnit.SECONDS).toString(),
+					(int) number(options, "--valid-days", 30), TargetProfile.read(target), alarmSettings,
+					unit(options).name().toLowerCase(Locale.ROOT), traffic, ceilingSpeed,
+					stoppedBy == null ? null : stoppedBy.name(), ceilingQps, currentQps,
+					level.low(), level.high(), range == null ? null : range.ceilings());
+			JSON.writeValue(Path.of(out).toFile(), evaluation);
+			System.out.printf("평가를 %s에 적었다. %d일 동안 유효하다%n", out, evaluation.validDays());
+		}
+		// 평가를 적은 뒤에 한다. 명령이 실패해도 잰 값은 남는다
+		if (advice != null) {
+			// 되풀이했으면 N번 가운데 하나라도 알람으로 확인되지 않았으면 실행하지 않는다
+			boolean confirmed = range == null ? stoppedBy == RoundJudge.State.OVERLOADED : range.allConfirmed();
+			applyScale(options, advice, confirmed);
+		}
+	}
+
+	/**
+	 * 탐색 한 번을 돌린다. 라운드 표의 머리말, 탐색, 라운드별 지표 표까지를 낸다. 되풀이할 때 이 하나를 N번 부른다.
+	 * 탐색 한 번의 알고리즘과 라운드의 내용은 되풀이를 넣기 전과 같다.
+	 */
+	private static Explorer.Result exploreOnce(JdbcTarget target, Sandbox sandbox, String resetCommand, String tracePath,
+			Map<String, String> options, RoundJudge judge, Explorer.Options exploreOptions) throws Exception {
 		System.out.printf("%-6s %7s %9s %9s %10s %9s %9s  %s%n",
 				"라운드", "배속", "계획(초)", "실제(초)", "늦음 p99", "왜곡", "실행 중", "판정");
 		Explorer.Result result = Explorer.explore(speed -> {
@@ -478,49 +574,61 @@ public final class Main {
 			}
 			System.out.println();
 		}
+		return result;
+	}
 
-		System.out.println();
-		if (result.ceilingSpeed() == 0) {
-			System.out.printf("상한: %.2f배속에서도 버티지 못했다. 녹화한 부하보다 낮다%n", exploreOptions.startSpeed());
-			return;
+	/** 되풀이 횟수. --repeat을 주지 않았으면 1. 1 이상의 정수가 아니면 탐색을 시작하기 전에 거른다. */
+	static int repeat(Map<String, String> options) {
+		String value = options.get("--repeat");
+		if (value == null) {
+			return 1;
 		}
-		System.out.printf("상한: %.2f배속%s%n", result.ceilingSpeed(), result.stoppedBy() == null
-				? " 이상 (이 배속까지 알람이 울리지 않았다)"
-				: result.stoppedBy() == RoundJudge.State.DISTORTED
+		int count;
+		try {
+			count = Integer.parseInt(value);
+		}
+		catch (NumberFormatException e) {
+			throw new IllegalArgumentException("--repeat에는 1 이상의 정수를 준다");
+		}
+		if (count < 1) {
+			throw new IllegalArgumentException("--repeat에는 1 이상의 정수를 준다");
+		}
+		return count;
+	}
+
+	/** "상한:" 줄에서 배속 뒤에 붙는 글자. 상한을 만든 판정에 따라 다르다. */
+	static String stoppedBySuffix(RoundJudge.State stoppedBy) {
+		return stoppedBy == null ? " 이상 (이 배속까지 알람이 울리지 않았다)"
+				: stoppedBy == RoundJudge.State.DISTORTED
 						? " 이상 (그 위는 재생기가 내지 못해 대상의 한계를 보지 못했다)"
-						: "");
-		// 읽기만 튼 탐색이면 상한과 수위도 읽기의 것이다
-		double recordedQps = readsOnly(options) ? traffic.readQps() : traffic.qps();
-		double ceilingQps = recordedQps * result.ceilingSpeed();
-		double currentQps = number(options, readsOnly(options) ? "--current-read-qps" : "--current-qps", recordedQps);
-		WaterLevel level = new WaterLevel(currentQps, ceilingQps,
-				number(options, "--level-low", 0.30), number(options, "--level-high", 0.50));
-		printLevel(level, recordedQps);
-		if (options.containsKey("--replica-trace")) {
-			TrafficModel replicaTraffic;
-			try (TraceReader trace = openTrace(options.get("--replica-trace"))) {
-				replicaTraffic = TrafficModel.of(trace);
-			}
-			// 위의 수위는 주 DB의 트래픽만 센 것이다. 종 DB의 것은 같은 배속을 곱해 따로 보여 준다
-			System.out.printf("종 DB에 함께 튼 트래픽: 녹화 구간의 초당 문장 수 %.0f, 상한 배속에서 %.0f%n",
-					replicaTraffic.qps(), replicaTraffic.qps() * result.ceilingSpeed());
-		}
-		ScaleAdvice advice = printReadWrite(options, traffic, result.ceilingSpeed(), level);
+						: "";
+	}
 
-		String out = options.get("--out");
-		if (out != null) {
-			Evaluation evaluation = new Evaluation(Instant.now().truncatedTo(ChronoUnit.SECONDS).toString(),
-					(int) number(options, "--valid-days", 30), TargetProfile.read(target), alarmSettings,
-					unit(options).name().toLowerCase(Locale.ROOT), traffic, result.ceilingSpeed(),
-					result.stoppedBy() == null ? null : result.stoppedBy().name(), ceilingQps, currentQps,
-					level.low(), level.high());
-			JSON.writeValue(Path.of(out).toFile(), evaluation);
-			System.out.printf("평가를 %s에 적었다. %d일 동안 유효하다%n", out, evaluation.validDays());
+	/** 되풀이한 탐색 한 번의 "탐색 i/N의 상한:" 줄의 뒷부분. 시작 배속에서도 못 버틴 탐색은 다르게 적는다. */
+	private static String ceilingText(double ceilingSpeed, RoundJudge.State stoppedBy, double startSpeed) {
+		if (ceilingSpeed == 0) {
+			return String.format("%.2f배속에서도 버티지 못했다", startSpeed);
 		}
-		// 평가를 적은 뒤에 한다. 명령이 실패해도 잰 값은 남는다
-		if (advice != null) {
-			applyScale(options, advice, result.stoppedBy() == RoundJudge.State.OVERLOADED);
-		}
+		return String.format("%.2f배속%s", ceilingSpeed, stoppedBySuffix(stoppedBy));
+	}
+
+	/** 되풀이한 상한들의 요약 줄. 패키지 안에서 테스트할 수 있게 글자만 돌려준다. */
+	static List<String> rangeLines(CeilingRange range) {
+		String every = range.ceilings().stream().map(ceiling -> String.format("%.2f", ceiling))
+				.collect(java.util.stream.Collectors.joining(", "));
+		return List.of(
+				String.format("상한: 최소 %.2f, 중앙값 %.2f, 최대 %.2f배속 (%d번 탐색, 퍼짐 %.0f%%)", range.min(),
+						range.median(), range.max(), range.count(), range.spread() * 100),
+				"  탐색마다: " + every,
+				"  수위는 가장 낮은 상한으로 판정한다");
+	}
+
+	private static String verdictName(WaterLevel.Verdict verdict) {
+		return switch (verdict) {
+			case SURPLUS -> "과잉";
+			case HEALTHY -> "적정";
+			case SHORT -> "부족";
+		};
 	}
 
 	private static Sandbox sandbox(JdbcTarget target, Map<String, String> options) {
@@ -745,12 +853,16 @@ public final class Main {
 				continue;
 			}
 			Evaluation e = JSON.readValue(file.toFile(), Evaluation.class);
+			// 되풀이한 평가면 평가한 시각 뒤에 상한의 범위를 붙인다. 한 번 돌린 평가면 지금과 같다
+			CeilingRange range = e.ceilingRange();
+			String rangeSuffix = range == null ? ""
+					: String.format(" (범위 %.2f~%.2f, %d번)", range.min(), range.max(), range.count());
 			System.out.printf("%-20s %-12s %8.2f %12.0f %5.0f%% %-6s  %s%n", t.name(), did, e.ceilingSpeed(), e.ceilingQps(),
 					e.level().level() * 100, switch (e.level().verdict()) {
 						case SURPLUS -> "과잉";
 						case HEALTHY -> "적정";
 						case SHORT -> "부족";
-					}, e.evaluatedAt() + (actions.get(t.name()) == ManagedTargets.Action.FAILED ? " (" + why.get(t.name()) + ")" : ""));
+					}, e.evaluatedAt() + (actions.get(t.name()) == ManagedTargets.Action.FAILED ? " (" + why.get(t.name()) + ")" : "") + rangeSuffix);
 		}
 		if (actions.containsValue(ManagedTargets.Action.FAILED)) {
 			System.exit(1);
@@ -764,6 +876,12 @@ public final class Main {
 
 		System.out.printf("평가: %s, 상한 %.2f배속 (초당 %.0f문장), 수위 %.0f%%%n", evaluation.evaluatedAt(),
 				evaluation.ceilingSpeed(), evaluation.ceilingQps(), evaluation.level().level() * 100);
+		// 되풀이한 평가면 위의 상한이 범위의 최솟값이라는 것을 밝힌다. 한 번 돌린 평가면 지금과 같다
+		CeilingRange range = evaluation.ceilingRange();
+		if (range != null) {
+			System.out.printf("  되풀이한 탐색 %d번의 상한: 최소 %.2f, 중앙값 %.2f, 최대 %.2f배속. 위의 상한은 가장 낮은 값이다%n",
+					range.count(), range.min(), range.median(), range.max());
+		}
 		if (reasons.isEmpty()) {
 			System.out.println("유효하다");
 		}
@@ -809,7 +927,7 @@ public final class Main {
 		Map<String, String> alarms = new TreeMap<>(e.alarms());
 		alarms.put("alarm-command", fingerprint(command));
 		return new Evaluation(e.evaluatedAt(), e.validDays(), e.profile(), alarms, e.unit(), e.traffic(), e.ceilingSpeed(),
-				e.stoppedBy(), e.ceilingQps(), e.currentQps(), e.low(), e.high());
+				e.stoppedBy(), e.ceilingQps(), e.currentQps(), e.low(), e.high(), e.ceilingSpeeds());
 	}
 
 	static String fingerprint(String text) {

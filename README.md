@@ -50,6 +50,7 @@ dbreplay explore --trace prod.trace.jsonl --url jdbc:mysql://sandbox:3306/ --use
 | [11](experiments/11-primary-replica/README.md) | 주종 구성에서 함께 틀고 복제 지연을 알람으로 걸면 상한이 어디서 잡히는가 |
 | [12](experiments/12-ceiling-variance/README.md) | 같은 절차를 되풀이했을 때 상한이 얼마나 흔들리는가 |
 | [13](experiments/13-mask-literals/README.md) | 리터럴을 가린 트래픽으로 재생해도 결과를 믿을 수 있는가 |
+| [14](experiments/14-repeat/README.md) | 탐색을 되풀이해 낸 상한의 범위가 실행마다 겹치는가 |
 
 ## 문서
 

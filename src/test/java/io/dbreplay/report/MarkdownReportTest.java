@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.IOException;
 import java.io.StringReader;
 import java.io.StringWriter;
+import java.util.List;
 import java.util.Map;
 
 import org.junit.jupiter.api.Test;
@@ -78,5 +79,31 @@ class MarkdownReportTest {
 		String md = report(null, null, null, null);
 
 		assertTrue(md.contains("`INSERT INTO t \\| u VALUES (?)`"));
+	}
+
+	/** 되풀이한 평가가 한쪽에 있으면 상한의 범위를 표에 넣고, 마지막 문장도 되풀이를 밝히도록 바꾼다. */
+	@Test
+	void showsTheCeilingRangeWhenOneSideWasRepeated() throws IOException {
+		Evaluation repeated = new Evaluation("2026-10-12T00:00:00Z", 30, Map.of(), Map.of(), "transaction",
+				new TrafficModel(200, 1_000_000, Map.of()), 3.75, "OVERLOADED", 3.75 * 4_000, 4_000, 0.3, 0.5,
+				List.of(8.5, 12.0, 8.5, 3.75, 8.0));
+		String md = report(null, null, evaluation(9.0), repeated);
+
+		assertTrue(md.contains("| 되풀이한 탐색의 상한 (최소 / 중앙값 / 최대) | 한 번 | 3.75 / 8.50 / 12.00 (5번) |"));
+		assertTrue(md.contains("되풀이한 쪽의 상한은 가장 낮은 값이다. 한 번만 돌린 쪽은 그 한 번의 값이다."));
+		int ceilingQpsRow = md.indexOf("| 상한 (초당 문장 수) |");
+		int rangeRow = md.indexOf("| 되풀이한 탐색의 상한");
+		int levelRow = md.indexOf("| 수위 |");
+		assertTrue(ceilingQpsRow < rangeRow && rangeRow < levelRow,
+				"범위 줄은 상한 줄 뒤, 수위 줄 앞에 있어야 한다");
+	}
+
+	/** 되풀이하지 않은 두 평가의 리포트는 상한 범위를 넣지 않고 지금의 문장을 그대로 둔다. */
+	@Test
+	void keepsTheSingleRunSentenceWhenNoSideWasRepeated() throws IOException {
+		String md = report(null, null, evaluation(9.0), evaluation(3.5));
+
+		assertFalse(md.contains("되풀이한"));
+		assertTrue(md.contains("상한은 탐색을 한 번씩 돌린 값이다."));
 	}
 }
