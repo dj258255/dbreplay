@@ -1,0 +1,10 @@
+라운드         배속     계획(초)     실제(초)     늦음 p99        왜곡      실행 중  판정
+Exception in thread "main" java.lang.IllegalStateException: 알람에 건 지표 'slow_finished_total'이(가) 이 라운드에 한 번도 떠지지 않았다. 이름을 잘못 적었거나 이 기종이 내지 않는 지표다. 뜬 지표: active_sessions, slow_running, tps
+	at io.dbreplay.explore.Alarm.present(Alarm.java:96)
+	at io.dbreplay.explore.Alarm.lambda$total$0(Alarm.java:78)
+	at io.dbreplay.explore.RoundJudge.judge(RoundJudge.java:40)
+	at io.dbreplay.explore.Explorer.play(Explorer.java:91)
+	at io.dbreplay.explore.Explorer.explore(Explorer.java:59)
+	at io.dbreplay.cli.Main.exploreOnce(Main.java:554)
+	at io.dbreplay.cli.Main.explore(Main.java:467)
+	at io.dbreplay.cli.Main.main(Main.java:188)

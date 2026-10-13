@@ -58,7 +58,7 @@ public interface Alarm {
 	static Alarm metric(String name, double threshold, int sustain) {
 		return round -> {
 			int run = 0;
-			for (double v : round.metric(name)) {
+			for (double v : present(name, round)) {
 				run = v >= threshold ? run + 1 : 0;
 				if (run >= sustain) {
 					return String.format("%s이(가) %d번 연속 %s 이상 (최대 %s)", name, sustain, plain(threshold), plain(round.max(name)));
@@ -69,6 +69,38 @@ public interface Alarm {
 	}
 
 	/**
+	 * 그 지표의 마지막 표본이 threshold 이상이면 울린다. 누적 지표({@code slow_finished_total})에 쓴다.
+	 * 누적 값은 한 번 넘으면 계속 넘어 있어서, 연속 횟수로 보는 {@link #metric}으로 걸면 라운드의 끝에서 넘었을
+	 * 때 놓친다.
+	 */
+	static Alarm total(String name, double threshold) {
+		return round -> {
+			double[] values = present(name, round);
+			double last = values[values.length - 1];
+			if (last >= threshold) {
+				return String.format("%s이(가) %s 이상 (%s)", name, plain(threshold), plain(last));
+			}
+			return null;
+		};
+	}
+
+	/**
+	 * 알람에 건 지표의 값을 돌려준다. 라운드에 한 번도 떠지지 않았으면 멈춘다.
+	 *
+	 * <p>조용히 "안 울렸다"로 넘기면, 이름을 잘못 적었거나 이 기종이 내지 못하는 지표를 건 경우에 과부하를 못 본
+	 * 것을 버틴 것으로 읽게 된다. 그렇게 읽으면 상한이 실제보다 높게 나온다.
+	 */
+	private static double[] present(String name, RoundData round) {
+		double[] values = round.metric(name);
+		if (values.length == 0) {
+			throw new IllegalStateException(String.format(
+					"알람에 건 지표 '%s'이(가) 이 라운드에 한 번도 떠지지 않았다. 이름을 잘못 적었거나 이 기종이 내지 않는 지표다. 뜬 지표: %s",
+					name, String.join(", ", new java.util.TreeSet<>(round.metrics().keySet()))));
+		}
+		return values;
+	}
+
+	/**
 	 * {@code active_sessions>=32,load1>=8}처럼 쉼표로 이은 조건을 알람들로 바꾼다.
 	 *
 	 * @throws IllegalArgumentException 조건의 모양이 틀렸을 때
@@ -76,13 +108,32 @@ public interface Alarm {
 	static java.util.List<Alarm> metrics(String spec, int sustain) {
 		java.util.List<Alarm> alarms = new java.util.ArrayList<>();
 		for (String condition : spec.split(",")) {
-			String[] parts = condition.strip().split(">=", 2);
-			if (parts.length != 2 || parts[0].isBlank()) {
-				throw new IllegalArgumentException("알람 조건은 '이름>=값'으로 적는다: " + condition);
-			}
+			String[] parts = split(condition);
 			alarms.add(metric(parts[0].strip(), Double.parseDouble(parts[1].strip()), sustain));
 		}
 		return alarms;
+	}
+
+	/**
+	 * {@code slow_finished_total>=50}처럼 쉼표로 이은 누적 지표 조건을 알람들로 바꾼다.
+	 *
+	 * @throws IllegalArgumentException 조건의 모양이 틀렸을 때
+	 */
+	static java.util.List<Alarm> totals(String spec) {
+		java.util.List<Alarm> alarms = new java.util.ArrayList<>();
+		for (String condition : spec.split(",")) {
+			String[] parts = split(condition);
+			alarms.add(total(parts[0].strip(), Double.parseDouble(parts[1].strip())));
+		}
+		return alarms;
+	}
+
+	private static String[] split(String condition) {
+		String[] parts = condition.strip().split(">=", 2);
+		if (parts.length != 2 || parts[0].isBlank()) {
+			throw new IllegalArgumentException("알람 조건은 '이름>=값'으로 적는다: " + condition);
+		}
+		return parts;
 	}
 
 	private static String plain(double value) {

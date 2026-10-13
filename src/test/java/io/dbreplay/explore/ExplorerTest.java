@@ -119,7 +119,7 @@ class ExplorerTest {
 
 		assertNull(alarm.check(round(1, 0, 40, 40, 10, 40, 40)), "두 번 연속까지는 울리지 않는다");
 		assertEquals("active_sessions이(가) 3번 연속 32 이상 (최대 50)", alarm.check(round(1, 0, 5, 32, 50, 33, 4)));
-		assertNull(alarm.check(round(1, 0)), "뜬 값이 없으면 울리지 않는다");
+		assertNull(alarm.check(round(1, 0, 10, 10, 10)), "임계값 아래로만 떠지면 울리지 않는다");
 	}
 
 	/** 지표 명령이 낸 이름에도 알람을 걸 수 있다. 조건 여럿은 쉼표로 잇는다. */
@@ -132,6 +132,48 @@ class ExplorerTest {
 		assertNull(alarms.get(0).check(busyHost));
 		assertEquals("load1이(가) 2번 연속 7.5 이상 (최대 8.2)", alarms.get(1).check(busyHost));
 		assertThrows(IllegalArgumentException.class, () -> Alarm.metrics("load1>8", 2));
+	}
+
+	/** 누적 지표는 마지막 표본이 임계값 이상이면 울린다. 이유에 이름과 값이 있다. */
+	@Test
+	void totalAlarmFiresOnTheLastSample() throws Exception {
+		Alarm alarm = Alarm.total("slow_finished_total", 50);
+
+		assertEquals("slow_finished_total이(가) 50 이상 (80)",
+				alarm.check(round(1, 0, Map.of("slow_finished_total", new double[] {10, 80}))));
+		assertNull(alarm.check(round(1, 0, Map.of("slow_finished_total", new double[] {10, 49}))));
+	}
+
+	/** 누적 값은 라운드의 맨 끝 표본에서만 넘어도 울린다. 연속으로 보는 metric은 같은 자료에서 놓친다. */
+	@Test
+	void totalAlarmSeesASpikeTheConsecutiveAlarmMisses() throws Exception {
+		RoundData data = round(1, 0, Map.of("slow_finished_total", new double[] {0, 0, 0, 80}));
+
+		assertEquals("slow_finished_total이(가) 50 이상 (80)", Alarm.total("slow_finished_total", 50).check(data));
+		assertNull(Alarm.metric("slow_finished_total", 50, 3).check(data), "3번 연속을 못 채워 놓친다");
+	}
+
+	/** 없는 지표에 건 알람은 조용히 안 울리지 않고 멈춘다. 이름을 잘못 적은 것을 알려 준다. */
+	@Test
+	void alarmsStopWhenTheirMetricNeverAppeared() {
+		RoundData data = round(1, 0, Map.of("active_sessions", new double[] {3}));
+
+		IllegalStateException metric = assertThrows(IllegalStateException.class,
+				() -> Alarm.metric("nope", 1, 3).check(data));
+		assertTrue(metric.getMessage().contains("nope"));
+		assertTrue(metric.getMessage().contains("active_sessions"), metric.getMessage());
+
+		IllegalStateException total = assertThrows(IllegalStateException.class, () -> Alarm.total("nope", 1).check(data));
+		assertTrue(total.getMessage().contains("nope"));
+	}
+
+	/** 누적 지표 조건 여럿은 쉼표로 잇는다. 모양이 틀리면 거른다. */
+	@Test
+	void parsesSeveralTotalConditions() {
+		List<Alarm> alarms = Alarm.totals("slow_finished_total>=50, x>=1");
+
+		assertEquals(2, alarms.size());
+		assertThrows(IllegalArgumentException.class, () -> Alarm.totals("x>1"));
 	}
 
 	@Test
