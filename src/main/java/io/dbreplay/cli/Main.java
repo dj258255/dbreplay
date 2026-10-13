@@ -83,7 +83,7 @@ public final class Main {
 			  dbreplay explore --trace <트래픽 파일> --url <JDBC URL> --user <계정> [--password <암호>]
 			                   (--snapshot <덤프 파일> [되돌리기 옵션] | --reset-command <데이터 되돌리기 명령>)
 			                   [--alarm-command <알람 확인 명령>] [--alarm-metric <이름>=<값>,...]
-			                   [--alarm-active-sessions <개수>] [--alarm-sustain 3] [--max-distortion 0.2]
+			                   [--alarm-active-sessions <개수>] [--alarm-total <이름>=<값>,...] [--alarm-sustain 3] [--max-distortion 0.2]
 			                   [지표 옵션] [--profile-command <명령>] [주종 옵션]
 			                   [--unit transaction|statement|session] [--only reads] [--max-connections 500]
 			                   [--start-speed 1] [--max-speed 64] [--precision 0.1] [--repeat 1]
@@ -95,7 +95,7 @@ public final class Main {
 
 			  dbreplay check   --evaluation <평가 파일> --url <JDBC URL> --user <계정> [--password <암호>]
 			                   [--trace <지금의 트래픽 파일>] [--max-traffic-distance 0.2]
-			                   [--profile-command <명령>] [explore에 줬던 알람 옵션]
+			                   [--current-qps <지금의 초당 문장 수>] [--profile-command <명령>] [explore에 줬던 알람 옵션]
 
 			  dbreplay manage  --targets <대상 목록.json> [--force yes] [--max-traffic-distance 0.2]
 			                   등록한 대상을 훑어, 평가한 적이 없거나 만료됐거나 무효인 것만 다시 평가하고 수위를 한 표로 낸다.
@@ -121,6 +121,9 @@ public final class Main {
 			지표 옵션:
 			  --sample-ms 200            DB에서 지표를 뜨는 간격. active_sessions(실행 중인 연결)와
 			                             slow_running(실행 중이면서 --slow-ms를 넘긴 문장)을 뜬다
+			                             표본마다 DB가 내는 누적 값에서 qps(MySQL만, 직전 표본부터의 초당 문장 수),
+			                             tps(PostgreSQL만, 초당 트랜잭션 수), slow_finished_total(MySQL만, 표본을 뜨기
+			                             시작한 뒤 --slow-ms를 넘겨 끝난 문장의 누적 수. 기준 시간이 든 칸까지 센다)도 뜬다
 			  --slow-ms 100              실행 중인 문장을 느리다고 볼 기준 시간
 			  --metric-command <명령>    DB 접속으로 못 읽는 지표(CPU, Load Average)를 받는다.
 			                             한 줄에 '이름 값'을 내는 명령을 --metric-command-ms(기본 1000)마다 실행한다
@@ -157,6 +160,8 @@ public final class Main {
 			                           DBREPLAY_ROUND_START, DBREPLAY_ROUND_END(에포크 초), DBREPLAY_SPEED를 환경 변수로 받는다
 			  --alarm-metric           지표가 값 이상으로 --alarm-sustain번 연속 떠지면 울린다.
 			                           예: active_sessions>=32,load1>=8. 지표 명령이 내는 이름도 쓸 수 있다
+			  --alarm-total            누적 지표(slow_finished_total)에 쓴다. 그 지표의 마지막 표본이 값 이상이면 울린다.
+			                           예: slow_finished_total>=50. 누적 값은 한 번 넘으면 계속 넘어 있어 연속으로 보지 않는다
 			  --alarm-active-sessions  --alarm-metric active_sessions>=<개수>와 같다
 
 			암호는 --password 대신 환경 변수 DBREPLAY_PASSWORD로 줄 수 있다.
@@ -646,6 +651,13 @@ public final class Main {
 		};
 	}
 
+	/** check --current-qps: 평가 파일의 상한은 그대로 두고 지금의 초당 문장 수로 수위를 다시 계산한 줄. */
+	static String currentQpsLine(double ceilingQps, double currentQps, double low, double high) {
+		WaterLevel level = new WaterLevel(currentQps, ceilingQps, low, high);
+		return String.format("  지금의 초당 %.0f문장으로 다시 계산한 수위: %.0f%% (건강 구간 %.0f~%.0f%%) → %s",
+				currentQps, level.level() * 100, low * 100, high * 100, verdictName(level.verdict()));
+	}
+
 	private static Sandbox sandbox(JdbcTarget target, Map<String, String> options) {
 		return new Sandbox(target, replica(options), new Sandbox.Options(required(options, "--snapshot"), options.get("--snapshot-db"),
 				options.get("--change-command"), options.get("--ready-command"), (long) number(options, "--settle-seconds", 60)));
@@ -982,6 +994,11 @@ public final class Main {
 
 		System.out.printf("평가: %s, 상한 %.2f배속 (초당 %.0f문장), 수위 %.0f%%%n", evaluation.evaluatedAt(),
 				evaluation.ceilingSpeed(), evaluation.ceilingQps(), evaluation.level().level() * 100);
+		// 평가 파일의 상한은 그대로 두고, 지금의 QPS를 주면 수위만 다시 계산해 보여 준다
+		if (options.containsKey("--current-qps")) {
+			System.out.println(currentQpsLine(evaluation.ceilingQps(), number(options, "--current-qps", 0),
+					evaluation.low(), evaluation.high()));
+		}
 		// 되풀이한 평가면 위의 상한이 범위의 최솟값이라는 것을 밝힌다. 한 번 돌린 평가면 지금과 같다
 		CeilingRange range = evaluation.ceilingRange();
 		if (range != null) {
@@ -1007,7 +1024,7 @@ public final class Main {
 	/** 평가 파일에 적어 두고 나중에 바뀌었는지 볼 알람 설정. */
 	private static Map<String, String> alarmSettings(Map<String, String> options) {
 		Map<String, String> settings = new TreeMap<>();
-		for (String name : List.of("--alarm-metric", "--alarm-active-sessions")) {
+		for (String name : List.of("--alarm-metric", "--alarm-active-sessions", "--alarm-total")) {
 			if (options.containsKey(name)) {
 				settings.put(name.substring(2), options.get(name));
 			}
@@ -1018,6 +1035,10 @@ public final class Main {
 		}
 		if (options.containsKey("--alarm-active-sessions") || options.containsKey("--alarm-metric")) {
 			settings.put("alarm-sustain", options.getOrDefault("--alarm-sustain", "3"));
+		}
+		// slow_finished_total은 --slow-ms를 기준으로 세므로 --alarm-total을 줬을 때도 남긴다
+		if (options.containsKey("--alarm-active-sessions") || options.containsKey("--alarm-metric")
+				|| options.containsKey("--alarm-total")) {
 			settings.put("slow-ms", options.getOrDefault("--slow-ms", "100"));
 		}
 		return settings;
@@ -1060,8 +1081,11 @@ public final class Main {
 		if (options.containsKey("--alarm-metric")) {
 			alarms.addAll(Alarm.metrics(options.get("--alarm-metric"), sustain));
 		}
+		if (options.containsKey("--alarm-total")) {
+			alarms.addAll(Alarm.totals(options.get("--alarm-total")));
+		}
 		if (alarms.isEmpty()) {
-			System.err.println("과부하는 알람으로 판정한다. --alarm-command, --alarm-metric, --alarm-active-sessions 중 하나는 줘야 한다");
+			System.err.println("과부하는 알람으로 판정한다. --alarm-command, --alarm-metric, --alarm-total, --alarm-active-sessions 중 하나는 줘야 한다");
 			System.exit(2);
 		}
 		return new RoundJudge(alarms, number(options, "--max-distortion", 0.2));

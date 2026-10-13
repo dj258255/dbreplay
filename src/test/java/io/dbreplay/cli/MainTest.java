@@ -221,4 +221,16 @@ class MainTest {
 		assertEquals(OWNER_ONLY, Files.getPosixFilePermissions(out));
 		assertTrue(Files.size(out) > 0);
 	}
+
+	/** check --current-qps: 평가 파일의 상한은 그대로 두고 지금의 QPS로 수위를 다시 계산한다. */
+	@Test
+	void recomputesTheWaterLevelFromTheCurrentQps() {
+		String shortOf = Main.currentQpsLine(20_000, 12_000, 0.3, 0.5);
+		assertTrue(shortOf.contains("60%"), shortOf);
+		assertTrue(shortOf.contains("부족"), shortOf);
+
+		String healthy = Main.currentQpsLine(20_000, 8_000, 0.3, 0.5);
+		assertTrue(healthy.contains("40%"), healthy);
+		assertTrue(healthy.contains("적정"), healthy);
+	}
 }
