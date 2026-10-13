@@ -1,0 +1,4 @@
+           Replica_IO_Running: Yes
+          Replica_SQL_Running: Yes
+walreceiver|streaming
+준비됨

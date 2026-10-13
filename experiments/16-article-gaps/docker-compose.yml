@@ -1,0 +1,69 @@
+# 실험 16: 원문 대조에서 메운 것들이 실제 DB에서 도는가
+name: dbreplay-exp16
+
+x-mysql: &mysql
+  image: mysql:8.4
+  environment:
+    MYSQL_ROOT_PASSWORD: replay
+    MYSQL_DATABASE: sbtest
+  healthcheck:
+    test: ["CMD", "mysqladmin", "ping", "-uroot", "-preplay", "--silent"]
+    interval: 2s
+    timeout: 2s
+    retries: 60
+
+x-pg-health: &pg-health
+  test: ["CMD", "pg_isready", "-U", "postgres"]
+  interval: 2s
+  timeout: 2s
+  retries: 60
+
+services:
+  mysql-primary:
+    <<: *mysql
+    command:
+      - --server-id=1
+      - --gtid-mode=ON
+      - --enforce-gtid-consistency=ON
+      - --slow-query-log=OFF
+      - --long-query-time=0
+      - --log-output=FILE
+      - --slow-query-log-file=/var/lib/mysql/slow.log
+      - --log-slow-extra=ON
+      - --max-connections=1000
+
+  # 복제는 run.sh가 건다. 읽기 전용도 그 뒤에 건다. 시작 옵션으로 걸면 이미지의 초기화가 계정을 만들지 못한다
+  mysql-replica:
+    <<: *mysql
+    command:
+      - --server-id=2
+      - --gtid-mode=ON
+      - --enforce-gtid-consistency=ON
+      - --slow-query-log=OFF
+      - --long-query-time=0
+      - --log-output=FILE
+      - --slow-query-log-file=/var/lib/mysql/slow.log
+      - --log-slow-extra=ON
+      - --max-connections=1000
+
+  pg-primary:
+    image: postgres:16
+    environment:
+      POSTGRES_PASSWORD: replay
+      POSTGRES_DB: shop
+    volumes:
+      - ./pg_hba.conf:/etc/dbreplay/pg_hba.conf:ro
+    command: ["postgres", "-c", "hba_file=/etc/dbreplay/pg_hba.conf", "-c", "logging_collector=on", "-c", "log_destination=csvlog", "-c", "log_directory=log",
+              "-c", "log_filename=pg.log", "-c", "log_rotation_age=0", "-c", "log_rotation_size=0",
+              "-c", "log_timezone=UTC", "-c", "log_disconnections=on", "-c", "max_connections=300"]
+    healthcheck: *pg-health
+
+  pg-replica:
+    image: postgres:16
+    user: postgres
+    environment:
+      PGPASSWORD: replay
+    volumes:
+      - ./pg-replica-entrypoint.sh:/replica-entrypoint.sh:ro
+    entrypoint: ["sh", "/replica-entrypoint.sh"]
+    healthcheck: *pg-health
