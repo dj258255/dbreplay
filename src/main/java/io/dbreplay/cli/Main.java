@@ -50,6 +50,7 @@ import io.dbreplay.report.NewErrors;
 import io.dbreplay.report.RunRecord;
 import io.dbreplay.report.TraceComparison;
 import io.dbreplay.sandbox.Sandbox;
+import io.dbreplay.sandbox.Snapshot;
 import io.dbreplay.trace.TraceReader;
 
 public final class Main {
@@ -103,6 +104,9 @@ public final class Main {
 
 			  dbreplay reset   --url <JDBC URL> --user <계정> [--password <암호>] --snapshot <덤프 파일> [되돌리기 옵션]
 			                   샌드박스를 녹화 시작 시점으로 되돌린다. mysql이나 psql 클라이언트가 있어야 한다
+
+			  dbreplay snapshot --url <JDBC URL> --user <계정> [--password <암호>] --out <덤프 파일> [--snapshot-db <이름>]
+			                   녹화를 시작하기 직전에 뜬다. reset과 explore의 --snapshot에 그대로 준다. mysqldump나 pg_dump가 있어야 한다
 
 			되돌리기 옵션:
 			  --snapshot <덤프 파일>     녹화 시작 시점의 논리 덤프(mysqldump, pg_dump의 평문 출력)
@@ -174,6 +178,7 @@ public final class Main {
 			case "check" -> check(options);
 			case "sample" -> sample(options);
 			case "reset" -> reset(options);
+			case "snapshot" -> snapshot(options);
 			case "manage" -> manage(options);
 			default -> usage();
 		}
@@ -643,6 +648,22 @@ public final class Main {
 				t.settleMillis() / 1e3, t.settled() ? "조용해짐" : "기다리지 않았거나 시간 안에 조용해지지 않음");
 		if (options.containsKey("--replica-url")) {
 			System.out.printf("  그중 종 DB가 주 DB를 따라올 때까지 %.1f초%n", t.replicaMillis() / 1e3);
+		}
+	}
+
+	/** 녹화를 시작하기 직전에 뜬 스냅샷을 reset과 explore의 --snapshot에 그대로 준다. */
+	private static void snapshot(Map<String, String> options) throws Exception {
+		Path out = Path.of(required(options, "--out"));
+		Snapshot snapshot = new Snapshot(target(options), options.get("--snapshot-db"));
+		long started = System.currentTimeMillis();
+		long bytes = snapshot.dump(out);
+		System.out.printf("스냅샷을 %s에 떴다 (%.1fMB, %.1f초)%n", out, bytes / 1e6,
+				(System.currentTimeMillis() - started) / 1e3);
+		// 새 pg_dump가 서버보다 새 버전이면 모르는 설정 줄을 덤프에서 뺐다. 무엇을 뺐는지 알려 준다
+		if (!snapshot.droppedSettings().isEmpty()) {
+			List<String> names = snapshot.droppedSettings().stream().map(Snapshot::settingName).toList();
+			System.out.printf("  서버가 모르는 설정 %d줄을 덤프에서 뺐다 (pg_dump가 서버보다 새 버전이다): %s%n",
+					snapshot.droppedSettings().size(), String.join(", ", names));
 		}
 	}
 

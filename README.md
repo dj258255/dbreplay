@@ -52,6 +52,7 @@ dbreplay explore --trace prod.trace.jsonl --url jdbc:mysql://sandbox:3306/ --use
 | [13](experiments/13-mask-literals/README.md) | 리터럴을 가린 트래픽으로 재생해도 결과를 믿을 수 있는가 |
 | [14](experiments/14-repeat/README.md) | 탐색을 되풀이해 낸 상한의 범위가 실행마다 겹치는가 |
 | [15](experiments/15-recording-overhead/README.md) | 모든 문장을 서버 로그로 남기면 운영의 처리량이 얼마나 주는가 |
+| [16](experiments/16-article-gaps/README.md) | 원문 대조에서 메운 것들이 실제 DB에서 도는가 |
 
 ## 문서
 

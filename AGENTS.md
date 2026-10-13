@@ -32,6 +32,7 @@ dbreplay replay  --trace <트래픽 파일> --url <JDBC URL> --user <계정> --s
 dbreplay compare --before <트래픽 파일> --after <트래픽 파일>
 dbreplay report  --before <트래픽 파일> --after <트래픽 파일> --out <리포트.md>
 dbreplay explore --trace <트래픽 파일> --url <JDBC URL> --user <계정> --snapshot <덤프 파일> --alarm-command <명령> [--repeat 5]
+dbreplay snapshot --url <JDBC URL> --user <계정> --out <덤프 파일>
 dbreplay reset   --url <JDBC URL> --user <계정> --snapshot <덤프 파일>
 dbreplay check   --evaluation <평가 파일> --url <JDBC URL> --user <계정>
 dbreplay manage  --targets <대상 목록.json>
