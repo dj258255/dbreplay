@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Instant;
 import java.util.List;
@@ -84,5 +85,94 @@ class MainTest {
 		Evaluation safe = Main.withoutRawCommand(old);
 
 		assertEquals(List.of(5.0, 3.0), safe.ceilingSpeeds());
+	}
+
+	/** 평가 때 하드웨어를 남기지 않았으면 지금 하드웨어를 줘도 비교하지 않는다. 모르는 것을 바뀌었다고 하면 안 된다. */
+	@Test
+	void doesNotCompareHardwareThatTheEvaluationDidNotRecord() {
+		List<Map<String, String>> profiles = Main.comparableProfiles(Map.of("version", "8.4.11"),
+				Map.of("version", "8.4.11", "host.cpus", "4"));
+
+		assertEquals(Map.of("version", "8.4.11"), profiles.get(0));
+		assertEquals(Map.of("version", "8.4.11"), profiles.get(1), "지금 쪽의 host. 항목을 뺀다");
+	}
+
+	/** 평가 때 하드웨어를 남겼는데 지금 --profile-command를 주지 않았으면 비교하지 않는다. */
+	@Test
+	void doesNotCompareHardwareWhenTheCurrentProfileHasNone() {
+		List<Map<String, String>> profiles = Main.comparableProfiles(Map.of("version", "8.4.11", "host.cpus", "8"),
+				Map.of("version", "8.4.11"));
+
+		assertEquals(Map.of("version", "8.4.11"), profiles.get(0), "평가 쪽의 host. 항목을 뺀다");
+		assertEquals(Map.of("version", "8.4.11"), profiles.get(1));
+	}
+
+	/** 양쪽에 다 하드웨어가 있으면 다른 파라미터와 똑같이 비교한다. */
+	@Test
+	void comparesHardwareWhenBothSidesHaveIt() {
+		List<Map<String, String>> profiles = Main.comparableProfiles(Map.of("version", "8.4.11", "host.cpus", "8"),
+				Map.of("version", "8.4.11", "host.cpus", "4"));
+
+		assertEquals(Map.of("version", "8.4.11", "host.cpus", "8"), profiles.get(0));
+		assertEquals(Map.of("version", "8.4.11", "host.cpus", "4"), profiles.get(1));
+
+		Evaluation evaluation = new Evaluation("2026-10-01T00:00:00Z", 30, profiles.get(0), Map.of(), "transaction",
+				new TrafficModel(0, 0, Map.of()), 5, null, 100, 20, 0.3, 0.5);
+		List<String> reasons = evaluation.invalidReasons(Instant.parse("2026-10-02T00:00:00Z"), profiles.get(1),
+				Map.of(), null, 0.2);
+
+		assertTrue(reasons.stream().anyMatch(reason -> reason.contains("host.cpus 8 → 4")), reasons.toString());
+	}
+
+	/** 하드웨어가 양쪽에서 같으면 무효 이유가 없다. */
+	@Test
+	void reportsNoReasonsWhenHardwareIsUnchanged() {
+		List<Map<String, String>> profiles = Main.comparableProfiles(Map.of("version", "8.4.11", "host.cpus", "8"),
+				Map.of("version", "8.4.11", "host.cpus", "8"));
+
+		Evaluation evaluation = new Evaluation("2026-10-01T00:00:00Z", 30, profiles.get(0), Map.of(), "transaction",
+				new TrafficModel(0, 0, Map.of()), 5, null, 100, 20, 0.3, 0.5);
+		List<String> reasons = evaluation.invalidReasons(Instant.parse("2026-10-02T00:00:00Z"), profiles.get(1),
+				Map.of(), null, 0.2);
+
+		assertEquals(List.of(), reasons);
+	}
+
+	/** 양쪽에 다 하드웨어가 있으면 비교했다는 문구다. */
+	@Test
+	void notesThatHardwareWasComparedWhenBothSidesHaveIt() {
+		Map<String, String> withHost = Map.of("version", "8.4.11", "host.cpus", "8");
+
+		assertEquals("하드웨어는 설정 명령이 낸 값으로 비교했다", Main.hardwareNote(withHost, withHost, true));
+	}
+
+	/** 평가 때 하드웨어를 남기지 않았으면 지금 무엇을 줘도 확인하지 않았다는 문구다. */
+	@Test
+	void notesNoHardwareWhenTheEvaluationDidNotRecordIt() {
+		Map<String, String> withHost = Map.of("version", "8.4.11", "host.cpus", "8");
+		Map<String, String> withoutHost = Map.of("version", "8.4.11");
+
+		assertEquals("하드웨어 사양은 DB 접속으로 알 수 없어 확인하지 않았다",
+				Main.hardwareNote(withoutHost, withHost, true));
+	}
+
+	/** 명령을 줬어도 아무 값도 내지 않아 지금 쪽에 host. 항목이 없으면 "비교했다"고 하면 안 된다. */
+	@Test
+	void notesThatTheCommandProducedNothingWhenOnlyTheEvaluationHasHardware() {
+		Map<String, String> withHost = Map.of("version", "8.4.11", "host.cpus", "8");
+		Map<String, String> withoutHost = Map.of("version", "8.4.11");
+
+		assertEquals("평가 파일에 하드웨어가 있지만 --profile-command가 아무 값도 내지 않아 비교하지 않았다",
+				Main.hardwareNote(withHost, withoutHost, true));
+	}
+
+	/** 평가 파일에는 하드웨어가 있는데 명령을 주지 않았으면 그 이유를 밝힌다. */
+	@Test
+	void notesThatTheCommandWasNotGivenWhenOnlyTheEvaluationHasHardware() {
+		Map<String, String> withHost = Map.of("version", "8.4.11", "host.cpus", "8");
+		Map<String, String> withoutHost = Map.of("version", "8.4.11");
+
+		assertEquals("평가 파일에 하드웨어가 있지만 --profile-command를 주지 않아 비교하지 않았다",
+				Main.hardwareNote(withHost, withoutHost, false));
 	}
 }
