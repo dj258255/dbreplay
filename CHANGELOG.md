@@ -63,6 +63,8 @@
 
 - `compare --rows <개수>`(#18). "실행 시간을 많이 쓴 순서"에 낼 모양의 수를 정한다. 기본은 15다. 모양 전부를 보고 싶을 때 쓴다.
 
+- 라이선스를 MIT로 정했다(#15).
+
 ### 바뀐 것
 
 - `--alarm-active-sessions <개수>`는 `--alarm-metric active_sessions>=<개수>`의 줄임으로 남는다.
