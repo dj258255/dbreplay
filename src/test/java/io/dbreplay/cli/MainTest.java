@@ -5,12 +5,20 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+import java.nio.file.FileSystems;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermission;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import io.dbreplay.explore.CeilingRange;
 import io.dbreplay.explore.Evaluation;
@@ -174,5 +182,43 @@ class MainTest {
 
 		assertEquals("평가 파일에 하드웨어가 있지만 --profile-command를 주지 않아 비교하지 않았다",
 				Main.hardwareNote(withHost, withoutHost, false));
+	}
+
+	private static final Set<PosixFilePermission> OWNER_ONLY =
+			Set.of(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE);
+
+	/** POSIX 권한이 없는 파일 시스템에서는 권한 확인을 건너뛴다. */
+	private static void requirePosix() {
+		assumeTrue(FileSystems.getDefault().supportedFileAttributeViews().contains("posix"),
+				"POSIX 권한이 없는 파일 시스템에서는 권한을 확인하지 않는다");
+	}
+
+	/** convert가 쓴 트래픽 파일은 값이 그대로 든 SQL이 들어 있어 소유자만 읽을 수 있어야 한다. */
+	@Test
+	void makesTheConvertedTraceFilePrivate(@TempDir Path dir) throws Exception {
+		requirePosix();
+		Path in = dir.resolve("slow.log");
+		Files.copy(Path.of("src/test/resources/mysql/exp01-slow.log"), in);
+		Path out = dir.resolve("trace.jsonl");
+
+		Main.main(new String[] { "convert", "--in", in.toString(), "--out", out.toString() });
+
+		assertEquals(OWNER_ONLY, Files.getPosixFilePermissions(out));
+		assertTrue(Files.size(out) > 0);
+	}
+
+	/** 다른 사용자가 읽을 수 있던 출력 파일이 이미 있어도 convert 뒤에는 소유자만 읽을 수 있다. */
+	@Test
+	void replacesAWorldReadableTraceFile(@TempDir Path dir) throws Exception {
+		requirePosix();
+		Path in = dir.resolve("slow.log");
+		Files.copy(Path.of("src/test/resources/mysql/exp01-slow.log"), in);
+		Path out = dir.resolve("trace.jsonl");
+		Files.createFile(out, PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-r--r--")));
+
+		Main.main(new String[] { "convert", "--in", in.toString(), "--out", out.toString() });
+
+		assertEquals(OWNER_ONLY, Files.getPosixFilePermissions(out));
+		assertTrue(Files.size(out) > 0);
 	}
 }
