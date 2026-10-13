@@ -26,9 +26,15 @@ public interface HeadPolicy {
 
 	Decision decide(Head head);
 
-	/** 따로 지정하지 않았을 때 쓰는 정책. */
+	/**
+	 * 따로 지정하지 않았을 때 쓰는 정책. 원본에서 ROLLBACK으로 끝난 머리는 빼고 COMMIT으로 끝난 머리는 남긴다.
+	 *
+	 * <p>롤백된 문장은 원본에서 일어나지 않은 일이다. 남기면 재생에서는 하나씩 자동 커밋돼 데이터가 원본과 달라지고,
+	 * 뒤의 문장이 다른 결과를 낸다. 커밋된 머리는 원본에서도 반영된 변경이라 남겨서 부하를 지킨다.
+	 * 포기하는 것: 읽기만 든 롤백된 머리의 부하도 함께 빠진다. 규칙을 하나로 두려고 나누지 않았다.
+	 * 범수 님이 정했다(2026-10-14, #13).
+	 */
 	static Decision byDefault(Head head) {
-		// TODO(범수): 머리에서 잘린 트랜잭션의 기본 처리를 정한다. 지금은 전부 남긴다.
-		return Decision.KEEP;
+		return head.rolledBack() ? Decision.DROP : Decision.KEEP;
 	}
 }
