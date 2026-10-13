@@ -1,0 +1,26 @@
+===== MySQL 8.4 =====
+@@long_query_time	@@log_slow_extra	@@log_output
+0.000000	1	FILE
+mysql off 1 tps=1485.99 qps=29719.78 p95_ms=7.84 log_bytes=0
+mysql on 1 tps=1307.01 qps=26140.16 p95_ms=9.22 log_bytes=466465634
+mysql off 2 tps=1477.62 qps=29552.44 p95_ms=7.98 log_bytes=0
+mysql on 2 tps=1249.08 qps=24981.64 p95_ms=11.87 log_bytes=446556669
+mysql off 3 tps=1498.04 qps=29960.79 p95_ms=7.84 log_bytes=0
+mysql on 3 tps=1358.28 qps=27165.53 p95_ms=8.74 log_bytes=485529831
+mysql off 4 tps=1477.95 qps=29559.08 p95_ms=8.13 log_bytes=0
+mysql on 4 tps=1140.94 qps=22818.79 p95_ms=13.46 log_bytes=407971638
+mysql off 5 tps=1425.38 qps=28507.55 p95_ms=8.43 log_bytes=0
+mysql on 5 tps=1314.44 qps=26288.76 p95_ms=9.22 log_bytes=469902022
+===== PostgreSQL 16 =====
+pg off 1 tps=5625.368605 latency_avg_ms=1.422 log_bytes=7861
+pg on 1 tps=4818.894404 latency_avg_ms=1.660 log_bytes=585526196
+pg off 2 tps=5315.505619 latency_avg_ms=1.505 log_bytes=7864
+pg on 2 tps=4308.896396 latency_avg_ms=1.857 log_bytes=523375355
+pg off 3 tps=5094.420187 latency_avg_ms=1.570 log_bytes=7864
+pg on 3 tps=4287.390162 latency_avg_ms=1.866 log_bytes=522404241
+pg off 4 tps=5769.785970 latency_avg_ms=1.387 log_bytes=7753
+pg on 4 tps=4715.529059 latency_avg_ms=1.697 log_bytes=576150929
+pg off 5 tps=5824.149255 latency_avg_ms=1.374 log_bytes=7864
+pg on 5 tps=4767.188012 latency_avg_ms=1.678 log_bytes=582438306
+끝
+exit=0
