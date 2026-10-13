@@ -67,7 +67,7 @@ public final class Main {
 			  dbreplay replay  --trace <트래픽 파일> --url <JDBC URL> --user <계정> [--password <암호>]
 			                   [--speed 1] [--unit transaction|statement|session] [--max-connections 500]
 			                   [--only reads] [--out <결과 파일>] [--run-out <재생 기록 파일>] [--metrics on] [지표 옵션]
-			                   [주종 옵션]
+			                   [--profile-command <명령>] [주종 옵션]
 
 			  dbreplay compare --before <트래픽 파일> --after <트래픽 파일> [--top 3] [--min-count 100] [--rows 15]
 
@@ -81,7 +81,7 @@ public final class Main {
 			                   (--snapshot <덤프 파일> [되돌리기 옵션] | --reset-command <데이터 되돌리기 명령>)
 			                   [--alarm-command <알람 확인 명령>] [--alarm-metric <이름>=<값>,...]
 			                   [--alarm-active-sessions <개수>] [--alarm-sustain 3] [--max-distortion 0.2]
-			                   [지표 옵션] [주종 옵션]
+			                   [지표 옵션] [--profile-command <명령>] [주종 옵션]
 			                   [--unit transaction|statement|session] [--only reads] [--max-connections 500]
 			                   [--start-speed 1] [--max-speed 64] [--precision 0.1] [--repeat 1]
 			                   [--current-qps <지금의 초당 문장 수>] [--current-read-qps <읽기>] [--current-write-qps <쓰기>]
@@ -92,7 +92,7 @@ public final class Main {
 
 			  dbreplay check   --evaluation <평가 파일> --url <JDBC URL> --user <계정> [--password <암호>]
 			                   [--trace <지금의 트래픽 파일>] [--max-traffic-distance 0.2]
-			                   [explore에 줬던 알람 옵션]
+			                   [--profile-command <명령>] [explore에 줬던 알람 옵션]
 
 			  dbreplay manage  --targets <대상 목록.json> [--force yes] [--max-traffic-distance 0.2]
 			                   등록한 대상을 훑어, 평가한 적이 없거나 만료됐거나 무효인 것만 다시 평가하고 수위를 한 표로 낸다.
@@ -121,6 +121,10 @@ public final class Main {
 			  --slow-ms 100              실행 중인 문장을 느리다고 볼 기준 시간
 			  --metric-command <명령>    DB 접속으로 못 읽는 지표(CPU, Load Average)를 받는다.
 			                             한 줄에 '이름 값'을 내는 명령을 --metric-command-ms(기본 1000)마다 실행한다
+
+			장비 설정(--profile-command):
+			  한 줄에 '이름 값'을 내는 명령. CPU 수, 메모리, 기종 이름처럼 DB 접속으로 알 수 없는 것을 낸다.
+			  평가 파일과 재생 기록에 host.을 붙여 남고, 바뀌면 평가가 무효다. 명령은 남기지 않고 출력만 남긴다
 
 			주종 옵션:
 			  --replica-url <JDBC URL>   주 DB(--url)를 복제로 따라오는 종 DB. 주면 복제 지연을 replication_lag_seconds로 뜨고
@@ -258,7 +262,7 @@ public final class Main {
 		printMetrics(metrics);
 		if (runOut != null) {
 			JSON.writeValue(Path.of(runOut).toFile(), RunRecord.of(Instant.now().truncatedTo(ChronoUnit.SECONDS).toString(),
-					unit(options).name().toLowerCase(Locale.ROOT), s, TargetProfile.read(target), metrics));
+					unit(options).name().toLowerCase(Locale.ROOT), s, profile(target, options), metrics));
 		}
 	}
 
@@ -513,7 +517,7 @@ public final class Main {
 		String out = options.get("--out");
 		if (out != null) {
 			Evaluation evaluation = new Evaluation(Instant.now().truncatedTo(ChronoUnit.SECONDS).toString(),
-					(int) number(options, "--valid-days", 30), TargetProfile.read(target), alarmSettings,
+					(int) number(options, "--valid-days", 30), profile(target, options), alarmSettings,
 					unit(options).name().toLowerCase(Locale.ROOT), traffic, ceilingSpeed,
 					stoppedBy == null ? null : stoppedBy.name(), ceilingQps, currentQps,
 					level.low(), level.high(), range == null ? null : range.ceilings());
@@ -810,8 +814,49 @@ public final class Main {
 		return only != null;
 	}
 
+	/** DB에서 읽은 설정에, --profile-command가 있으면 그 명령이 낸 장비 설정을 더한다. */
+	private static Map<String, String> profile(JdbcTarget target, Map<String, String> options) throws Exception {
+		Map<String, String> profile = TargetProfile.read(target);
+		String command = options.get("--profile-command");
+		if (command != null) {
+			profile.putAll(TargetProfile.readHost(command));
+		}
+		return profile;
+	}
+
+	/**
+	 * 평가 때의 설정과 지금의 설정에서, 양쪽에 다 {@code host.} 항목이 있을 때만 그것을 남긴다. 한쪽에라도
+	 * 없으면 양쪽에서 뺀다. 모르는 것을 "바뀌었다"고 하면 안 된다(하드웨어를 남기지 않고 평가했거나, 지금
+	 * --profile-command를 주지 않았을 때다).
+	 *
+	 * @return 첫째가 평가 때의 설정, 둘째가 지금의 설정
+	 */
+	static List<Map<String, String>> comparableProfiles(Map<String, String> evaluated, Map<String, String> current) {
+		boolean evaluatedHasHost = evaluated.keySet().stream().anyMatch(key -> key.startsWith(TargetProfile.HOST_PREFIX));
+		boolean currentHasHost = current.keySet().stream().anyMatch(key -> key.startsWith(TargetProfile.HOST_PREFIX));
+		if (evaluatedHasHost && currentHasHost) {
+			return List.of(evaluated, current);
+		}
+		return List.of(dropHost(evaluated), dropHost(current));
+	}
+
+	private static Map<String, String> dropHost(Map<String, String> profile) {
+		Map<String, String> kept = new TreeMap<>(profile);
+		kept.keySet().removeIf(key -> key.startsWith(TargetProfile.HOST_PREFIX));
+		return kept;
+	}
+
 	/** 이 평가를 지금도 믿어도 되는지 본다. 무효인 이유들을 돌려주고, 비어 있으면 유효하다. */
 	private static List<String> invalidReasons(Evaluation evaluation, Map<String, String> options) throws Exception {
+		return invalidReasons(evaluation, options, null);
+	}
+
+	/**
+	 * @param currentProfile 지금의 설정. null이면 여기서 읽는다. check는 설정 명령을 한 번만 실행하려고 미리
+	 *                       읽어 넘긴다(하드웨어 문구에도 같은 값을 쓴다)
+	 */
+	private static List<String> invalidReasons(Evaluation evaluation, Map<String, String> options,
+			Map<String, String> currentProfile) throws Exception {
 		TrafficModel current = null;
 		String tracePath = options.get("--trace");
 		if (tracePath != null) {
@@ -819,8 +864,40 @@ public final class Main {
 				current = TrafficModel.of(trace);
 			}
 		}
-		return withoutRawCommand(evaluation).invalidReasons(Instant.now(), TargetProfile.read(target(options)),
-				alarmSettings(options), current, number(options, "--max-traffic-distance", 0.2));
+		Evaluation safe = withoutRawCommand(evaluation);
+		Map<String, String> now = currentProfile != null ? currentProfile : profile(target(options), options);
+		// 하드웨어는 양쪽에 다 있을 때만 비교한다. 뺀 맵으로 평가 쪽도 다시 만들어 같은 기준으로 견준다
+		List<Map<String, String>> profiles = comparableProfiles(safe.profile(), now);
+		return withProfile(safe, profiles.get(0)).invalidReasons(Instant.now(), profiles.get(1), alarmSettings(options),
+				current, number(options, "--max-traffic-distance", 0.2));
+	}
+
+	/**
+	 * check의 마지막 줄에 찍을 하드웨어 문구. 옵션을 줬는지가 아니라 실제로 비교했는지로 정한다. 설정 명령이
+	 * 0으로 끝나면서 아무 값도 내지 않으면 지금 쪽에 {@code host.} 항목이 없어 비교하지 않는데, 옵션이 있다고
+	 * "비교했다"고 찍으면 틀린 안심을 준다.
+	 */
+	static String hardwareNote(Map<String, String> evaluated, Map<String, String> current, boolean commandGiven) {
+		if (hasHost(evaluated) && hasHost(current)) {
+			return "하드웨어는 설정 명령이 낸 값으로 비교했다";
+		}
+		if (!hasHost(evaluated)) {
+			return "하드웨어 사양은 DB 접속으로 알 수 없어 확인하지 않았다";
+		}
+		if (commandGiven) {
+			return "평가 파일에 하드웨어가 있지만 --profile-command가 아무 값도 내지 않아 비교하지 않았다";
+		}
+		return "평가 파일에 하드웨어가 있지만 --profile-command를 주지 않아 비교하지 않았다";
+	}
+
+	private static boolean hasHost(Map<String, String> profile) {
+		return profile.keySet().stream().anyMatch(key -> key.startsWith(TargetProfile.HOST_PREFIX));
+	}
+
+	/** 같은 평가에 설정 맵만 바꿔 끼운다. comparableProfiles가 뺀 맵을 평가 쪽에도 적용하려는 것이다. */
+	private static Evaluation withProfile(Evaluation e, Map<String, String> profile) {
+		return new Evaluation(e.evaluatedAt(), e.validDays(), profile, e.alarms(), e.unit(), e.traffic(), e.ceilingSpeed(),
+				e.stoppedBy(), e.ceilingQps(), e.currentQps(), e.low(), e.high(), e.ceilingSpeeds());
 	}
 
 	private static void manage(Map<String, String> options) throws Exception {
@@ -893,7 +970,9 @@ public final class Main {
 	private static void check(Map<String, String> options) throws Exception {
 		Evaluation evaluation = JSON.readValue(Path.of(required(options, "--evaluation")).toFile(), Evaluation.class);
 		String tracePath = options.get("--trace");
-		List<String> reasons = invalidReasons(evaluation, options);
+		// 지금의 설정을 한 번만 읽어 무효 사유와 하드웨어 문구에 함께 쓴다. 설정 명령을 두 번 실행하지 않는다
+		Map<String, String> currentProfile = profile(target(options), options);
+		List<String> reasons = invalidReasons(evaluation, options, currentProfile);
 
 		System.out.printf("평가: %s, 상한 %.2f배속 (초당 %.0f문장), 수위 %.0f%%%n", evaluation.evaluatedAt(),
 				evaluation.ceilingSpeed(), evaluation.ceilingQps(), evaluation.level().level() * 100);
@@ -910,7 +989,9 @@ public final class Main {
 			System.out.println("무효다. 다시 평가해야 한다");
 			reasons.forEach(r -> System.out.println("  - " + r));
 		}
-		System.out.println("하드웨어 사양은 DB 접속으로 알 수 없어 확인하지 않았다"
+		// 하드웨어는 DB 접속으로 알 수 없다. 실제로 비교했는지로 문구를 정한다(옵션을 줬는지가 아니다)
+		String hardware = hardwareNote(evaluation.profile(), currentProfile, options.containsKey("--profile-command"));
+		System.out.println(hardware
 				+ (tracePath == null ? ". 트래픽 모양은 --trace를 주지 않아 확인하지 않았다" : ""));
 		if (!reasons.isEmpty()) {
 			System.exit(1);
