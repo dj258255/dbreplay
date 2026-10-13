@@ -57,6 +57,7 @@ dbreplay explore --trace prod.trace.jsonl --url jdbc:mysql://sandbox:3306/ --use
 - [경위와 결정](docs/ORIGIN.md): 왜 만들었고, 무엇을 누가 정했고, 글의 기준이 무엇인가
 - [로드맵](docs/work/ROADMAP.md): 끝난 것, 남은 것, 하지 않는 범위
 - [검증 기록](docs/verify/VERIFICATION.md): 어느 기능을 무엇으로 확인했는가
+- [원문 대조](docs/verify/ARTICLE.md): 메이투안 글의 항목 하나하나가 여기에 있는가, 없는가
 - [작업 방식](docs/work/README.md)과 [기여 가이드](CONTRIBUTING.md)
 
 ## 라이선스
