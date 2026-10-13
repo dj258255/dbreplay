@@ -17,7 +17,7 @@ build/install/dbreplay/bin/dbreplay        # 사용법이 나옵니다
 
 ## 변경을 올리기 전에
 
-- `./gradlew test`가 통과해야 합니다.
+- `./gradlew test`가 통과해야 합니다. main은 보호돼 있어서 CI의 `test`가 통과하지 않은 PR은 머지되지 않습니다.
 - 동작이 바뀌면 테스트를 함께 고칩니다. 실제 DB에서만 드러나는 것은 `experiments/`에 스크립트와 결과를 남깁니다.
 - 수치를 주장하려면 무엇을, 어떤 조건에서, 몇 번 쟀는지를 함께 적습니다. 측정 없는 개선 주장은 받지 않습니다.
 - 확인한 내용은 `docs/verify/VERIFICATION.md`에 한 줄을 더합니다.
