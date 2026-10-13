@@ -163,6 +163,22 @@ class SlowLogConverterTest {
 		assertEquals(2, dropped.summary().droppedHead());
 	}
 
+	/** 기본 정책: 롤백으로 끝난 머리는 빼고 커밋으로 끝난 머리는 남긴다. 롤백된 쓰기를 재생에서 커밋하지 않으려는 것이다. */
+	@Test
+	void byDefaultDropsAHeadThatWasRolledBackAndKeepsOneThatWasCommitted() throws IOException {
+		String log = entry("2026-10-11T00:00:01.000000Z", 7, "0.000100", "UPDATE t SET a = 1 WHERE id = 1")
+				+ entry("2026-10-11T00:00:02.000000Z", 7, "0.000100", "ROLLBACK")
+				+ entry("2026-10-11T00:00:01.500000Z", 8, "0.000100", "UPDATE t SET a = 2 WHERE id = 2")
+				+ entry("2026-10-11T00:00:02.500000Z", 8, "0.000100", "COMMIT")
+				+ entry("2026-10-11T00:00:03.000000Z", 7, "0.000100", "SELECT a FROM t WHERE id = 1");
+
+		Converted c = convert(new StringReader(log), HeadPolicy::byDefault);
+
+		assertEquals(List.of("UPDATE t SET a = 2 WHERE id = 2", "COMMIT", "SELECT a FROM t WHERE id = 1"),
+				c.records().stream().map(TraceRecord::sql).toList());
+		assertEquals(2, c.summary().droppedHead(), "롤백된 UPDATE와 그 ROLLBACK");
+	}
+
 	/** 녹화하는 동안 이 도구로 지표를 뜨면 그 조회가 로그에 섞인다. 원본의 트래픽이 아니라서 뺀다. */
 	@Test
 	void leavesOutTheStatementsThisToolSentItself() throws IOException {
