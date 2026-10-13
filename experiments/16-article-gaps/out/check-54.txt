@@ -1,0 +1,23 @@
+== MySQL: sysbench 초당 200 트랜잭션, 20초
+    transactions:                        4024   (201.17 per sec.)
+    queries:                             80480  (4023.42 per sec.)
+지표                       표본 수         최소         평균         최대
+active_sessions           100       0.00       0.56       4.00
+qps                        99       0.00    3927.56    5405.26
+slow_finished_total       100       0.00       0.00       0.00
+slow_running              100       0.00       0.00       0.00
+== PostgreSQL: pgbench 초당 200 트랜잭션, 20초
+number of transactions actually processed: 3968
+tps = 198.440710 (without initial connection time)
+지표                       표본 수         최소         평균         최대
+active_sessions           100       0.00       0.08       1.00
+slow_running              100       0.00       0.00       0.00
+tps                        99       0.00     204.82    1043.32
+== 한가할 때 (표본기 자신의 조회가 빠지는가)
+qps                        24       0.00       0.41       4.96
+slow_finished_total        25       0.00       0.00       0.00
+tps                        24       0.00       6.96      50.10
+== check --current-qps (check-57.sh가 남긴 평가 파일로)
+평가: 2026-10-13T22:45:00Z, 상한 2.00배속 (초당 1760문장), 수위 50%
+  지금의 초당 1200문장으로 다시 계산한 수위: 68% (건강 구간 30~50%) → 부족
+유효하다
