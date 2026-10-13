@@ -1,6 +1,8 @@
 package io.dbreplay.cli;
 
+import java.io.BufferedWriter;
 import java.io.IOException;
+import java.io.OutputStreamWriter;
 import java.io.UncheckedIOException;
 import java.io.Reader;
 import java.io.Writer;
@@ -51,6 +53,7 @@ import io.dbreplay.report.RunRecord;
 import io.dbreplay.report.TraceComparison;
 import io.dbreplay.sandbox.Sandbox;
 import io.dbreplay.sandbox.Snapshot;
+import io.dbreplay.trace.PrivateFile;
 import io.dbreplay.trace.TraceReader;
 
 public final class Main {
@@ -206,8 +209,11 @@ public final class Main {
 		String maskName = masker == null ? null : mask;
 		ConvertSummary s;
 		long spills;
+		// 트래픽 파일에는 값이 그대로 든 SQL이 들어 있다. 소유자만 읽을 수 있는 파일을 만들어 그 핸들에 바로
+		// 쓴다. 경로로 다시 열면 그 사이에 경로가 심볼릭 링크로 바뀌어 다른 파일로 갈 수 있다.
+		// 평가 파일·재생 결과·리포트는 값이 든 SQL이 없어 건드리지 않는다
 		try (Reader reader = Files.newBufferedReader(Path.of(required(options, "--in")), StandardCharsets.UTF_8);
-				Writer writer = Files.newBufferedWriter(out, StandardCharsets.UTF_8);
+				Writer writer = new BufferedWriter(new OutputStreamWriter(PrivateFile.open(out), StandardCharsets.UTF_8));
 				RecordBuffer buffer = new RecordBuffer(tempParent, sortBytes)) {
 			s = switch (from) {
 				case "mysql-slow" -> SlowLogConverter.convert(reader, writer, HeadPolicy::byDefault, buffer, masker, maskName);

@@ -1,8 +1,11 @@
 package io.dbreplay.sandbox;
 
 import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -21,6 +24,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import io.dbreplay.replay.JdbcTarget;
+import io.dbreplay.trace.PrivateFile;
 
 /**
  * 녹화를 시작하기 직전의 데이터 스냅샷을 뜬다. 메이투안의 시스템은 녹화 시작 시점의 전체 데이터를 스냅샷으로
@@ -97,10 +101,12 @@ public final class Snapshot {
 			builder.redirectError(errorFile.toFile());
 			Process process = builder.start();
 			// 덤프는 데이터베이스의 인코딩으로 나온다. ISO_8859_1은 바이트를 글자 하나로 그대로 옮기는 인코딩이라
-			// 어떤 인코딩의 덤프든 바이트가 바뀌지 않는다. UTF-8로 읽으면 그 인코딩이 아닌 글자가 깨진다
+			// 어떤 인코딩의 덤프든 바이트가 바뀌지 않는다. UTF-8로 읽으면 그 인코딩이 아닌 글자가 깨진다.
+			// 만든 핸들에 바로 쓴다. 경로로 다시 열면 그 사이에 경로가 바뀔 수 있다
 			try (BufferedReader in = new BufferedReader(
 						new InputStreamReader(process.getInputStream(), StandardCharsets.ISO_8859_1));
-					Writer writer = Files.newBufferedWriter(out, StandardCharsets.ISO_8859_1)) {
+					Writer writer = new BufferedWriter(
+							new OutputStreamWriter(PrivateFile.open(out), StandardCharsets.ISO_8859_1))) {
 				dropped.addAll(copyDroppingUnknownSettings(in, writer, knownSettings));
 			}
 			int exit = process.waitFor();
@@ -115,15 +121,27 @@ public final class Snapshot {
 		}
 	}
 
-	/** MySQL은 지금처럼 표준 출력을 파일로 바로 보낸다. */
+	/**
+	 * MySQL은 표준 출력을 읽어 만든 핸들에 그대로 옮긴다. {@code redirectOutput}은 경로로 다시 여는 것이라,
+	 * 그 사이에 경로가 심볼릭 링크로 바뀌면 덤프가 다른 파일로 갈 수 있다.
+	 */
 	private void dumpMysql(ProcessBuilder builder, Path out) throws IOException, InterruptedException {
-		builder.redirectOutput(out.toFile());
-		Process process = builder.start();
-		byte[] error = process.getErrorStream().readAllBytes();
-		int exit = process.waitFor();
-		if (exit != 0) {
-			Files.deleteIfExists(out);
-			throw new IOException("mysqldump이(가) 실패했다 (종료 코드 " + exit + "): " + tail(error, StandardCharsets.UTF_8));
+		// 표준 출력을 읽는 동안 표준 오류가 차면 프로세스가 멈춘다. 임시 파일로 받는다
+		Path errorFile = Files.createTempFile("dbreplay-mysql-dump-", ".err");
+		try {
+			builder.redirectError(errorFile.toFile());
+			Process process = builder.start();
+			try (OutputStream sink = PrivateFile.open(out)) {
+				process.getInputStream().transferTo(sink);
+			}
+			int exit = process.waitFor();
+			if (exit != 0) {
+				Files.deleteIfExists(out);
+				throw new IOException("mysqldump이(가) 실패했다 (종료 코드 " + exit + "): " + errorTail(errorFile));
+			}
+		}
+		finally {
+			Files.deleteIfExists(errorFile);
 		}
 	}
 
