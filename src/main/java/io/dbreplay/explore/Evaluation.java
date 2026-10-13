@@ -8,6 +8,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.TreeSet;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
+
 /**
  * 용량 평가 한 번의 결과와, 그 평가가 어떤 조건에서 나왔는지의 기록.
  *
@@ -20,12 +22,13 @@ import java.util.TreeSet;
  * @param alarms       평가할 때의 알람 설정
  * @param unit         재생 단위
  * @param traffic      평가에 쓴 트래픽의 모양
- * @param ceilingSpeed 버틴 가장 높은 배속
- * @param stoppedBy    위쪽 경계를 만든 판정. 경계를 못 봤으면 null
- * @param ceilingQps   상한 (초당 문장 수)
+ * @param ceilingSpeed 버틴 가장 높은 배속. 되풀이했으면 가장 낮은 상한
+ * @param stoppedBy    위쪽 경계를 만든 판정. 경계를 못 봤으면 null. 되풀이했으면 가장 낮은 상한을 낸 탐색의 판정
+ * @param ceilingQps   상한 (초당 문장 수). 되풀이했으면 가장 낮은 상한으로 계산한 값
  * @param currentQps   수위를 낼 때 쓴 지금의 초당 문장 수
  * @param low          건강 구간의 아래 끝
  * @param high         건강 구간의 위 끝
+ * @param ceilingSpeeds 되풀이한 탐색마다의 상한. 되풀이하지 않았으면 null. 파일에 이 항목이 없으면 되풀이하지 않은 것이다
  */
 public record Evaluation(
 		String evaluatedAt,
@@ -39,10 +42,35 @@ public record Evaluation(
 		double ceilingQps,
 		double currentQps,
 		double low,
-		double high) {
+		double high,
+		@JsonInclude(JsonInclude.Include.NON_NULL) List<Double> ceilingSpeeds) {
+
+	/** 되풀이하지 않은 평가. 예전 호출과 파일 형식을 그대로 둔다. */
+	public Evaluation(String evaluatedAt, int validDays, Map<String, String> profile, Map<String, String> alarms,
+			String unit, TrafficModel traffic, double ceilingSpeed, String stoppedBy, double ceilingQps, double currentQps,
+			double low, double high) {
+		this(evaluatedAt, validDays, profile, alarms, unit, traffic, ceilingSpeed, stoppedBy, ceilingQps, currentQps, low,
+				high, null);
+	}
 
 	public WaterLevel level() {
 		return new WaterLevel(currentQps, ceilingQps, low, high);
+	}
+
+	/**
+	 * 되풀이한 탐색이 있으면 상한들을 범위로 묶어 돌려준다. 없으면 null.
+	 *
+	 * <p>allConfirmed는 false로 둔다. 그 값은 파일에 남기지 않으므로, 파일만 보고는 상한이 알람으로 확인된
+	 * 값인지 알 수 없다. 평가를 읽어 보여 주는 데는 쓰지 않아 파일에 남기지 않았다.
+	 *
+	 * <p>상한 목록이 비어 있으면(손으로 고친 파일 같은 경우) 범위가 없는 것으로 본다. 빈 목록으로 범위를
+	 * 만들면 {@code min()}이 예외로 죽는다.
+	 */
+	public CeilingRange ceilingRange() {
+		if (ceilingSpeeds == null || ceilingSpeeds.isEmpty()) {
+			return null;
+		}
+		return new CeilingRange(ceilingSpeeds, stoppedBy == null ? null : RoundJudge.State.valueOf(stoppedBy), false);
 	}
 
 	/**

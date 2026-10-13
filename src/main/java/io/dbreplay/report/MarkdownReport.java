@@ -9,6 +9,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
 
+import io.dbreplay.explore.CeilingRange;
 import io.dbreplay.explore.Evaluation;
 
 /**
@@ -164,12 +165,32 @@ public final class MarkdownReport {
 	}
 
 	private static void capacity(PrintWriter out, Evaluation before, Evaluation after) {
+		CeilingRange beforeRange = before.ceilingRange();
+		CeilingRange afterRange = after.ceilingRange();
 		out.printf("## 용량%n%n| | 변경 전 | 변경 후 |%n|---|---|---|%n");
 		out.printf("| 알람 없이 버틴 배속 | %.2f | %.2f |%n", before.ceilingSpeed(), after.ceilingSpeed());
 		out.printf("| 상한 (초당 문장 수) | %,.0f | %,.0f |%n", before.ceilingQps(), after.ceilingQps());
+		// 되풀이한 쪽이 하나라도 있으면 수위 줄 앞에 상한의 범위를 밝힌다. 두 쪽 다 한 번 돌렸으면 지금과 같다
+		if (beforeRange != null || afterRange != null) {
+			out.printf("| 되풀이한 탐색의 상한 (최소 / 중앙값 / 최대) | %s | %s |%n", rangeCell(beforeRange),
+					rangeCell(afterRange));
+		}
 		out.printf("| 수위 | %.0f%% | %.0f%% |%n", before.level().level() * 100, after.level().level() * 100);
 		out.printf("| 평가한 시각 | %s | %s |%n%n", before.evaluatedAt(), after.evaluatedAt());
-		out.printf("상한은 탐색을 한 번씩 돌린 값이다.%n%n");
+		if (beforeRange == null && afterRange == null) {
+			out.printf("상한은 탐색을 한 번씩 돌린 값이다.%n%n");
+		}
+		else {
+			out.printf("되풀이한 쪽의 상한은 가장 낮은 값이다. 한 번만 돌린 쪽은 그 한 번의 값이다.%n%n");
+		}
+	}
+
+	/** 되풀이한 평가의 상한 범위 칸. 되풀이하지 않았으면 "한 번"이다. */
+	private static String rangeCell(CeilingRange range) {
+		if (range == null) {
+			return "한 번";
+		}
+		return String.format("%.2f / %.2f / %.2f (%d번)", range.min(), range.median(), range.max(), range.count());
 	}
 
 	private static String stat(RunRecord.Stat s) {
