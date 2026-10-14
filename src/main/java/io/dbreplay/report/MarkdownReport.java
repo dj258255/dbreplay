@@ -177,6 +177,10 @@ public final class MarkdownReport {
 					rangeCell(afterRange));
 		}
 		out.printf("| 수위 | %.0f%% | %.0f%% |%n", before.level().level() * 100, after.level().level() * 100);
+		// 종 DB를 함께 튼 평가가 하나라도 있으면 그 수위 줄을 더한다. 둘 다 없으면 지금과 같다
+		if (before.replica() != null || after.replica() != null) {
+			out.printf("| 종 DB의 수위 | %s | %s |%n", replicaLevelCell(before), replicaLevelCell(after));
+		}
 		out.printf("| 평가한 시각 | %s | %s |%n%n", before.evaluatedAt(), after.evaluatedAt());
 		if (beforeRange == null && afterRange == null) {
 			out.printf("상한은 탐색을 한 번씩 돌린 값이다.%n%n");
@@ -258,6 +262,15 @@ public final class MarkdownReport {
 			return "한 번";
 		}
 		return String.format("%.2f / %.2f / %.2f (%d번)", range.min(), range.median(), range.max(), range.count());
+	}
+
+	/** 종 DB를 함께 튼 평가의 종 DB 수위 칸. 함께 틀지 않았으면 "-"이다. */
+	private static String replicaLevelCell(Evaluation evaluation) {
+		Evaluation.Replica replica = evaluation.replica();
+		if (replica == null) {
+			return "-";
+		}
+		return String.format("%.0f%%", replica.level(evaluation.low(), evaluation.high()).level() * 100);
 	}
 
 	private static String stat(RunRecord.Stat s) {

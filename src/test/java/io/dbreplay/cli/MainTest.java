@@ -25,6 +25,7 @@ import io.dbreplay.explore.Evaluation;
 import io.dbreplay.explore.Explorer;
 import io.dbreplay.explore.RoundJudge;
 import io.dbreplay.explore.TrafficModel;
+import io.dbreplay.explore.WaterLevel;
 
 class MainTest {
 
@@ -107,6 +108,58 @@ class MainTest {
 		Evaluation safe = Main.withoutRawCommand(old);
 
 		assertEquals(explorations, safe.explorations());
+	}
+
+	/** 알람 명령의 원문이 든 예전 평가를 고쳐도 종 DB 기록은 잃지 않는다. */
+	@Test
+	void keepsReplicaWhenTheRawCommandIsFingerprinted() {
+		Evaluation.Replica replica = new Evaluation.Replica(new TrafficModel(0, 0, Map.of()), 20_000, 2_000);
+		Evaluation old = new Evaluation("2026-10-01T00:00:00Z", 30, Map.of(),
+				Map.of("alarm-command", "mysql -uroot -psecret -e 'select 1'"), "transaction",
+				new TrafficModel(0, 0, Map.of()), 5, null, 100, 20, 0.3, 0.5, null, null, replica);
+
+		Evaluation safe = Main.withoutRawCommand(old);
+
+		assertEquals(replica, safe.replica());
+	}
+
+	/** 종 DB의 수위 줄. 지금 초당 2,000, 상한 초당 10,000이면 20%, 과잉이다. */
+	@Test
+	void buildsTheReplicaLevelLine() {
+		String line = Main.replicaLevelLine(2_000, 10_000, 0.3, 0.5);
+
+		assertTrue(line.contains("20%"), line);
+		assertTrue(line.contains("과잉"), line);
+	}
+
+	/** 읽기 노드 권고의 입력: 종 DB의 수위가 있으면 그것, 없으면 주 DB 트래픽의 읽기 수위. */
+	@Test
+	void picksTheReplicaLevelForReadNodeAdviceWhenPresent() {
+		WaterLevel primaryRead = WaterLevel.of(4_000, 10_000);
+		WaterLevel replica = WaterLevel.of(2_000, 10_000);
+
+		assertEquals(replica, Main.readLevelForAdvice(replica, primaryRead));
+		assertEquals(primaryRead, Main.readLevelForAdvice(null, primaryRead));
+	}
+
+	/** 종 DB의 수위로 계산한 권고는 확장 명령을 실행하지 않는다. 종 DB의 상한은 알람으로 확인된 적이 없다. */
+	@Test
+	void refusesToApplyAdviceComputedFromTheReplicaLevel() {
+		assertTrue(Main.scaleConfirmed(true, false), "주 DB의 권고이고 알람으로 확인됐다");
+		assertFalse(Main.scaleConfirmed(true, true), "종 DB의 권고다");
+		assertFalse(Main.scaleConfirmed(false, false), "알람으로 확인되지 않았다");
+	}
+
+	/** check의 수 검사: 지금의 QPS 옵션에 음수·NaN·무한대를 주면 거른다. */
+	@Test
+	void rejectsBadCurrentQpsValues() {
+		assertThrows(IllegalArgumentException.class, () -> Main.checkQpsOptions(Map.of("--current-qps", "-1")));
+		assertThrows(IllegalArgumentException.class, () -> Main.checkQpsOptions(Map.of("--current-qps", "NaN")));
+		assertThrows(IllegalArgumentException.class, () -> Main.checkQpsOptions(Map.of("--current-qps", "Infinity")));
+		assertThrows(IllegalArgumentException.class, () -> Main.checkQpsOptions(Map.of("--current-replica-qps", "-1")));
+		assertThrows(IllegalArgumentException.class, () -> Main.checkQpsOptions(Map.of("--current-replica-qps", "NaN")));
+		assertThrows(IllegalArgumentException.class, () -> Main.checkQpsOptions(Map.of("--current-replica-qps", "Infinity")));
+		Main.checkQpsOptions(Map.of("--current-qps", "0"));
 	}
 
 	/** 평가 때 하드웨어를 남기지 않았으면 지금 하드웨어를 줘도 비교하지 않는다. 모르는 것을 바뀌었다고 하면 안 된다. */

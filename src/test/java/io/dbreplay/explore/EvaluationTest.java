@@ -233,4 +233,27 @@ class EvaluationTest {
 		assertEquals(Map.of("active_sessions", List.of(3.0, 5.0), "load1", List.of(5.5, 9.0)), log.metrics());
 		assertEquals(List.of("active_sessions", "load1"), List.copyOf(log.metrics().keySet()), "이름 순");
 	}
+
+	/** 종 DB를 함께 튼 평가를 쓰고 다시 읽으면 같다. Replica가 낸 수위가 맞다. */
+	@Test
+	void keepsTheReplicaThroughAFile() throws IOException {
+		Evaluation.Replica replica = new Evaluation.Replica(traffic(80, 20), 20_000, 2_000);
+		Evaluation withReplica = new Evaluation("2026-10-01T00:00:00Z", 30, PROFILE, ALARMS, "transaction", traffic(80, 20),
+				5.0, "OVERLOADED", 20_000, 4_000, 0.3, 0.5, null, null, replica);
+		ObjectMapper json = new ObjectMapper();
+
+		Evaluation read = json.readValue(json.writeValueAsString(withReplica), Evaluation.class);
+
+		assertEquals(withReplica, read);
+		assertEquals(0.1, read.replica().level(0.3, 0.5).level(), 1e-9, "2000 ÷ 20000 = 10%");
+		assertEquals(WaterLevel.Verdict.SURPLUS, read.replica().level(0.3, 0.5).verdict());
+	}
+
+	/** 종 DB를 함께 틀지 않은 평가는 JSON에 replica 이름이 없다. */
+	@Test
+	void omitsTheReplicaWhenThereIsNone() throws IOException {
+		String json = new ObjectMapper().writeValueAsString(evaluation());
+
+		assertFalse(json.contains("replica"));
+	}
 }
