@@ -20,6 +20,8 @@ import org.junit.jupiter.api.Test;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 
+import io.dbreplay.replay.Histogram;
+import io.dbreplay.replay.ReplaySummary;
 import io.dbreplay.trace.TraceHeader;
 import io.dbreplay.trace.TraceReader;
 import io.dbreplay.trace.TraceRecord;
@@ -184,5 +186,51 @@ class EvaluationTest {
 
 		assertTrue(json.contains("\"stoppedBy\" : null"), "경계를 못 본 평가도 stoppedBy 줄을 찍는다");
 		assertFalse(json.contains("ceilingSpeeds"), "되풀이하지 않았으면 항목이 없다");
+	}
+
+	/** 라운드를 남긴 평가를 쓰고 다시 읽으면 배속, 판정, 이유, 지표의 평균과 최대가 그대로다. */
+	@Test
+	void keepsTheExplorationsThroughAFile() throws IOException {
+		Evaluation withLog = new Evaluation("2026-10-01T00:00:00Z", 30, PROFILE, ALARMS, "transaction", traffic(80, 20),
+				5.0, "OVERLOADED", 20_000, 4_000, 0.3, 0.5, null, List.of(List.of(
+						new Evaluation.RoundLog(1.0, "HELD", null, 0.0, Map.of("active_sessions", List.of(1.0, 2.0))),
+						new Evaluation.RoundLog(4.0, "OVERLOADED", "알람", 0.4, Map.of("active_sessions", List.of(3.0, 4.0))))));
+		ObjectMapper json = new ObjectMapper();
+
+		Evaluation read = json.readValue(json.writeValueAsString(withLog), Evaluation.class);
+
+		assertEquals(withLog, read);
+		assertEquals(2, read.explorations().getFirst().size());
+		assertEquals(4.0, read.explorations().getFirst().get(1).speed(), 1e-9);
+		assertEquals("OVERLOADED", read.explorations().getFirst().get(1).verdict());
+		assertEquals("알람", read.explorations().getFirst().get(1).reason());
+		assertEquals(List.of(3.0, 4.0), read.explorations().getFirst().get(1).metrics().get("active_sessions"));
+	}
+
+	/** 라운드를 남기지 않은 평가는 JSON에 explorations 이름이 없다. */
+	@Test
+	void omitsTheExplorationsWhenThereAreNone() throws IOException {
+		String json = new ObjectMapper().writeValueAsString(evaluation());
+
+		assertFalse(json.contains("explorations"));
+	}
+
+	/** 라운드 하나에서 리포트용 기록을 만든다. 지표는 이름 순으로 [평균, 최대]가 된다. */
+	@Test
+	void buildsARoundLogFromAnExplorerRound() {
+		ReplaySummary summary = new ReplaySummary(1_000, 8, 0, 0, 0, 400, 0, 4, 30_000_000, 7_500_000,
+				new Histogram(), new Histogram(), new Histogram());
+		RoundData data = new RoundData(4, 1_000_000, 1_030_000, summary,
+				Map.of("active_sessions", new double[] {1, 5}, "load1", new double[] {2, 9}));
+		Explorer.Round round = new Explorer.Round(2, 4, data, new RoundJudge.Verdict(RoundJudge.State.OVERLOADED, "알람"));
+
+		Evaluation.RoundLog log = Evaluation.RoundLog.of(round);
+
+		assertEquals(4.0, log.speed(), 1e-9);
+		assertEquals("OVERLOADED", log.verdict());
+		assertEquals("알람", log.reason());
+		assertEquals(data.distortion(), log.distortion(), 1e-9);
+		assertEquals(Map.of("active_sessions", List.of(3.0, 5.0), "load1", List.of(5.5, 9.0)), log.metrics());
+		assertEquals(List.of("active_sessions", "load1"), List.copyOf(log.metrics().keySet()), "이름 순");
 	}
 }

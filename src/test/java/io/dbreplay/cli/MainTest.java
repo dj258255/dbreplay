@@ -95,6 +95,20 @@ class MainTest {
 		assertEquals(List.of(5.0, 3.0), safe.ceilingSpeeds());
 	}
 
+	/** 알람 명령의 원문이 든 예전 평가를 고쳐도 라운드 기록은 잃지 않는다. */
+	@Test
+	void keepsExplorationsWhenTheRawCommandIsFingerprinted() {
+		List<List<Evaluation.RoundLog>> explorations = List.of(List.of(
+				new Evaluation.RoundLog(1.0, "HELD", null, 0.0, Map.of("active_sessions", List.of(1.0, 2.0)))));
+		Evaluation old = new Evaluation("2026-10-01T00:00:00Z", 30, Map.of(),
+				Map.of("alarm-command", "mysql -uroot -psecret -e 'select 1'"), "transaction",
+				new TrafficModel(0, 0, Map.of()), 5, null, 100, 20, 0.3, 0.5, null, explorations);
+
+		Evaluation safe = Main.withoutRawCommand(old);
+
+		assertEquals(explorations, safe.explorations());
+	}
+
 	/** 평가 때 하드웨어를 남기지 않았으면 지금 하드웨어를 줘도 비교하지 않는다. 모르는 것을 바뀌었다고 하면 안 된다. */
 	@Test
 	void doesNotCompareHardwareThatTheEvaluationDidNotRecord() {

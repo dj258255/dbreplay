@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.TreeMap;
 import java.util.TreeSet;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -29,6 +30,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
  * @param low          건강 구간의 아래 끝
  * @param high         건강 구간의 위 끝
  * @param ceilingSpeeds 되풀이한 탐색마다의 상한. 되풀이하지 않았으면 null. 파일에 이 항목이 없으면 되풀이하지 않은 것이다
+ * @param explorations 탐색마다의 라운드들. 되풀이하지 않았으면 탐색 하나다. 남기지 않은 예전 파일이면 null
  */
 public record Evaluation(
 		String evaluatedAt,
@@ -43,14 +45,44 @@ public record Evaluation(
 		double currentQps,
 		double low,
 		double high,
-		@JsonInclude(JsonInclude.Include.NON_NULL) List<Double> ceilingSpeeds) {
+		@JsonInclude(JsonInclude.Include.NON_NULL) List<Double> ceilingSpeeds,
+		@JsonInclude(JsonInclude.Include.NON_NULL) List<List<RoundLog>> explorations) {
+
+	/**
+	 * 탐색의 한 라운드. 리포트의 상승 과정에 쓴다.
+	 *
+	 * @param speed      그 라운드의 배속
+	 * @param verdict    판정. HELD, OVERLOADED, DISTORTED
+	 * @param reason     과부하나 왜곡으로 판정한 이유. 버텼으면 null
+	 * @param distortion 재생기가 늦어 계획을 못 지킨 문장의 비율
+	 * @param metrics    지표 이름별 [평균, 최대]
+	 */
+	public record RoundLog(double speed, String verdict, String reason, double distortion, Map<String, List<Double>> metrics) {
+
+		/** 라운드에서 만든다. 지표는 이름 순으로 [평균, 최대]를 담는다. */
+		public static RoundLog of(Explorer.Round round) {
+			Map<String, List<Double>> metrics = new TreeMap<>();
+			round.data().metrics().keySet()
+					.forEach(name -> metrics.put(name, List.of(round.data().mean(name), round.data().max(name))));
+			return new RoundLog(round.speed(), round.verdict().state().name(), round.verdict().reason(),
+					round.data().distortion(), metrics);
+		}
+	}
 
 	/** 되풀이하지 않은 평가. 예전 호출과 파일 형식을 그대로 둔다. */
 	public Evaluation(String evaluatedAt, int validDays, Map<String, String> profile, Map<String, String> alarms,
 			String unit, TrafficModel traffic, double ceilingSpeed, String stoppedBy, double ceilingQps, double currentQps,
 			double low, double high) {
 		this(evaluatedAt, validDays, profile, alarms, unit, traffic, ceilingSpeed, stoppedBy, ceilingQps, currentQps, low,
-				high, null);
+				high, null, null);
+	}
+
+	/** 되풀이한 상한 목록은 있지만 라운드 기록은 없는 평가. */
+	public Evaluation(String evaluatedAt, int validDays, Map<String, String> profile, Map<String, String> alarms,
+			String unit, TrafficModel traffic, double ceilingSpeed, String stoppedBy, double ceilingQps, double currentQps,
+			double low, double high, List<Double> ceilingSpeeds) {
+		this(evaluatedAt, validDays, profile, alarms, unit, traffic, ceilingSpeed, stoppedBy, ceilingQps, currentQps, low,
+				high, ceilingSpeeds, null);
 	}
 
 	public WaterLevel level() {
