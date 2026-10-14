@@ -84,6 +84,17 @@ class MainTest {
 		assertEquals("  탐색마다: 8.50, 12.00, 8.50, 3.75, 8.00", lines.get(1));
 	}
 
+	/** 한 번만 탐색했으면 상한이 흔들린다는 안내를 붙이고, 되풀이했으면 범위가 대신하므로 붙이지 않는다 (#76). */
+	@Test
+	void notesThatASingleExplorationCanSwing() {
+		List<String> once = Main.singleRunNote(1);
+		assertEquals(2, once.size());
+		assertTrue(once.get(0).contains("한 번 탐색한 값이다"));
+		assertTrue(once.get(1).contains("--repeat N"));
+		assertEquals(List.of(), Main.singleRunNote(2));
+		assertEquals(List.of(), Main.singleRunNote(5));
+	}
+
 	/** 알람 명령의 원문이 든 예전 평가를 고쳐도 되풀이한 상한 목록은 잃지 않는다. */
 	@Test
 	void keepsCeilingSpeedsWhenTheRawCommandIsFingerprinted() {
