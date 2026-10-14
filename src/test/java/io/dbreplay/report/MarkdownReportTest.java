@@ -161,4 +161,22 @@ class MarkdownReportTest {
 		assertTrue(md.contains("| 1 | 1.00 | 버팀 | 0.0% | 1.0 / 2.0 | - | |"), md);
 		assertTrue(md.contains("cpu \\| busy"), md);
 	}
+
+	private static Evaluation withReplica(double ceiling, double replicaCeilingQps, double replicaCurrentQps) {
+		return new Evaluation("2026-10-12T00:00:00Z", 30, Map.of(), Map.of(), "transaction",
+				new TrafficModel(200, 1_000_000, Map.of()), ceiling, "OVERLOADED", ceiling * 4_000, 4_000, 0.3, 0.5,
+				null, null, new Evaluation.Replica(new TrafficModel(200, 1_000_000, Map.of()), replicaCeilingQps, replicaCurrentQps));
+	}
+
+	/** 한쪽에만 종 DB가 있으면 종 DB 수위 줄이 있고 없는 쪽은 -다. 둘 다 없으면 그 줄이 없다. */
+	@Test
+	void showsTheReplicaLevelWhenOneSideHasAReplica() throws IOException {
+		String md = report(null, null, evaluation(9.0), withReplica(3.5, 10_000, 1_200));
+
+		assertTrue(md.contains("| 종 DB의 수위 | - | 12% |"), md);
+
+		String none = report(null, null, evaluation(9.0), evaluation(3.5));
+
+		assertFalse(none.contains("종 DB의 수위"), none);
+	}
 }

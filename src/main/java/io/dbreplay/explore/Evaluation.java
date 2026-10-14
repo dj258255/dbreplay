@@ -31,6 +31,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
  * @param high         건강 구간의 위 끝
  * @param ceilingSpeeds 되풀이한 탐색마다의 상한. 되풀이하지 않았으면 null. 파일에 이 항목이 없으면 되풀이하지 않은 것이다
  * @param explorations 탐색마다의 라운드들. 되풀이하지 않았으면 탐색 하나다. 남기지 않은 예전 파일이면 null
+ * @param replica      주 DB의 재생과 함께 튼 종 DB의 트래픽. 함께 틀지 않았으면 null
  */
 public record Evaluation(
 		String evaluatedAt,
@@ -46,7 +47,23 @@ public record Evaluation(
 		double low,
 		double high,
 		@JsonInclude(JsonInclude.Include.NON_NULL) List<Double> ceilingSpeeds,
-		@JsonInclude(JsonInclude.Include.NON_NULL) List<List<RoundLog>> explorations) {
+		@JsonInclude(JsonInclude.Include.NON_NULL) List<List<RoundLog>> explorations,
+		@JsonInclude(JsonInclude.Include.NON_NULL) Replica replica) {
+
+	/**
+	 * 주 DB의 재생과 함께 튼 종 DB의 트래픽. 상한 배속은 주 DB와 같다(함께 틀었다).
+	 *
+	 * @param traffic    종 DB에서 녹화한 트래픽의 모양
+	 * @param ceilingQps 종 DB의 상한 (초당 문장 수) = 종 DB의 녹화 QPS × 상한 배속
+	 * @param currentQps 수위를 낼 때 쓴 종 DB의 지금의 초당 문장 수
+	 */
+	public record Replica(TrafficModel traffic, double ceilingQps, double currentQps) {
+
+		/** 이 종 DB의 수위. 건강 구간은 주 DB와 같은 것을 쓴다. */
+		public WaterLevel level(double low, double high) {
+			return new WaterLevel(currentQps, ceilingQps, low, high);
+		}
+	}
 
 	/**
 	 * 탐색의 한 라운드. 리포트의 상승 과정에 쓴다.
@@ -74,7 +91,7 @@ public record Evaluation(
 			String unit, TrafficModel traffic, double ceilingSpeed, String stoppedBy, double ceilingQps, double currentQps,
 			double low, double high) {
 		this(evaluatedAt, validDays, profile, alarms, unit, traffic, ceilingSpeed, stoppedBy, ceilingQps, currentQps, low,
-				high, null, null);
+				high, null);
 	}
 
 	/** 되풀이한 상한 목록은 있지만 라운드 기록은 없는 평가. */
@@ -83,6 +100,14 @@ public record Evaluation(
 			double low, double high, List<Double> ceilingSpeeds) {
 		this(evaluatedAt, validDays, profile, alarms, unit, traffic, ceilingSpeed, stoppedBy, ceilingQps, currentQps, low,
 				high, ceilingSpeeds, null);
+	}
+
+	/** 종 DB를 함께 틀지 않은 평가. 라운드 기록은 있을 수 있다. */
+	public Evaluation(String evaluatedAt, int validDays, Map<String, String> profile, Map<String, String> alarms,
+			String unit, TrafficModel traffic, double ceilingSpeed, String stoppedBy, double ceilingQps, double currentQps,
+			double low, double high, List<Double> ceilingSpeeds, List<List<RoundLog>> explorations) {
+		this(evaluatedAt, validDays, profile, alarms, unit, traffic, ceilingSpeed, stoppedBy, ceilingQps, currentQps, low,
+				high, ceilingSpeeds, explorations, null);
 	}
 
 	public WaterLevel level() {

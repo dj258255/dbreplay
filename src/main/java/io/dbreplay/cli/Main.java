@@ -88,6 +88,7 @@ public final class Main {
 			                   [--unit transaction|statement|session] [--only reads] [--max-connections 500]
 			                   [--start-speed 1] [--max-speed 64] [--precision 0.1] [--repeat 1]
 			                   [--current-qps <지금의 초당 문장 수>] [--current-read-qps <읽기>] [--current-write-qps <쓰기>]
+			                   [--current-replica-qps <종 DB의 지금의 초당 문장 수>]
 			                   [--level-low 0.3] [--level-high 0.5]
 			                   [--read-nodes <읽기를 받는 노드 수>] [--min-read-nodes 1] [--max-read-nodes <한도>]
 			                   [--scale-command <명령> --apply-scale yes]
@@ -95,7 +96,7 @@ public final class Main {
 
 			  dbreplay check   --evaluation <평가 파일> --url <JDBC URL> --user <계정> [--password <암호>]
 			                   [--trace <지금의 트래픽 파일>] [--max-traffic-distance 0.2]
-			                   [--current-qps <지금의 초당 문장 수>] [--profile-command <명령>] [explore에 줬던 알람 옵션]
+			                   [--current-qps <지금의 초당 문장 수>] [--current-replica-qps <종 DB>] [--profile-command <명령>] [explore에 줬던 알람 옵션]
 
 			  dbreplay manage  --targets <대상 목록.json> [--force yes] [--max-traffic-distance 0.2]
 			                   등록한 대상을 훑어, 평가한 적이 없거나 만료됐거나 무효인 것만 다시 평가하고 수위를 한 표로 낸다.
@@ -522,16 +523,24 @@ public final class Main {
 						atMax.level() * 100);
 			}
 		}
+		// 종 DB를 함께 틀었으면 그 수위도 따로 낸다. 종 DB의 지금 QPS는 --current-replica-qps, 없으면 녹화 QPS를 쓴다
+		Evaluation.Replica replica = null;
+		WaterLevel replicaLevel = null;
 		if (options.containsKey("--replica-trace")) {
 			TrafficModel replicaTraffic;
 			try (TraceReader trace = openTrace(options.get("--replica-trace"))) {
 				replicaTraffic = TrafficModel.of(trace);
 			}
 			// 위의 수위는 주 DB의 트래픽만 센 것이다. 종 DB의 것은 같은 배속을 곱해 따로 보여 준다
+			double replicaCeilingQps = replicaTraffic.qps() * ceilingSpeed;
+			double currentReplicaQps = number(options, "--current-replica-qps", replicaTraffic.qps());
 			System.out.printf("종 DB에 함께 튼 트래픽: 녹화 구간의 초당 문장 수 %.0f, 상한 배속에서 %.0f%n",
-					replicaTraffic.qps(), replicaTraffic.qps() * ceilingSpeed);
+					replicaTraffic.qps(), replicaCeilingQps);
+			System.out.println(replicaLevelLine(currentReplicaQps, replicaCeilingQps, level.low(), level.high()));
+			replicaLevel = new WaterLevel(currentReplicaQps, replicaCeilingQps, level.low(), level.high());
+			replica = new Evaluation.Replica(replicaTraffic, replicaCeilingQps, currentReplicaQps);
 		}
-		ScaleAdvice advice = printReadWrite(options, traffic, ceilingSpeed, level);
+		ScaleAdvice advice = printReadWrite(options, traffic, ceilingSpeed, level, replicaLevel);
 
 		String out = options.get("--out");
 		if (out != null) {
@@ -543,7 +552,7 @@ public final class Main {
 					(int) number(options, "--valid-days", 30), profile(target, options), alarmSettings,
 					unit(options).name().toLowerCase(Locale.ROOT), traffic, ceilingSpeed,
 					stoppedBy == null ? null : stoppedBy.name(), ceilingQps, currentQps,
-					level.low(), level.high(), range == null ? null : range.ceilings(), explorations);
+					level.low(), level.high(), range == null ? null : range.ceilings(), explorations, replica);
 			JSON.writeValue(Path.of(out).toFile(), evaluation);
 			System.out.printf("평가를 %s에 적었다. %d일 동안 유효하다%n", out, evaluation.validDays());
 		}
@@ -551,8 +560,22 @@ public final class Main {
 		if (advice != null) {
 			// 되풀이했으면 N번 가운데 하나라도 알람으로 확인되지 않았으면 실행하지 않는다
 			boolean confirmed = range == null ? stoppedBy == RoundJudge.State.OVERLOADED : range.allConfirmed();
-			applyScale(options, advice, confirmed);
+			boolean adviceFromReplica = replicaLevel != null;
+			// 종 DB의 상한은 주 DB와 같은 배속 × 종 DB의 녹화 QPS로 어림한 값이다. 그 탐색을 멈춘 알람은 주 DB의
+			// 것이라, 종 DB의 한계가 알람으로 확인된 적은 없다. 왜 실행하지 않는지 먼저 밝힌다
+			if (adviceFromReplica && options.containsKey("--scale-command")) {
+				System.out.println("  종 DB의 상한은 주 DB와 같은 배속을 곱해 어림한 값이라 확장 명령을 실행하지 않는다");
+			}
+			applyScale(options, advice, scaleConfirmed(confirmed, adviceFromReplica));
 		}
+	}
+
+	/**
+	 * 확장 명령을 실행해도 되는가. 종 DB의 수위로 계산한 권고는 종 DB의 상한을 주 DB와 같은 배속을 곱해 어림한
+	 * 값이라 알람으로 확인된 것이 아니다. 부하 지표는 주 DB에서만 뜨고, 그 탐색을 멈춘 알람은 주 DB의 것이다.
+	 */
+	static boolean scaleConfirmed(boolean ceilingConfirmed, boolean adviceFromReplica) {
+		return ceilingConfirmed && !adviceFromReplica;
 	}
 
 	/**
@@ -672,6 +695,13 @@ public final class Main {
 				currentQps, level.level() * 100, low * 100, high * 100, verdictName(level.verdict()));
 	}
 
+	/** 종 DB의 수위 줄. 주 DB의 수위(printLevel)는 여러 줄이지만 종 DB는 이 한 줄로만 낸다. */
+	static String replicaLevelLine(double currentQps, double ceilingQps, double low, double high) {
+		WaterLevel level = new WaterLevel(currentQps, ceilingQps, low, high);
+		return String.format("종 DB의 수위: %.0f%% (초당 %.0f ÷ 상한 %.0f), 건강 구간 %.0f~%.0f%% → %s",
+				level.level() * 100, currentQps, ceilingQps, low * 100, high * 100, verdictName(level.verdict()));
+	}
+
 	/**
 	 * 라운드에서 지표를 읽다 실패했으면 탐색을 멈춘다. 그 뒤의 값이 없으면 알람이 못 본 것을 버틴 것으로 읽게 되어
 	 * 상한이 실제보다 높게 나온다.
@@ -744,7 +774,8 @@ public final class Main {
 	 * 상한 배속 하나를 각각의 QPS에 곱한 값이다. 읽기와 쓰기가 지금의 비율로 함께 늘 때의 상한이라는 뜻이다.
 	 */
 	/** @return 확장·축소 권고. --read-nodes를 주지 않았거나 읽기와 쓰기를 나눠 볼 수 없으면 null */
-	private static ScaleAdvice printReadWrite(Map<String, String> options, TrafficModel traffic, double ceilingSpeed, WaterLevel level) {
+	private static ScaleAdvice printReadWrite(Map<String, String> options, TrafficModel traffic, double ceilingSpeed,
+			WaterLevel level, WaterLevel replicaLevel) {
 		if (traffic.reads() + traffic.writes() == 0) {
 			return null;
 		}
@@ -767,16 +798,31 @@ public final class Main {
 		if (!options.containsKey("--read-nodes")) {
 			return null;
 		}
-		ScaleAdvice advice = ScaleAdvice.of(levels[0], levels[1], nodes(options, "--read-nodes", 1),
-				nodes(options, "--min-read-nodes", 1), nodes(options, "--max-read-nodes", Integer.MAX_VALUE));
+		// 종 DB를 함께 틀었으면 읽기 노드는 종 DB다. 읽기 노드 권고를 종 DB의 수위로 계산한다
+		ScaleAdvice advice = ScaleAdvice.of(readLevelForAdvice(replicaLevel, levels[0]), levels[1],
+				nodes(options, "--read-nodes", 1), nodes(options, "--min-read-nodes", 1),
+				nodes(options, "--max-read-nodes", Integer.MAX_VALUE));
+		if (replicaLevel != null) {
+			System.out.println("  읽기 노드의 권고는 종 DB의 수위로 계산했다");
+		}
 		printScaleAdvice(advice);
 		return advice;
+	}
+
+	/** 읽기 노드 권고에 쓸 수위. 종 DB를 함께 틀었으면 종 DB의 수위, 아니면 주 DB 트래픽의 읽기 수위. */
+	static WaterLevel readLevelForAdvice(WaterLevel replicaLevel, WaterLevel primaryReadLevel) {
+		return replicaLevel != null ? replicaLevel : primaryReadLevel;
 	}
 
 	private static void checkScaleOptions(Map<String, String> options) {
 		ScaleAdvice.checkNodes(nodes(options, "--read-nodes", 1), nodes(options, "--min-read-nodes", 1),
 				nodes(options, "--max-read-nodes", Integer.MAX_VALUE));
-		for (String name : List.of("--current-qps", "--current-read-qps", "--current-write-qps")) {
+		checkQpsOptions(options);
+	}
+
+	/** 지금의 초당 문장 수 옵션들은 0 이상의 유한한 수여야 한다. 음수·NaN·무한대는 탐색이나 확인을 시작하기 전에 거른다. */
+	static void checkQpsOptions(Map<String, String> options) {
+		for (String name : List.of("--current-qps", "--current-read-qps", "--current-write-qps", "--current-replica-qps")) {
 			double qps = number(options, name, 0);
 			if (!(qps >= 0) || Double.isInfinite(qps)) {
 				throw new IllegalArgumentException(name + "에는 0 이상의 수를 준다");
@@ -947,7 +993,8 @@ public final class Main {
 	/** 같은 평가에 설정 맵만 바꿔 끼운다. comparableProfiles가 뺀 맵을 평가 쪽에도 적용하려는 것이다. */
 	private static Evaluation withProfile(Evaluation e, Map<String, String> profile) {
 		return new Evaluation(e.evaluatedAt(), e.validDays(), profile, e.alarms(), e.unit(), e.traffic(), e.ceilingSpeed(),
-				e.stoppedBy(), e.ceilingQps(), e.currentQps(), e.low(), e.high(), e.ceilingSpeeds(), e.explorations());
+				e.stoppedBy(), e.ceilingQps(), e.currentQps(), e.low(), e.high(), e.ceilingSpeeds(), e.explorations(),
+				e.replica());
 	}
 
 	private static void manage(Map<String, String> options) throws Exception {
@@ -1018,6 +1065,8 @@ public final class Main {
 	}
 
 	private static void check(Map<String, String> options) throws Exception {
+		// explore와 같은 검사를 한다. 잘못 준 수는 평가 파일을 읽거나 붙기 전에 거른다
+		checkQpsOptions(options);
 		Evaluation evaluation = JSON.readValue(Path.of(required(options, "--evaluation")).toFile(), Evaluation.class);
 		String tracePath = options.get("--trace");
 		// 지금의 설정을 한 번만 읽어 무효 사유와 하드웨어 문구에 함께 쓴다. 설정 명령을 두 번 실행하지 않는다
@@ -1030,6 +1079,16 @@ public final class Main {
 		if (options.containsKey("--current-qps")) {
 			System.out.println(currentQpsLine(evaluation.ceilingQps(), number(options, "--current-qps", 0),
 					evaluation.low(), evaluation.high()));
+		}
+		// 종 DB를 함께 틀어 평가했으면 그 수위도 보여 준다. --current-replica-qps를 주면 다시 계산한다
+		Evaluation.Replica replica = evaluation.replica();
+		if (replica != null) {
+			System.out.printf("  종 DB: 상한 초당 %.0f, 수위 %.0f%%%n", replica.ceilingQps(),
+					replica.level(evaluation.low(), evaluation.high()).level() * 100);
+			if (options.containsKey("--current-replica-qps")) {
+				System.out.println(replicaLevelLine(number(options, "--current-replica-qps", 0), replica.ceilingQps(),
+						evaluation.low(), evaluation.high()));
+			}
 		}
 		// 되풀이한 평가면 위의 상한이 범위의 최솟값이라는 것을 밝힌다. 한 번 돌린 평가면 지금과 같다
 		CeilingRange range = evaluation.ceilingRange();
@@ -1088,7 +1147,8 @@ public final class Main {
 		Map<String, String> alarms = new TreeMap<>(e.alarms());
 		alarms.put("alarm-command", fingerprint(command));
 		return new Evaluation(e.evaluatedAt(), e.validDays(), e.profile(), alarms, e.unit(), e.traffic(), e.ceilingSpeed(),
-				e.stoppedBy(), e.ceilingQps(), e.currentQps(), e.low(), e.high(), e.ceilingSpeeds(), e.explorations());
+				e.stoppedBy(), e.ceilingQps(), e.currentQps(), e.low(), e.high(), e.ceilingSpeeds(), e.explorations(),
+				e.replica());
 	}
 
 	static String fingerprint(String text) {
