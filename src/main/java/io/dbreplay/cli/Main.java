@@ -481,6 +481,7 @@ public final class Main {
 				return;
 			}
 			System.out.printf("상한: %.2f배속%s%n", result.ceilingSpeed(), stoppedBySuffix(result.stoppedBy()));
+			singleRunNote(repeat).forEach(System.out::println);
 			ceilingSpeed = result.ceilingSpeed();
 			stoppedBy = result.stoppedBy();
 		}
@@ -667,6 +668,18 @@ public final class Main {
 			return String.format("%.2f배속에서도 버티지 못했다", startSpeed);
 		}
 		return String.format("%.2f배속%s", ceilingSpeed, stoppedBySuffix(stoppedBy));
+	}
+
+	/**
+	 * 한 번만 탐색했을 때 상한 밑에 붙이는 안내. 숫자 하나는 믿을 만해 보이지만 같은 절차의 상한이 크게 흔들렸다(실험 12).
+	 * 기본 횟수 1은 범수 님이 유지하기로 했고, 대신 이 줄을 붙인다(#14, #76). 평가 파일에는 넣지 않는다.
+	 */
+	static List<String> singleRunNote(int repeat) {
+		if (repeat != 1) {
+			return List.of();
+		}
+		return List.of("  한 번 탐색한 값이다. 같은 절차를 되풀이하면 크게 달라질 수 있다(실험 12에서 최대와 최소의 차이가 중앙값의 36~97%).",
+				"  --repeat N으로 범위를 본다");
 	}
 
 	/** 되풀이한 상한들의 요약 줄. 패키지 안에서 테스트할 수 있게 글자만 돌려준다. */
