@@ -254,6 +254,7 @@ public final class Main {
 		NewErrors newErrors;
 		ReplaySummary replicaSummary;
 		Map<String, double[]> metrics = Map.of();
+		List<String> failures = List.of();
 		try (MetricSampler sampler = withMetrics ? sampler(target, options) : new MetricSampler();
 				TraceReader trace = openTrace(required(options, "--trace"));
 				ResultWriter results = out == null ? null
@@ -263,6 +264,7 @@ public final class Main {
 			s = Replayer.run(trace, target, newErrors, replayOptions);
 			replicaSummary = replicaRun == null ? null : replicaRun.join();
 			metrics = sampler.stop();
+			failures = sampler.failures();
 		}
 		print(s, replayOptions);
 		printNewErrors(newErrors, required(options, "--trace"));
@@ -271,6 +273,7 @@ public final class Main {
 			print(replicaSummary, replicaOptions(options, replayOptions.speed()));
 		}
 		printMetrics(metrics);
+		printFailures(failures);
 		if (runOut != null) {
 			JSON.writeValue(Path.of(runOut).toFile(), RunRecord.of(Instant.now().truncatedTo(ChronoUnit.SECONDS).toString(),
 					unit(options).name().toLowerCase(Locale.ROOT), s, profile(target, options), metrics));
@@ -303,12 +306,15 @@ public final class Main {
 		JdbcTarget target = target(options);
 		long seconds = (long) number(options, "--seconds", 30);
 		Map<String, double[]> metrics;
+		List<String> failures = List.of();
 		try (MetricSampler sampler = sampler(target, options)) {
 			Thread.sleep(seconds * 1_000);
 			metrics = sampler.stop();
+			failures = sampler.failures();
 		}
 		System.out.printf("%d초 동안 뜬 지표%n", seconds);
 		printMetrics(metrics);
+		printFailures(failures);
 	}
 
 	private static MetricSampler sampler(JdbcTarget target, Map<String, String> options) throws Exception {
@@ -573,6 +579,8 @@ public final class Main {
 				s = Replayer.run(trace, target, r -> { }, replayOptions(options, speed));
 				replicaSummary = replicaRun == null ? null : replicaRun.join();
 				metrics = sampler.stop();
+				// 라운드 도중에 지표를 읽다 실패했으면 여기서 멈춘다. 그 뒤의 값이 없어 알람이 못 본 것을 버틴 것으로 읽게 된다
+				requireNoFailures(sampler.failures());
 			}
 			return new RoundData(speed, started, System.currentTimeMillis(), s, replicaSummary, metrics);
 		}, judge, exploreOptions, round -> {
@@ -662,6 +670,24 @@ public final class Main {
 		WaterLevel level = new WaterLevel(currentQps, ceilingQps, low, high);
 		return String.format("  지금의 초당 %.0f문장으로 다시 계산한 수위: %.0f%% (건강 구간 %.0f~%.0f%%) → %s",
 				currentQps, level.level() * 100, low * 100, high * 100, verdictName(level.verdict()));
+	}
+
+	/**
+	 * 라운드에서 지표를 읽다 실패했으면 탐색을 멈춘다. 그 뒤의 값이 없으면 알람이 못 본 것을 버틴 것으로 읽게 되어
+	 * 상한이 실제보다 높게 나온다.
+	 */
+	static void requireNoFailures(List<String> failures) {
+		if (!failures.isEmpty()) {
+			throw new IllegalStateException("이 라운드에서 지표를 읽다 실패했다: " + String.join("; ", failures)
+					+ ". 그 뒤의 값이 없어 알람이 못 본 것을 버틴 것으로 읽게 된다. 탐색을 멈춘다");
+		}
+	}
+
+	/** 표본기가 지표를 읽다 멈춘 것이 있으면 알린다. 그 뒤의 값은 빠져 있다. */
+	private static void printFailures(List<String> failures) {
+		if (!failures.isEmpty()) {
+			System.out.println("지표를 읽다 실패했다: " + String.join("; ", failures) + ". 그 뒤의 값은 빠져 있다");
+		}
 	}
 
 	private static Sandbox sandbox(JdbcTarget target, Map<String, String> options) {
