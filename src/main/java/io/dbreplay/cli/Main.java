@@ -461,10 +461,13 @@ public final class Main {
 
 		// 상한을 하나로 낼지, 되풀이해 범위로 낼지. 되풀이하지 않았으면 출력이 지금과 글자 하나 다르지 않다
 		CeilingRange range = null;
+		// 탐색마다의 라운드를 평가 파일에 남긴다. 되풀이하지 않았으면 하나짜리 목록이다
+		List<Explorer.Result> results = new ArrayList<>();
 		double ceilingSpeed;
 		RoundJudge.State stoppedBy;
 		if (repeat == 1) {
 			Explorer.Result result = exploreOnce(target, sandbox, resetCommand, tracePath, options, judge, exploreOptions);
+			results.add(result);
 			System.out.println();
 			if (result.ceilingSpeed() == 0) {
 				System.out.printf("상한: %.2f배속에서도 버티지 못했다. 녹화한 부하보다 낮다%n", exploreOptions.startSpeed());
@@ -475,7 +478,6 @@ public final class Main {
 			stoppedBy = result.stoppedBy();
 		}
 		else {
-			List<Explorer.Result> results = new ArrayList<>();
 			for (int i = 1; i <= repeat; i++) {
 				System.out.printf("=== 탐색 %d/%d ===%n", i, repeat);
 				Explorer.Result one = exploreOnce(target, sandbox, resetCommand, tracePath, options, judge, exploreOptions);
@@ -527,11 +529,15 @@ public final class Main {
 
 		String out = options.get("--out");
 		if (out != null) {
+			// 탐색마다의 라운드를 리포트의 상승 과정에 쓰려고 남긴다
+			List<List<Evaluation.RoundLog>> explorations = results.stream()
+					.map(exploration -> exploration.rounds().stream().map(Evaluation.RoundLog::of).toList())
+					.toList();
 			Evaluation evaluation = new Evaluation(Instant.now().truncatedTo(ChronoUnit.SECONDS).toString(),
 					(int) number(options, "--valid-days", 30), profile(target, options), alarmSettings,
 					unit(options).name().toLowerCase(Locale.ROOT), traffic, ceilingSpeed,
 					stoppedBy == null ? null : stoppedBy.name(), ceilingQps, currentQps,
-					level.low(), level.high(), range == null ? null : range.ceilings());
+					level.low(), level.high(), range == null ? null : range.ceilings(), explorations);
 			JSON.writeValue(Path.of(out).toFile(), evaluation);
 			System.out.printf("평가를 %s에 적었다. %d일 동안 유효하다%n", out, evaluation.validDays());
 		}
@@ -915,7 +921,7 @@ public final class Main {
 	/** 같은 평가에 설정 맵만 바꿔 끼운다. comparableProfiles가 뺀 맵을 평가 쪽에도 적용하려는 것이다. */
 	private static Evaluation withProfile(Evaluation e, Map<String, String> profile) {
 		return new Evaluation(e.evaluatedAt(), e.validDays(), profile, e.alarms(), e.unit(), e.traffic(), e.ceilingSpeed(),
-				e.stoppedBy(), e.ceilingQps(), e.currentQps(), e.low(), e.high(), e.ceilingSpeeds());
+				e.stoppedBy(), e.ceilingQps(), e.currentQps(), e.low(), e.high(), e.ceilingSpeeds(), e.explorations());
 	}
 
 	private static void manage(Map<String, String> options) throws Exception {
@@ -1056,7 +1062,7 @@ public final class Main {
 		Map<String, String> alarms = new TreeMap<>(e.alarms());
 		alarms.put("alarm-command", fingerprint(command));
 		return new Evaluation(e.evaluatedAt(), e.validDays(), e.profile(), alarms, e.unit(), e.traffic(), e.ceilingSpeed(),
-				e.stoppedBy(), e.ceilingQps(), e.currentQps(), e.low(), e.high(), e.ceilingSpeeds());
+				e.stoppedBy(), e.ceilingQps(), e.currentQps(), e.low(), e.high(), e.ceilingSpeeds(), e.explorations());
 	}
 
 	static String fingerprint(String text) {

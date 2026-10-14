@@ -3,6 +3,7 @@ package io.dbreplay.report;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.Writer;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -183,6 +184,72 @@ public final class MarkdownReport {
 		else {
 			out.printf("되풀이한 쪽의 상한은 가장 낮은 값이다. 한 번만 돌린 쪽은 그 한 번의 값이다.%n%n");
 		}
+		// 라운드를 남긴 평가가 하나라도 있으면 그 상한이 나온 과정을 따로 낸다. 둘 다 없으면 지금과 같다
+		if (hasRounds(before) || hasRounds(after)) {
+			ascending(out, "변경 전", before);
+			ascending(out, "변경 후", after);
+		}
+	}
+
+	private static boolean hasRounds(Evaluation evaluation) {
+		return evaluation.explorations() != null && !evaluation.explorations().isEmpty();
+	}
+
+	/** 상한이 어떤 라운드들에서 나왔는지를 표로 낸다. 되풀이했으면 탐색마다 라운드가 이어서 나온다. */
+	private static void ascending(PrintWriter out, String label, Evaluation evaluation) {
+		out.printf("### 상승 과정: %s%n%n", label);
+		if (!hasRounds(evaluation)) {
+			out.printf("라운드를 남기지 않은 평가 파일이다.%n%n");
+			return;
+		}
+		// 지표 열은 그 평가의 라운드들에 나온 이름 전부를 이름 순으로 둔다. 어떤 라운드에 없으면 그 칸은 -
+		Set<String> names = new TreeSet<>();
+		for (List<Evaluation.RoundLog> rounds : evaluation.explorations()) {
+			for (Evaluation.RoundLog round : rounds) {
+				names.addAll(round.metrics().keySet());
+			}
+		}
+		StringBuilder header = new StringBuilder("| 탐색 | 배속 | 판정 | 왜곡 |");
+		names.forEach(name -> header.append(" ").append(name).append(" (평균 / 최대) |"));
+		header.append(" 이유 |");
+		out.println(header);
+		StringBuilder divider = new StringBuilder("|---|---|---|---|");
+		names.forEach(name -> divider.append("---|"));
+		divider.append("---|");
+		out.println(divider);
+		int exploration = 0;
+		for (List<Evaluation.RoundLog> rounds : evaluation.explorations()) {
+			exploration++;
+			for (Evaluation.RoundLog round : rounds) {
+				List<String> cells = new ArrayList<>();
+				cells.add(Integer.toString(exploration));
+				cells.add(String.format("%.2f", round.speed()));
+				cells.add(verdictName(round.verdict()));
+				cells.add(String.format("%.1f%%", round.distortion() * 100));
+				for (String name : names) {
+					List<Double> stats = round.metrics().get(name);
+					cells.add(stats == null ? "-" : String.format("%.1f / %.1f", stats.get(0), stats.get(1)));
+				}
+				cells.add(round.reason() == null ? "" : cell(round.reason()));
+				StringBuilder row = new StringBuilder("|");
+				for (String cell : cells) {
+					// 빈 칸(이유 없음)도 한 칸으로 둔다. 칸마다 앞뒤에 공백을 넣으면 빈 칸이 두 칸이 된다
+					row.append(cell.isEmpty() ? " " : " " + cell + " ").append("|");
+				}
+				out.println(row);
+			}
+		}
+		out.println();
+	}
+
+	/** 라운드의 판정 이름을 표에 쓸 한국어로 바꾼다. 모르는 값이면 그 글자 그대로 둔다. */
+	private static String verdictName(String verdict) {
+		return switch (verdict) {
+			case "HELD" -> "버팀";
+			case "OVERLOADED" -> "과부하";
+			case "DISTORTED" -> "왜곡";
+			default -> verdict;
+		};
 	}
 
 	/** 되풀이한 평가의 상한 범위 칸. 되풀이하지 않았으면 "한 번"이다. */

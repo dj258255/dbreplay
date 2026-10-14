@@ -106,4 +106,59 @@ class MarkdownReportTest {
 		assertFalse(md.contains("되풀이한"));
 		assertTrue(md.contains("상한은 탐색을 한 번씩 돌린 값이다."));
 	}
+
+	private static Evaluation withRounds(double ceiling, List<List<Evaluation.RoundLog>> explorations) {
+		return new Evaluation("2026-10-12T00:00:00Z", 30, Map.of(), Map.of(), "transaction",
+				new TrafficModel(200, 1_000_000, Map.of()), ceiling, "OVERLOADED", ceiling * 4_000, 4_000, 0.3, 0.5,
+				null, explorations);
+	}
+
+	/** 한쪽만 라운드를 남겼으면 그쪽 표가 나오고, 다른 쪽은 남기지 않았다고 적는다. */
+	@Test
+	void showsTheClimbForTheSideThatKeptRounds() throws IOException {
+		Evaluation withClimb = withRounds(9.0, List.of(List.of(
+				new Evaluation.RoundLog(1.0, "HELD", null, 0.0, Map.of("active_sessions", List.of(1.2, 5.0))),
+				new Evaluation.RoundLog(4.0, "OVERLOADED", "active_sessions이(가) 3번 연속 32 이상 (최대 390)", 0.004,
+						Map.of("active_sessions", List.of(40.1, 390.0))))));
+		String md = report(null, null, withClimb, evaluation(3.5));
+
+		assertTrue(md.contains("### 상승 과정: 변경 전"));
+		assertTrue(md.contains("| 1 | 1.00 | 버팀 | 0.0% | 1.2 / 5.0 | |"), md);
+		assertTrue(md.contains("| 1 | 4.00 | 과부하 | 0.4% | 40.1 / 390.0 | active_sessions이(가) 3번 연속 32 이상 (최대 390) |"), md);
+		assertTrue(md.contains("### 상승 과정: 변경 후"));
+		assertTrue(md.contains("라운드를 남기지 않은 평가 파일이다."));
+	}
+
+	/** 두 쪽 다 라운드를 남기지 않았으면 상승 과정을 넣지 않는다. */
+	@Test
+	void omitsTheClimbWhenNeitherSideKeptRounds() throws IOException {
+		String md = report(null, null, evaluation(9.0), evaluation(3.5));
+
+		assertFalse(md.contains("상승 과정"));
+	}
+
+	/** 되풀이한 평가면 탐색마다 라운드가 이어서 나오고 탐색 번호가 1, 2로 붙는다. */
+	@Test
+	void numbersEachExplorationInTheClimb() throws IOException {
+		Evaluation withClimb = withRounds(9.0, List.of(
+				List.of(new Evaluation.RoundLog(1.0, "HELD", null, 0.0, Map.of("active_sessions", List.of(1.0, 2.0)))),
+				List.of(new Evaluation.RoundLog(2.0, "HELD", null, 0.0, Map.of("active_sessions", List.of(3.0, 4.0))))));
+		String md = report(null, null, withClimb, evaluation(3.5));
+
+		assertTrue(md.contains("| 1 | 1.00 |"), md);
+		assertTrue(md.contains("| 2 | 2.00 |"), md);
+	}
+
+	/** 어떤 라운드에 없는 지표의 칸은 -이고, 이유에 세로선이 있어도 표의 열 수가 맞는다. */
+	@Test
+	void leavesMissingMetricsEmptyAndKeepsTheReasonInOneCell() throws IOException {
+		Evaluation withClimb = withRounds(9.0, List.of(List.of(
+				new Evaluation.RoundLog(1.0, "HELD", null, 0.0, Map.of("active_sessions", List.of(1.0, 2.0))),
+				new Evaluation.RoundLog(2.0, "OVERLOADED", "cpu | busy", 0.1,
+						Map.of("active_sessions", List.of(3.0, 4.0), "load1", List.of(7.0, 8.0))))));
+		String md = report(null, null, withClimb, evaluation(3.5));
+
+		assertTrue(md.contains("| 1 | 1.00 | 버팀 | 0.0% | 1.0 / 2.0 | - | |"), md);
+		assertTrue(md.contains("cpu \\| busy"), md);
+	}
 }
