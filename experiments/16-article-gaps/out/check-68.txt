@@ -1,0 +1,7 @@
+끊을 표본기 연결 (14초 뒤): 27472 
+탐색이 멈췄다 (종료 코드 1)
+Exception in thread "main" java.lang.IllegalStateException: 이 라운드에서 지표를 읽다 실패했다: DbMetricSource이(가) 지표를 읽다 멈췄다 (CommunicationsException). 그 뒤의 값이 없어 알람이 못 본 것을 버틴 것으로 읽게 된다. 탐색을 멈춘다
+== replay는 끝까지 가고 알린다
+replay 종료 코드 0
+문장 37761개를 연결 113개로 1.0배속에 틀었다 (단위: 트랜잭션)
+지표를 읽다 실패했다: DbMetricSource이(가) 지표를 읽다 멈췄다 (CommunicationsException). 그 뒤의 값은 빠져 있다

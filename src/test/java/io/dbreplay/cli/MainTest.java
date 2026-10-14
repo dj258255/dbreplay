@@ -247,4 +247,16 @@ class MainTest {
 		assertTrue(healthy.contains("40%"), healthy);
 		assertTrue(healthy.contains("적정"), healthy);
 	}
+
+	/** 라운드에서 지표를 읽다 실패했으면 탐색을 멈춘다. 그 뒤의 값이 없으면 못 본 것을 버틴 것으로 읽게 된다. */
+	@Test
+	void stopsTheExplorationWhenMetricsFailedMidRound() {
+		Main.requireNoFailures(List.of());
+
+		IllegalStateException e = assertThrows(IllegalStateException.class,
+				() -> Main.requireNoFailures(List.of("DbMetricSource이(가) 지표를 읽다 멈췄다 (SQLException)")));
+
+		assertTrue(e.getMessage().contains("DbMetricSource이(가) 지표를 읽다 멈췄다"), e.getMessage());
+		assertTrue(e.getMessage().contains("탐색을 멈춘다"), e.getMessage());
+	}
 }

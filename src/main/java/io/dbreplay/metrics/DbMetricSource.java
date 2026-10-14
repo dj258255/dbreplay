@@ -4,7 +4,9 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import io.dbreplay.replay.JdbcTarget;
@@ -78,9 +80,10 @@ public final class DbMetricSource implements MetricSource {
 		// 조용히 안 울리게 된다
 		this.rateStatement = prepare(postgres ? POSTGRES_RATE : MYSQL_RATE, null);
 		this.slowFinishedStatement = postgres ? null : prepare(MYSQL_SLOW_FINISHED, slowMillis);
-		// 표본기 자신이 표본 하나에 보내는 문장 수. MySQL은 조회 셋, PostgreSQL은 둘이다
+		// 표본기 자신이 보내는 조회 수는 Counters가 표본마다 센다. 상수로 빼면 느리게 끝난 문장 조회가 꺼졌을 때
+		// 실제보다 많이 빼게 된다
 		this.counters = new Counters(postgres ? TPS : QPS,
-				rateStatement == null ? null : new StatementCounter(rateStatement), postgres ? 2 : 3,
+				rateStatement == null ? null : new StatementCounter(rateStatement),
 				slowFinishedStatement == null ? null : new StatementCounter(slowFinishedStatement));
 	}
 
@@ -111,6 +114,11 @@ public final class DbMetricSource implements MetricSource {
 		return values;
 	}
 
+	@Override
+	public List<String> failures() {
+		return counters.failures();
+	}
+
 	/** 누적 값을 한 번 읽는 곳. 표본기 자신의 PreparedStatement를 감싼 것이고, 테스트에서는 가짜를 넣는다. */
 	interface Counter {
 		double read() throws SQLException;
@@ -125,27 +133,47 @@ public final class DbMetricSource implements MetricSource {
 
 		private final String rateName;
 		private final Counter rate;
-		private final double ownPerSample;
 		private final Counter slowFinished;
+		private final List<String> failures = new ArrayList<>();
 
+		private boolean rateProduced;
 		private boolean rateBroken;
 		private Double previousRate;
 		private long previousRateNanos;
+		private boolean slowProduced;
 		private boolean slowFinishedBroken;
-		private boolean slowBaselineSet;
-		private long slowBaseline;
+		private boolean slowSeen;
 		private long previousSlowRaw;
+		private long slowSum;
 
-		Counters(String rateName, Counter rate, double ownPerSample, Counter slowFinished) {
+		Counters(String rateName, Counter rate, Counter slowFinished) {
 			this.rateName = rateName;
 			this.rate = rate;
-			this.ownPerSample = ownPerSample;
 			this.slowFinished = slowFinished;
+		}
+
+		List<String> failures() {
+			return List.copyOf(failures);
 		}
 
 		void addTo(Map<String, Double> values, long nanos) {
 			addRate(values, nanos);
 			addSlowFinished(values);
+		}
+
+		/**
+		 * 두 초당 횟수 표본 사이에 이 연결이 보낸 조회 수. 기존 조회 하나 + 초당 횟수 조회 하나 + (느리게 끝난 문장
+		 * 조회가 켜져 있으면) 하나다. 꺼진 조회를 세면 실제보다 많이 빼게 된다.
+		 */
+		private double ownCount() {
+			double own = 1;
+			if (rate != null && !rateBroken) {
+				own++;
+			}
+			if (slowFinished != null && !slowFinishedBroken) {
+				own++;
+			}
+			return own;
 		}
 
 		/** 직전 표본과 지금 표본의 누적 값 차이로 초당 횟수를 낸다. 첫 표본에는 직전 값이 없어 내지 않는다. */
@@ -159,16 +187,25 @@ public final class DbMetricSource implements MetricSource {
 			}
 			catch (SQLException e) {
 				rateBroken = true;
+				// 처음부터 실패한 것은 그 지표가 원래 없는 것이다. 값을 낸 뒤 끊긴 것만 적는다
+				if (rateProduced) {
+					failures.add(rateName + " 조회가 도중에 실패했다 (" + state(e) + ")");
+				}
 				return;
 			}
 			if (previousRate != null) {
-				values.put(rateName, rate(previousRate, previousRateNanos, current, nanos, ownPerSample));
+				values.put(rateName, rate(previousRate, previousRateNanos, current, nanos, ownCount()));
+				rateProduced = true;
 			}
 			previousRate = current;
 			previousRateNanos = nanos;
 		}
 
-		/** 첫 표본을 기준으로 삼고 그 뒤의 증가분만 낸다. 덤프를 되붓는 문장들이 이미 쌓여 있다. */
+		/**
+		 * 표본을 뜨기 시작한 뒤 기준 시간을 넘겨 끝난 문장의 누적 수. 첫 표본은 0이다. 서버의 값이 늘었으면 늘어난
+		 * 만큼 더하고, 줄었으면(서버가 분포를 비웠다) 지금의 서버 값만큼 더한다(비운 뒤 다시 쌓인 것이다). 이렇게
+		 * 하면 이 지표는 줄지 않고, 분포를 비우기 전에 센 수도 사라지지 않는다.
+		 */
 		private void addSlowFinished(Map<String, Double> values) {
 			if (slowFinished == null || slowFinishedBroken) {
 				return;
@@ -179,18 +216,23 @@ public final class DbMetricSource implements MetricSource {
 			}
 			catch (SQLException e) {
 				slowFinishedBroken = true;
+				if (slowProduced) {
+					failures.add(SLOW_FINISHED_TOTAL + " 조회가 도중에 실패했다 (" + state(e) + ")");
+				}
 				return;
 			}
-			if (!slowBaselineSet) {
-				slowBaseline = raw;
-				slowBaselineSet = true;
+			if (slowSeen) {
+				slowSum += raw >= previousSlowRaw ? raw - previousSlowRaw : raw;
 			}
-			else if (raw < previousSlowRaw) {
-				// 서버가 분포를 비웠다. 기준을 다시 잡는다
-				slowBaseline = raw;
-			}
-			values.put(SLOW_FINISHED_TOTAL, (double) (raw - slowBaseline));
+			slowSeen = true;
 			previousSlowRaw = raw;
+			values.put(SLOW_FINISHED_TOTAL, (double) slowSum);
+			slowProduced = true;
+		}
+
+		/** SQLState가 있으면 그것을, 없으면 예외의 클래스 이름을 쓴다. 메시지는 싣지 않는다(접속 정보가 섞일 수 있다). */
+		private static String state(SQLException e) {
+			return e.getSQLState() != null ? e.getSQLState() : e.getClass().getSimpleName();
 		}
 	}
 

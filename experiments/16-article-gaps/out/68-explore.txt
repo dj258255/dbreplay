@@ -1,0 +1,9 @@
+라운드         배속     계획(초)     실제(초)     늦음 p99        왜곡      실행 중  판정
+Exception in thread "main" java.lang.IllegalStateException: 이 라운드에서 지표를 읽다 실패했다: DbMetricSource이(가) 지표를 읽다 멈췄다 (CommunicationsException). 그 뒤의 값이 없어 알람이 못 본 것을 버틴 것으로 읽게 된다. 탐색을 멈춘다
+	at io.dbreplay.cli.Main.requireNoFailures(Main.java:681)
+	at io.dbreplay.cli.Main.lambda$exploreOnce$0(Main.java:583)
+	at io.dbreplay.explore.Explorer.play(Explorer.java:90)
+	at io.dbreplay.explore.Explorer.explore(Explorer.java:59)
+	at io.dbreplay.cli.Main.exploreOnce(Main.java:566)
+	at io.dbreplay.cli.Main.explore(Main.java:475)
+	at io.dbreplay.cli.Main.main(Main.java:188)
