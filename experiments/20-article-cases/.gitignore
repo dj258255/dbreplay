@@ -2,3 +2,4 @@ out/*.jsonl
 out/*.sql
 out/*-slow.log
 # out/sessions.txt는 사례 3의 근거라 올린다(바깥 알람의 실패 표본)
+out/109/*.jsonl
