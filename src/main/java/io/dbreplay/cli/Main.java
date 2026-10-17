@@ -733,8 +733,9 @@ public final class Main {
 		String every = range.ceilings().stream().map(ceiling -> String.format("%.2f", ceiling))
 				.collect(java.util.stream.Collectors.joining(", "));
 		return List.of(
-				String.format("상한: 최소 %.2f, 중앙값 %.2f, 최대 %.2f배속 (%d번 탐색, 퍼짐 %.0f%%)", range.min(),
-						range.median(), range.max(), range.count(), range.spread() * 100),
+				String.format("상한: 최소 %.2f, 중앙값 %.2f, 최대 %.2f배속 (%d번 탐색, %s)", range.min(),
+						range.median(), range.max(), range.count(),
+						Double.isNaN(range.spread()) ? "퍼짐은 중앙값이 0이라 낼 수 없다" : String.format("퍼짐 %.0f%%", range.spread() * 100)),
 				"  탐색마다: " + every,
 				"  수위는 가장 낮은 상한으로 판정한다");
 	}
