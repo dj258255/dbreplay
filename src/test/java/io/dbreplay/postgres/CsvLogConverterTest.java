@@ -11,12 +11,15 @@ import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.junit.jupiter.api.Test;
 
 import io.dbreplay.convert.ConvertSummary;
 import io.dbreplay.convert.HeadPolicy;
+import io.dbreplay.convert.RecordBuffer;
+import io.dbreplay.convert.ScopeFilter;
 import io.dbreplay.trace.TraceReader;
 import io.dbreplay.trace.TraceRecord;
 
@@ -44,10 +47,15 @@ class CsvLogConverterTest {
 
 	/** csvlog 한 행. 16판의 칸 순서대로 필요한 칸만 채운다. */
 	private static String row(String time, String session, String severity, String message, String detail, String query) {
+		return rowAs(time, session, "postgres", "shop", severity, message, detail, query);
+	}
+
+	private static String rowAs(String time, String session, String user, String database, String severity, String message,
+			String detail, String query) {
 		String[] columns = new String[26];
 		columns[0] = "2026-10-11 " + time + " UTC";
-		columns[1] = "postgres";
-		columns[2] = "shop";
+		columns[1] = user;
+		columns[2] = database;
 		columns[3] = "953";
 		columns[5] = session;
 		columns[11] = severity;
@@ -177,5 +185,35 @@ class CsvLogConverterTest {
 				PgParameters.inline("UPDATE t SET a = $1, b = $2 WHERE id = $10 AND c = '$1' AND d = $$ $1 $$ AND e = $tag$ $2 $tag$ -- $1",
 						"parameters: $1 = '5', $2 = NULL, $10 = 'it''s'"));
 		assertEquals("SELECT $1", PgParameters.inline("SELECT $1", null));
+	}
+
+	/** 대상 데이터베이스의 문장만 남기고, 뺀 계정의 연결은 통째로 뺀다. 남긴 문장이 없는 연결은 종료 줄도 없다 (#83). */
+	@Test
+	void keepsOnlyTheTargetDatabaseAndDropsExcludedUsers() throws IOException {
+		String csv = rowAs("00:00:01.000", "a.1", "app", "shop", "LOG", "duration: 0.010 ms  statement: BEGIN", null, null)
+				+ rowAs("00:00:01.001", "a.1", "app", "shop", "LOG", "duration: 0.100 ms  statement: UPDATE t SET v = 1", null, null)
+				+ rowAs("00:00:01.002", "a.1", "app", "shop", "LOG", "duration: 0.050 ms  statement: COMMIT", null, null)
+				+ rowAs("00:00:01.003", "b.2", "backup", "shop", "LOG", "duration: 5.000 ms  statement: SELECT * FROM t", null, null)
+				+ rowAs("00:00:01.004", "c.3", "app", "billing", "LOG", "duration: 0.200 ms  statement: SELECT 1", null, null)
+				+ rowAs("00:00:01.100", "a.1", "app", "shop", "LOG", "disconnection: session time: 0:00:01.000", null, null)
+				+ rowAs("00:00:01.100", "b.2", "backup", "shop", "LOG", "disconnection: session time: 0:00:01.000", null, null)
+				+ rowAs("00:00:01.100", "c.3", "app", "billing", "LOG", "disconnection: session time: 0:00:01.000", null, null);
+		ScopeFilter scope = new ScopeFilter(Set.of("shop"), Set.of("backup"));
+		StringWriter out = new StringWriter();
+		try (RecordBuffer buffer = new RecordBuffer()) {
+			CsvLogConverter.convert(new StringReader(csv), out, HeadPolicy::byDefault, buffer, null, null, scope);
+		}
+		List<TraceRecord> records = new ArrayList<>();
+		try (TraceReader reader = new TraceReader(new StringReader(out.toString()))) {
+			assertEquals("database=shop;exclude-user=backup", reader.header().scope());
+			for (TraceRecord r; (r = reader.next()) != null;) {
+				records.add(r);
+			}
+		}
+		assertEquals(4, records.size());
+		assertTrue(records.stream().allMatch(r -> r.session().equals("a.1")));
+		assertTrue(records.getLast().endsSession());
+		assertEquals(2, scope.droppedStatements());
+		assertEquals(2, scope.droppedCloses());
 	}
 }

@@ -20,6 +20,7 @@ import io.dbreplay.convert.ConvertSummary;
 import io.dbreplay.convert.HeadPolicy;
 import io.dbreplay.convert.LiteralMasker;
 import io.dbreplay.convert.RecordBuffer;
+import io.dbreplay.convert.ScopeFilter;
 import io.dbreplay.convert.SessionHead;
 import io.dbreplay.convert.SqlWords;
 import io.dbreplay.trace.TraceHeader;
@@ -38,6 +39,7 @@ public final class CsvLogConverter {
 
 	// csvlog의 칸 순서. 13판부터 앞의 23칸은 같고 뒤에 칸이 더해져 왔다
 	private static final int LOG_TIME = 0;
+	private static final int USER_NAME = 1;
 	private static final int DATABASE = 2;
 	private static final int SESSION_ID = 5;
 	private static final int SEVERITY = 11;
@@ -84,9 +86,15 @@ public final class CsvLogConverter {
 	 */
 	public static ConvertSummary convert(Reader csvLog, Writer trace, HeadPolicy headPolicy, RecordBuffer buffer,
 			LiteralMasker masker, String maskName) throws IOException {
+		return convert(csvLog, trace, headPolicy, buffer, masker, maskName, ScopeFilter.all());
+	}
+
+	/** @param scope 재생 대상의 SQL만 남긴다. 계정과 데이터베이스는 csvlog의 user_name, database_name 칸에서 읽는다 */
+	public static ConvertSummary convert(Reader csvLog, Writer trace, HeadPolicy headPolicy, RecordBuffer buffer,
+			LiteralMasker masker, String maskName, ScopeFilter scope) throws IOException {
 		CsvReader reader = new CsvReader(csvLog);
-		Map<String, Session> sessions = new HashMap<>();
-		long entries = 0, ignored = 0, skipped = 0, clamped = 0;
+		Emitter emitter = new Emitter(buffer, headPolicy, masker, scope);
+		long entries = 0, ignored = 0, skipped = 0;
 
 		for (List<String> row; (row = reader.next()) != null;) {
 			entries++;
@@ -117,9 +125,7 @@ public final class CsvLogConverter {
 					error = FAILED;
 				}
 				else if (message.startsWith("disconnection: ")) {
-					Session session = sessions.remove(sessionId);
-					long at = session == null ? loggedMicros : Math.max(loggedMicros, session.lastStartMicros);
-					buffer.add(TraceRecord.close(sessionId, at));
+					emitter.close(sessionId, loggedMicros);
 					continue;
 				}
 				else {
@@ -132,13 +138,64 @@ public final class CsvLogConverter {
 				continue;
 			}
 
-			sql = stripSemicolon(sql.strip());
-			if (SqlWords.ownStatement(sql)) {
+			if (!emitter.statement(sessionId, loggedMicros - durationMicros, durationMicros, sql, row.get(DATABASE), row.get(USER_NAME),
+					error)) {
 				ignored++; // 이 도구의 표본기가 보낸 조회
-				continue;
+			}
+		}
+
+		RecordBuffer.Written w = buffer.write(trace, TraceHeader.of("postgresql", "csvlog").withMask(maskName).withScope(scope.describe()));
+		return new ConvertSummary(entries, w.statements(), w.closes(), w.sessions(), ignored,
+				buffer.droppedCount(), skipped, emitter.clamped);
+	}
+
+	/**
+	 * 패킷 캡처에서 해석한 문장으로 트래픽 파일을 만든다(#79). 트랜잭션 경계, 머리 정책, 가림은 csvlog와 같은 코드가 한다.
+	 */
+	public static ConvertSummary convert(PostgresCapture capture, Writer trace, HeadPolicy headPolicy, RecordBuffer buffer,
+			LiteralMasker masker, String maskName, ScopeFilter scope) throws IOException {
+		Emitter emitter = new Emitter(buffer, headPolicy, masker, scope);
+		long entries = 0, ignored = 0;
+		for (PostgresCapture.Entry e; (e = capture.next()) != null;) {
+			entries++;
+			if (e.close()) {
+				emitter.close(e.session(), e.startMicros());
+			}
+			else if (!emitter.statement(e.session(), e.startMicros(), e.durationMicros(), e.sql(), e.database(), e.user(), e.error())) {
+				ignored++;
+			}
+		}
+		RecordBuffer.Written w = buffer.write(trace, TraceHeader.of("postgresql", "pcap").withMask(maskName).withScope(scope.describe()));
+		return new ConvertSummary(entries, w.statements(), w.closes(), w.sessions(), ignored, buffer.droppedCount(), capture.skipped(),
+				emitter.clamped);
+	}
+
+	/** 문장과 연결 종료를 트래픽 레코드로 쌓는다. csvlog와 패킷 캡처가 함께 쓴다. */
+	private static final class Emitter {
+
+		private final RecordBuffer buffer;
+		private final HeadPolicy headPolicy;
+		private final LiteralMasker masker;
+		private final ScopeFilter scope;
+		private final Map<String, Session> sessions = new HashMap<>();
+		long clamped;
+
+		Emitter(RecordBuffer buffer, HeadPolicy headPolicy, LiteralMasker masker, ScopeFilter scope) {
+			this.buffer = buffer;
+			this.headPolicy = headPolicy;
+			this.masker = masker;
+			this.scope = scope;
+		}
+
+		/** @return 이 도구 자신의 조회라서 뺐으면 거짓 */
+		boolean statement(String sessionId, long startMicros, long durationMicros, String rawSql, String database, String user,
+				Integer error) throws IOException {
+			String sql = stripSemicolon(rawSql.strip());
+			if (SqlWords.ownStatement(sql)) {
+				return false;
 			}
 			Session session = sessions.computeIfAbsent(sessionId, id -> new Session());
-			long start = loggedMicros - durationMicros;
+			long start = startMicros;
 			if (start < session.lastStartMicros) {
 				start = session.lastStartMicros;
 				clamped++;
@@ -148,21 +205,29 @@ public final class CsvLogConverter {
 			PgTransactionTracker.Kind kind = PgTransactionTracker.kindOf(sql);
 			boolean isEnd = kind == PgTransactionTracker.Kind.END || kind == PgTransactionTracker.Kind.END_AND_CHAIN;
 			boolean orphanEnd = isEnd && !session.tracker.inTransaction();
+			// 걸러 내는 문장도 트랜잭션 추적에는 넣는다. 걸러 낸 COMMIT을 못 보면 남긴 문장들이 끝난 트랜잭션에 묶인다
 			Long txn = session.tracker.assign(kind);
+			if (!scope.keeps(sessionId, database, user)) {
+				return true;
+			}
 			long index = buffer.add(new TraceRecord(sessionId, start, durationMicros,
-					masker == null ? sql : masker.mask(sql), row.get(DATABASE),
-					error, null, txn, null));
+					masker == null ? sql : masker.mask(sql), database, error, null, txn, null));
 			if (kind == PgTransactionTracker.Kind.OTHER) {
 				session.head.statement(index, sql);
 			}
 			else {
 				session.head.boundary(sessionId, index, orphanEnd, sql, headPolicy, buffer);
 			}
+			return true;
 		}
 
-		RecordBuffer.Written w = buffer.write(trace, TraceHeader.of("postgresql", "csvlog").withMask(maskName));
-		return new ConvertSummary(entries, w.statements(), w.closes(), w.sessions(), ignored,
-				buffer.droppedCount(), skipped, clamped);
+		void close(String sessionId, long loggedMicros) throws IOException {
+			Session session = sessions.remove(sessionId);
+			long at = session == null ? loggedMicros : Math.max(loggedMicros, session.lastStartMicros);
+			if (scope.keepsClose(sessionId)) {
+				buffer.add(TraceRecord.close(sessionId, at));
+			}
+		}
 	}
 
 	private static String stripSemicolon(String s) {
