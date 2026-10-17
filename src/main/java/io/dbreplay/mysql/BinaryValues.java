@@ -32,7 +32,12 @@ final class BinaryValues {
 	}
 
 	private static String string(ByteBuffer b) {
-		byte[] bytes = new byte[(int) MysqlCapture.lenenc(b)];
+		long length = MysqlCapture.lenenc(b);
+		// 패킷에 남은 것보다 긴 길이는 깨진 것이다. 그 길이로 메모리를 잡지 않는다(커밋 뒤 보안 검토의 지적)
+		if (length < 0 || length > b.remaining()) {
+			throw new IllegalArgumentException("인자의 길이가 패킷보다 길다");
+		}
+		byte[] bytes = new byte[(int) length];
 		b.get(bytes);
 		String text = MysqlCapture.utf8(bytes);
 		if (text == null) {

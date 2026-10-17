@@ -27,6 +27,8 @@ public final class PcapReader {
 	private static final int RAW_OLD = 12;
 	private static final int LINUX_SLL = 113;
 	private static final int LINUX_SLL2 = 276;
+	/** 패킷 하나의 길이로 믿을 수 있는 상한. tcpdump의 기본 스냅 길이(262,144)다. 넘으면 파일이 깨진 것으로 본다 */
+	static final int MAX_PACKET = 262_144;
 
 	private final DataInputStream in;
 	private final ByteOrder order;
@@ -75,6 +77,10 @@ public final class PcapReader {
 			long fraction = r.getInt() & 0xffff_ffffL;
 			int captured = r.getInt();
 			int original = r.getInt();
+			// 깨졌거나 조작된 파일의 길이를 믿고 메모리를 잡지 않는다(커밋 뒤 보안 검토의 지적)
+			if (captured < 0 || captured > MAX_PACKET) {
+				throw new IOException("pcap 레코드의 길이가 이상하다: " + captured + ". 파일이 깨졌다");
+			}
 			byte[] packet = in.readNBytes(captured);
 			if (packet.length < captured) {
 				throw new EOFException("pcap 파일이 패킷 중간에서 끝났다");

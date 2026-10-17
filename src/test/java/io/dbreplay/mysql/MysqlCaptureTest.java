@@ -144,6 +144,24 @@ class MysqlCaptureTest {
 		assertTrue(losses[0].startsWith("시작을 보지 못한 연결 1, 조각을 놓친 연결 1"), losses[0]);
 	}
 
+	/** 깨진 캡처의 길이를 믿고 메모리를 잡지 않는다. 레코드 길이가 이상하면 멈추고, 인자 길이가 패킷보다 길면 그 연결만 버린다. */
+	@Test
+	void refusesLengthsLongerThanTheData() throws IOException {
+		byte[] header = new byte[24];
+		java.nio.ByteBuffer.wrap(header).order(java.nio.ByteOrder.LITTLE_ENDIAN).putInt(0xa1b2c3d4).putShort((short) 2).putShort((short) 4)
+				.putInt(0).putInt(0).putInt(65535).putInt(1);
+		byte[] record = new byte[16];
+		java.nio.ByteBuffer.wrap(record).order(java.nio.ByteOrder.LITTLE_ENDIAN).putInt(0).putInt(0).putInt(Integer.MAX_VALUE).putInt(0);
+		byte[] file = new byte[40];
+		System.arraycopy(header, 0, file, 0, 24);
+		System.arraycopy(record, 0, file, 24, 16);
+		MysqlCapture broken = new MysqlCapture(new java.io.ByteArrayInputStream(file), 3306);
+		org.junit.jupiter.api.Assertions.assertThrows(IOException.class, broken::next);
+
+		java.nio.ByteBuffer value = java.nio.ByteBuffer.wrap(b(0xfd, 0xff, 0xff, 0xff, 1, 2, 3));
+		org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class, () -> BinaryValues.read(value, 0xfd));
+	}
+
 	@Test
 	void inlinesValuesOutsideQuotesAndComments() {
 		assertEquals("SELECT '?', 1 /* ? */ FROM t WHERE a = 'x' AND b = ?",

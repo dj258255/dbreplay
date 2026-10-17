@@ -40,6 +40,8 @@ public final class PostgresCapture {
 	private static final int SSL_REQUEST = 80877103;
 	private static final int GSS_REQUEST = 80877104;
 	private static final int PROTOCOL_3 = 196608;
+	/** 메시지 하나의 길이로 믿을 수 있는 상한. 이보다 길면 깨졌거나 이 도구가 다루지 않는 것(큰 COPY)으로 보고 그 연결을 버린다 */
+	static final int MAX_MESSAGE = 64 * 1024 * 1024;
 
 	private final PcapReader reader;
 	private final TcpStreams streams;
@@ -147,6 +149,10 @@ public final class PostgresCapture {
 						return;
 					}
 					int length = client.peekInt(0);
+					if (length < 8 || length > MAX_MESSAGE) {
+						die();
+						return;
+					}
 					if (client.available() < length) {
 						return;
 					}
@@ -169,6 +175,10 @@ public final class PostgresCapture {
 					return;
 				}
 				int length = client.peekInt(1);
+				if (length < 4 || length > MAX_MESSAGE) {
+					die();
+					return;
+				}
 				if (client.available() < 1 + length) {
 					return;
 				}
@@ -245,6 +255,9 @@ public final class PostgresCapture {
 					value = "NULL";
 				}
 				else {
+					if (length > b.remaining()) {
+						throw new IllegalArgumentException("인자의 길이가 메시지보다 길다");
+					}
 					byte[] bytes = new byte[length];
 					b.get(bytes);
 					int format = formats.length == 0 ? 0 : formats.length == 1 ? formats[0] : formats[i];
@@ -270,6 +283,10 @@ public final class PostgresCapture {
 			}
 			while (!dead && server.available() >= 5) {
 				int length = server.peekInt(1);
+				if (length < 4 || length > MAX_MESSAGE) {
+					die();
+					return;
+				}
 				if (server.available() < 1 + length) {
 					return;
 				}

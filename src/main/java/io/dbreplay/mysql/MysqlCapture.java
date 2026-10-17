@@ -470,6 +470,9 @@ public final class MysqlCapture implements SlowLogSource {
 	 * 읽어, 길이 바이트를 읽은 만큼 되돌아간다. 실제로 그렇게 틀려 처음 데이터베이스를 놓쳤다.
 	 */
 	static void skip(ByteBuffer b, int n) {
+		if (n < 0 || n > b.remaining()) {
+			throw new IllegalArgumentException("건너뛸 길이가 패킷보다 길다");
+		}
 		b.position(b.position() + n);
 	}
 
