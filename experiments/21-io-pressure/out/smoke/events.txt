@@ -1,0 +1,16 @@
+1792212594 start mysql-a
+1792212609 end mysql-a
+1792212629 start mysql-b
+1792212689 write-start dbreplay-exp21-mysql84-1
+1792212692 write-end dbreplay-exp21-mysql84-1
+1792212712 delete-start dbreplay-exp21-mysql84-1
+1792212712 delete-end dbreplay-exp21-mysql84-1
+1792212740 end mysql-b
+1792212761 start pg-a
+1792212776 end pg-a
+1792212796 start pg-b
+1792212857 write-start dbreplay-exp21-pg16-1
+1792212859 write-end dbreplay-exp21-pg16-1
+1792212879 delete-start dbreplay-exp21-pg16-1
+1792212879 delete-end dbreplay-exp21-pg16-1
+1792212907 end pg-b
