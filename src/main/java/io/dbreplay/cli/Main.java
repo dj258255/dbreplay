@@ -62,6 +62,7 @@ import io.dbreplay.report.MarkdownReport;
 import io.dbreplay.report.NewErrors;
 import io.dbreplay.report.RunRecord;
 import io.dbreplay.report.TraceComparison;
+import io.dbreplay.sandbox.DockerSandbox;
 import io.dbreplay.sandbox.Sandbox;
 import io.dbreplay.sandbox.Snapshot;
 import io.dbreplay.trace.PrivateFile;
@@ -121,6 +122,13 @@ public final class Main {
 			                   [--measure-url <운영 JDBC URL> [--measure-user <계정>] [--measure-seconds 60]]
 			                   --measure-url을 주면 운영 DB에서 그 시간 동안 초당 문장 수를 재서 수위를 다시 계산한다.
 			                   암호는 DBREPLAY_MEASURE_PASSWORD로 준다(없으면 --password와 같다). PostgreSQL은 pg_stat_statements가 있어야 한다
+
+			  dbreplay sandbox-create --like <운영 JDBC URL> --user <계정> --name <컨테이너 이름> --port <호스트 포트>
+			                   [--image <이미지:태그>] [--snapshot <덤프 파일>]
+			                   운영과 같은 버전의 샌드박스를 도커로 띄우고 파라미터를 옮긴다. 관리자 암호는 DBREPLAY_SANDBOX_PASSWORD로 준다
+			  dbreplay sandbox-diff --like <운영 JDBC URL> --user <계정> --url <샌드박스 JDBC URL> [--sandbox-user root]
+			                   버전과 파라미터가 운영과 다른 것을 낸다. 다르면 0이 아닌 값으로 끝난다
+			  dbreplay sandbox-drop --name <컨테이너 이름>
 
 			  dbreplay manage  --targets <대상 목록.json> [--force yes] [--max-traffic-distance 0.2]
 			                   [--every <분>] [--register-max-distance 0.2] [--register-min-qps 0]
@@ -233,6 +241,9 @@ public final class Main {
 			case "reset" -> reset(options);
 			case "snapshot" -> snapshot(options);
 			case "manage" -> manage(options);
+			case "sandbox-create" -> sandboxCreate(options);
+			case "sandbox-diff" -> sandboxDiff(options);
+			case "sandbox-drop" -> DockerSandbox.drop(required(options, "--name"));
 			default -> usage();
 		}
 	}
@@ -864,6 +875,60 @@ public final class Main {
 	private static Sandbox sandbox(JdbcTarget target, Map<String, String> options) {
 		return new Sandbox(target, replica(options), new Sandbox.Options(required(options, "--snapshot"), options.get("--snapshot-db"),
 				options.get("--change-command"), options.get("--ready-command"), (long) number(options, "--settle-seconds", 60)));
+	}
+
+	/**
+	 * 운영과 같은 버전의 샌드박스를 도커로 띄우고 파라미터를 옮긴다(#84). URL은 암호가 들 수 있어 찍지 않는다.
+	 * 샌드박스의 관리자 암호는 명령줄에 남지 않게 DBREPLAY_SANDBOX_PASSWORD로 받는다.
+	 */
+	private static void sandboxCreate(Map<String, String> options) throws Exception {
+		String name = required(options, "--name");
+		DockerSandbox.Created created = DockerSandbox.create(likeTarget(options), name, (int) number(options, "--port", 0),
+				sandboxPassword(), options.get("--image"));
+		System.out.printf("샌드박스 %s를 띄웠다: 이미지 %s, 호스트 포트 %d, 관리자 %s%n", name, created.image(),
+				(int) number(options, "--port", 0), created.target().user());
+		System.out.printf("운영의 파라미터 %d개를 옮기고 다시 띄웠다%n", created.copied());
+		printParameterDiff("옮기지 못한 것", created.notCopied());
+		if (options.containsKey("--snapshot")) {
+			Sandbox.Timing t = sandbox(created.target(), options).reset();
+			System.out.printf("덤프를 되부었다 (%.1f초)%n", t.totalMillis() / 1e3);
+		}
+		System.out.println("접속 URL은 운영의 URL에서 호스트와 포트를 127.0.0.1:" + (int) number(options, "--port", 0) + "로 바꾼 것이다");
+	}
+
+	/** 운영과 샌드박스의 버전과 파라미터 차이를 낸다. 다르면 0이 아닌 값으로 끝난다. */
+	private static void sandboxDiff(Map<String, String> options) throws Exception {
+		JdbcTarget sandbox = new JdbcTarget(required(options, "--url"),
+				options.getOrDefault("--sandbox-user", likeTarget(options).isPostgres() ? "postgres" : "root"), sandboxPassword());
+		Map<String, String[]> diff = DockerSandbox.diff(likeTarget(options), sandbox);
+		if (diff.isEmpty()) {
+			System.out.println("버전과 파라미터가 운영과 같다 (장비와 경로, 서버의 정체성에 매인 것은 보지 않았다)");
+			return;
+		}
+		printParameterDiff("운영과 다른 것", diff);
+		System.exit(1);
+	}
+
+	private static JdbcTarget likeTarget(Map<String, String> options) {
+		String password = options.getOrDefault("--password", System.getenv().getOrDefault("DBREPLAY_PASSWORD", ""));
+		return new JdbcTarget(required(options, "--like"), required(options, "--user"), password);
+	}
+
+	private static String sandboxPassword() {
+		String password = System.getenv("DBREPLAY_SANDBOX_PASSWORD");
+		if (password == null || password.isEmpty()) {
+			throw new IllegalArgumentException("샌드박스의 관리자 암호를 DBREPLAY_SANDBOX_PASSWORD로 준다");
+		}
+		return password;
+	}
+
+	static void printParameterDiff(String title, Map<String, String[]> diff) {
+		if (diff.isEmpty()) {
+			return;
+		}
+		System.out.printf("%s %d개 (운영 → 샌드박스)%n", title, diff.size());
+		diff.forEach((name, values) -> System.out.printf("  %s: %s → %s%n", name,
+				values[0] == null ? "(없음)" : values[0], values[1] == null ? "(없음)" : values[1]));
 	}
 
 	private static void reset(Map<String, String> options) throws Exception {

@@ -21,7 +21,7 @@ Java 25와 Gradle로 만든다.
 | `io.dbreplay.replay` | 재생기. 트랜잭션·문장·연결 단위로 내보낸다 |
 | `io.dbreplay.report` | SQL 모양별 전후 비교, Markdown 리포트 |
 | `io.dbreplay.metrics` | 재생하는 동안 대상의 부하 지표를 뜬다. DB 접속으로 읽는 것과 사용자 명령으로 받는 것 |
-| `io.dbreplay.sandbox` | 샌드박스를 녹화 시작 시점으로 되돌린다. 덤프 되붓기, 변경, 통계, 대기 |
+| `io.dbreplay.sandbox` | 샌드박스를 녹화 시작 시점으로 되돌린다. 덤프 되붓기, 변경, 통계, 대기. 도커로 띄우고 파라미터를 옮긴다 |
 | `io.dbreplay.explore` | 용량 탐색, 알람 판정, 수위, 평가의 유효성 |
 
 ```sh
@@ -37,6 +37,7 @@ dbreplay reset   --url <JDBC URL> --user <계정> --snapshot <덤프 파일>
 dbreplay check   --evaluation <평가 파일> --url <JDBC URL> --user <계정>
 dbreplay manage  --targets <대상 목록.json>
 dbreplay sample  --url <JDBC URL> --user <계정> --seconds <초>
+dbreplay sandbox-create --like <운영 JDBC URL> --user <계정> --name <이름> --port <포트>
 ```
 
 ## 판정과 재생 방식
