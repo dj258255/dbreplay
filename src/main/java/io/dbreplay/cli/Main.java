@@ -63,6 +63,7 @@ import io.dbreplay.report.NewErrors;
 import io.dbreplay.report.RunRecord;
 import io.dbreplay.report.TraceComparison;
 import io.dbreplay.sandbox.DockerSandbox;
+import io.dbreplay.serve.Server;
 import io.dbreplay.sandbox.Sandbox;
 import io.dbreplay.sandbox.Snapshot;
 import io.dbreplay.trace.PrivateFile;
@@ -123,6 +124,10 @@ public final class Main {
 			                   --measure-url을 주면 운영 DB에서 그 시간 동안 초당 문장 수를 재서 수위를 다시 계산한다.
 			                   암호는 DBREPLAY_MEASURE_PASSWORD로 준다(없으면 --password와 같다). PostgreSQL은 pg_stat_statements가 있어야 한다
 
+			  dbreplay serve   --dir <작업 폴더> [--targets <대상 목록.json>] [--port 8080] [--host 127.0.0.1]
+			                   평가와 리포트를 보여 주는 화면과 재생을 맡기는 HTTP API(/api/openapi.json)를 연다.
+			                   재생은 대상 목록의 이름으로만 받고 URL과 계정은 목록에서 찾는다. 암호는 DBREPLAY_PASSWORD로 준다.
+			                   /api/는 토큰(DBREPLAY_SERVE_TOKEN, 없으면 띄울 때 만들어 보여 준다)을 Authorization: Bearer로 요구한다
 			  dbreplay sandbox-create --like <운영 JDBC URL> --user <계정> --name <컨테이너 이름> --port <호스트 포트>
 			                   [--image <이미지:태그>] [--snapshot <덤프 파일>]
 			                   운영과 같은 버전의 샌드박스를 도커로 띄우고 파라미터를 옮긴다. 관리자 암호는 DBREPLAY_SANDBOX_PASSWORD로 준다
@@ -241,6 +246,7 @@ public final class Main {
 			case "reset" -> reset(options);
 			case "snapshot" -> snapshot(options);
 			case "manage" -> manage(options);
+			case "serve" -> serve(options);
 			case "sandbox-create" -> sandboxCreate(options);
 			case "sandbox-diff" -> sandboxDiff(options);
 			case "sandbox-drop" -> DockerSandbox.drop(required(options, "--name"));
@@ -875,6 +881,52 @@ public final class Main {
 	private static Sandbox sandbox(JdbcTarget target, Map<String, String> options) {
 		return new Sandbox(target, replica(options), new Sandbox.Options(required(options, "--snapshot"), options.get("--snapshot-db"),
 				options.get("--change-command"), options.get("--ready-command"), (long) number(options, "--settle-seconds", 60)));
+	}
+
+	/**
+	 * 작업 폴더의 평가와 리포트를 보여 주는 화면과 재생을 맡기는 HTTP API를 연다(#88). 재생의 암호는 API로 받지 않고
+	 * 서버를 띄울 때의 DBREPLAY_PASSWORD를 쓴다.
+	 */
+	private static void serve(Map<String, String> options) throws Exception {
+		String host = options.getOrDefault("--host", "127.0.0.1");
+		String password = System.getenv().getOrDefault("DBREPLAY_PASSWORD", "");
+		// API 토큰. 주지 않으면 띄울 때마다 새로 만들어 한 번 보여 준다
+		String token = System.getenv("DBREPLAY_SERVE_TOKEN");
+		boolean generated = token == null || token.isEmpty();
+		if (generated) {
+			byte[] random = new byte[24];
+			new java.security.SecureRandom().nextBytes(random);
+			token = java.util.HexFormat.of().formatHex(random);
+		}
+		Server server = new Server(Path.of(required(options, "--dir")),
+				options.containsKey("--targets") ? Path.of(options.get("--targets")) : null, host, (int) number(options, "--port", 8080), token,
+				(trace, url, user, speed, unit) -> {
+					try (TraceReader t = openTrace(trace.toString())) {
+						Replayer.Options replayOptions = Replayer.Options.atSpeed(speed)
+								.withUnit(Replayer.Unit.valueOf(unit.toUpperCase(Locale.ROOT)));
+						return summaryJson(Replayer.run(t, new JdbcTarget(url, user, password), r -> { }, replayOptions));
+					}
+				});
+		server.start();
+		System.out.printf("http://%s:%d 에서 연다. 멈추려면 Ctrl+C%n", host, server.port());
+		if (generated) {
+			System.out.println("API 토큰(Authorization: Bearer): " + token + "  DBREPLAY_SERVE_TOKEN으로 정해 둘 수 있다");
+		}
+		Thread.currentThread().join();
+	}
+
+	/** API로 돌려줄 재생 요약. */
+	static Map<String, Object> summaryJson(ReplaySummary s) {
+		Map<String, Object> out = new java.util.LinkedHashMap<>();
+		out.put("statements", s.statements());
+		out.put("errors", s.errors());
+		out.put("originalErrors", s.origErrors());
+		out.put("speed", s.speed());
+		out.put("elapsedSeconds", s.elapsedMicros() / 1e6);
+		out.put("replayerLateRatio", s.replayerLateRatio());
+		out.put("durationP50Micros", s.duration().quantile(0.5));
+		out.put("durationP99Micros", s.duration().quantile(0.99));
+		return out;
 	}
 
 	/**
