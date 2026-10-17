@@ -1,0 +1,124 @@
+pgbench (16.15 (Debian 16.15-1.pgdg13+2))
+progress: 1792212798.192 s, 5816.0 tps, lat 1.344 ms stddev 0.763, 0 failed
+progress: 1792212799.192 s, 6252.8 tps, lat 1.276 ms stddev 0.487, 0 failed
+progress: 1792212800.192 s, 6208.8 tps, lat 1.285 ms stddev 0.496, 0 failed
+progress: 1792212801.192 s, 6191.2 tps, lat 1.288 ms stddev 0.469, 0 failed
+progress: 1792212802.192 s, 6229.9 tps, lat 1.280 ms stddev 0.511, 0 failed
+progress: 1792212803.192 s, 6364.1 tps, lat 1.253 ms stddev 0.459, 0 failed
+progress: 1792212804.192 s, 6051.9 tps, lat 1.318 ms stddev 0.729, 0 failed
+progress: 1792212805.192 s, 5571.9 tps, lat 1.432 ms stddev 0.569, 0 failed
+progress: 1792212806.192 s, 6118.3 tps, lat 1.304 ms stddev 0.503, 0 failed
+progress: 1792212807.192 s, 6277.8 tps, lat 1.271 ms stddev 0.477, 0 failed
+progress: 1792212808.192 s, 6250.3 tps, lat 1.277 ms stddev 0.486, 0 failed
+progress: 1792212809.192 s, 6344.0 tps, lat 1.257 ms stddev 0.456, 0 failed
+progress: 1792212810.192 s, 6190.8 tps, lat 1.288 ms stddev 0.646, 0 failed
+progress: 1792212811.192 s, 5715.0 tps, lat 1.396 ms stddev 0.775, 0 failed
+progress: 1792212812.192 s, 6208.9 tps, lat 1.285 ms stddev 0.492, 0 failed
+progress: 1792212813.192 s, 6258.0 tps, lat 1.274 ms stddev 0.483, 0 failed
+progress: 1792212814.192 s, 6310.3 tps, lat 1.264 ms stddev 0.475, 0 failed
+progress: 1792212815.192 s, 6282.1 tps, lat 1.271 ms stddev 0.479, 0 failed
+progress: 1792212816.192 s, 5281.4 tps, lat 1.509 ms stddev 0.733, 0 failed
+progress: 1792212817.192 s, 6111.7 tps, lat 1.305 ms stddev 0.516, 0 failed
+progress: 1792212818.192 s, 6273.2 tps, lat 1.272 ms stddev 0.481, 0 failed
+progress: 1792212819.192 s, 6284.8 tps, lat 1.269 ms stddev 0.464, 0 failed
+progress: 1792212820.192 s, 6183.4 tps, lat 1.290 ms stddev 0.674, 0 failed
+progress: 1792212821.192 s, 6080.9 tps, lat 1.312 ms stddev 0.513, 0 failed
+progress: 1792212822.192 s, 6148.2 tps, lat 1.297 ms stddev 0.710, 0 failed
+progress: 1792212823.192 s, 5971.7 tps, lat 1.336 ms stddev 0.858, 0 failed
+progress: 1792212824.192 s, 6313.2 tps, lat 1.264 ms stddev 0.510, 0 failed
+progress: 1792212825.192 s, 6249.8 tps, lat 1.276 ms stddev 0.485, 0 failed
+progress: 1792212826.192 s, 6189.8 tps, lat 1.289 ms stddev 0.486, 0 failed
+progress: 1792212827.192 s, 5726.1 tps, lat 1.393 ms stddev 0.553, 0 failed
+progress: 1792212828.192 s, 5988.4 tps, lat 1.332 ms stddev 0.742, 0 failed
+progress: 1792212829.192 s, 6210.5 tps, lat 1.285 ms stddev 0.482, 0 failed
+progress: 1792212830.192 s, 6335.6 tps, lat 1.259 ms stddev 0.468, 0 failed
+progress: 1792212831.192 s, 6196.7 tps, lat 1.287 ms stddev 0.489, 0 failed
+progress: 1792212832.192 s, 6173.8 tps, lat 1.292 ms stddev 0.491, 0 failed
+progress: 1792212833.192 s, 6240.4 tps, lat 1.278 ms stddev 0.477, 0 failed
+progress: 1792212834.192 s, 6177.9 tps, lat 1.291 ms stddev 0.706, 0 failed
+progress: 1792212835.192 s, 6294.7 tps, lat 1.267 ms stddev 0.473, 0 failed
+progress: 1792212836.192 s, 6311.0 tps, lat 1.264 ms stddev 0.470, 0 failed
+progress: 1792212837.192 s, 5811.2 tps, lat 1.373 ms stddev 0.811, 0 failed
+progress: 1792212838.192 s, 5966.0 tps, lat 1.337 ms stddev 0.498, 0 failed
+progress: 1792212839.192 s, 5949.2 tps, lat 1.341 ms stddev 0.504, 0 failed
+progress: 1792212840.192 s, 6220.8 tps, lat 1.282 ms stddev 0.621, 0 failed
+progress: 1792212841.192 s, 5899.8 tps, lat 1.352 ms stddev 0.694, 0 failed
+progress: 1792212842.192 s, 5981.0 tps, lat 1.334 ms stddev 0.517, 0 failed
+progress: 1792212843.192 s, 6140.2 tps, lat 1.299 ms stddev 0.507, 0 failed
+progress: 1792212844.192 s, 6174.7 tps, lat 1.291 ms stddev 0.527, 0 failed
+progress: 1792212845.192 s, 6189.3 tps, lat 1.289 ms stddev 0.503, 0 failed
+progress: 1792212846.192 s, 6121.3 tps, lat 1.303 ms stddev 0.837, 0 failed
+progress: 1792212847.192 s, 6038.6 tps, lat 1.321 ms stddev 0.511, 0 failed
+progress: 1792212848.192 s, 6279.2 tps, lat 1.270 ms stddev 0.471, 0 failed
+progress: 1792212849.192 s, 5882.7 tps, lat 1.356 ms stddev 0.715, 0 failed
+progress: 1792212850.192 s, 5741.4 tps, lat 1.390 ms stddev 0.553, 0 failed
+progress: 1792212851.192 s, 6220.4 tps, lat 1.282 ms stddev 0.479, 0 failed
+progress: 1792212852.192 s, 5978.3 tps, lat 1.334 ms stddev 0.948, 0 failed
+progress: 1792212853.192 s, 6176.2 tps, lat 1.291 ms stddev 0.670, 0 failed
+progress: 1792212854.192 s, 6240.5 tps, lat 1.278 ms stddev 0.534, 0 failed
+progress: 1792212855.192 s, 6035.6 tps, lat 1.322 ms stddev 0.513, 0 failed
+progress: 1792212856.192 s, 5666.9 tps, lat 1.408 ms stddev 0.620, 0 failed
+progress: 1792212857.192 s, 4304.9 tps, lat 1.854 ms stddev 1.557, 0 failed
+progress: 1792212858.193 s, 1647.2 tps, lat 4.708 ms stddev 16.390, 0 failed
+progress: 1792212859.195 s, 8.0 tps, lat 217.803 ms stddev 201.102, 0 failed
+progress: 1792212860.192 s, 2358.2 tps, lat 6.157 ms stddev 73.159, 0 failed
+progress: 1792212861.192 s, 4099.7 tps, lat 1.949 ms stddev 1.690, 0 failed
+progress: 1792212862.192 s, 5962.7 tps, lat 1.338 ms stddev 0.511, 0 failed
+progress: 1792212863.192 s, 5479.7 tps, lat 1.456 ms stddev 0.729, 0 failed
+progress: 1792212864.192 s, 5534.1 tps, lat 1.442 ms stddev 0.673, 0 failed
+progress: 1792212865.192 s, 5356.9 tps, lat 1.490 ms stddev 0.897, 0 failed
+progress: 1792212866.192 s, 6027.2 tps, lat 1.323 ms stddev 0.531, 0 failed
+progress: 1792212867.192 s, 6100.1 tps, lat 1.308 ms stddev 0.513, 0 failed
+progress: 1792212868.192 s, 5972.6 tps, lat 1.336 ms stddev 0.909, 0 failed
+progress: 1792212869.192 s, 6283.8 tps, lat 1.269 ms stddev 0.462, 0 failed
+progress: 1792212870.192 s, 6289.6 tps, lat 1.268 ms stddev 0.472, 0 failed
+progress: 1792212871.192 s, 6046.2 tps, lat 1.319 ms stddev 0.667, 0 failed
+progress: 1792212872.192 s, 5455.6 tps, lat 1.462 ms stddev 0.608, 0 failed
+progress: 1792212873.192 s, 6031.2 tps, lat 1.323 ms stddev 0.520, 0 failed
+progress: 1792212874.192 s, 6039.8 tps, lat 1.321 ms stddev 0.955, 0 failed
+progress: 1792212875.192 s, 6142.7 tps, lat 1.294 ms stddev 0.531, 0 failed
+progress: 1792212876.192 s, 6080.5 tps, lat 1.317 ms stddev 0.601, 0 failed
+progress: 1792212877.192 s, 6089.1 tps, lat 1.310 ms stddev 0.523, 0 failed
+progress: 1792212878.192 s, 5896.6 tps, lat 1.353 ms stddev 0.547, 0 failed
+progress: 1792212879.192 s, 5749.2 tps, lat 1.388 ms stddev 0.765, 0 failed
+progress: 1792212880.192 s, 5409.2 tps, lat 1.475 ms stddev 2.615, 0 failed
+progress: 1792212881.192 s, 6195.2 tps, lat 1.288 ms stddev 0.495, 0 failed
+progress: 1792212882.193 s, 6193.8 tps, lat 1.288 ms stddev 0.491, 0 failed
+progress: 1792212883.192 s, 5562.3 tps, lat 1.434 ms stddev 0.583, 0 failed
+progress: 1792212884.192 s, 5838.3 tps, lat 1.367 ms stddev 0.616, 0 failed
+progress: 1792212885.192 s, 6310.6 tps, lat 1.264 ms stddev 0.466, 0 failed
+progress: 1792212886.192 s, 5657.7 tps, lat 1.410 ms stddev 1.203, 0 failed
+progress: 1792212887.192 s, 5709.7 tps, lat 1.397 ms stddev 1.007, 0 failed
+progress: 1792212888.192 s, 6063.9 tps, lat 1.315 ms stddev 0.728, 0 failed
+progress: 1792212889.192 s, 6080.2 tps, lat 1.312 ms stddev 0.736, 0 failed
+progress: 1792212890.192 s, 6264.9 tps, lat 1.273 ms stddev 0.506, 0 failed
+progress: 1792212891.192 s, 6203.0 tps, lat 1.286 ms stddev 0.486, 0 failed
+progress: 1792212892.192 s, 6264.6 tps, lat 1.273 ms stddev 0.481, 0 failed
+progress: 1792212893.192 s, 6094.5 tps, lat 1.309 ms stddev 0.702, 0 failed
+progress: 1792212894.192 s, 5835.7 tps, lat 1.367 ms stddev 0.581, 0 failed
+progress: 1792212895.192 s, 5721.7 tps, lat 1.393 ms stddev 0.589, 0 failed
+progress: 1792212896.192 s, 5722.3 tps, lat 1.396 ms stddev 1.004, 0 failed
+progress: 1792212897.192 s, 6017.8 tps, lat 1.325 ms stddev 0.607, 0 failed
+progress: 1792212898.192 s, 6153.3 tps, lat 1.297 ms stddev 0.500, 0 failed
+progress: 1792212899.192 s, 5918.0 tps, lat 1.348 ms stddev 0.689, 0 failed
+progress: 1792212900.192 s, 6339.6 tps, lat 1.259 ms stddev 0.464, 0 failed
+progress: 1792212901.192 s, 6139.4 tps, lat 1.299 ms stddev 0.504, 0 failed
+progress: 1792212902.192 s, 6208.8 tps, lat 1.285 ms stddev 0.484, 0 failed
+progress: 1792212903.192 s, 6097.4 tps, lat 1.308 ms stddev 0.497, 0 failed
+progress: 1792212904.192 s, 5872.7 tps, lat 1.358 ms stddev 0.698, 0 failed
+progress: 1792212905.192 s, 5915.2 tps, lat 1.349 ms stddev 0.800, 0 failed
+progress: 1792212906.192 s, 5718.7 tps, lat 1.395 ms stddev 0.589, 0 failed
+progress: 1792212907.192 s, 6161.9 tps, lat 1.295 ms stddev 0.500, 0 failed
+transaction type: <builtin: TPC-B (sort of)>
+scaling factor: 5
+query mode: prepared
+number of clients: 8
+number of threads: 4
+maximum number of tries: 1
+duration: 110 s
+number of transactions actually processed: 646731
+number of failed transactions: 0 (0.000%)
+latency average = 1.357 ms
+latency stddev = 4.668 ms
+initial connection time = 19.488 ms
+tps = 5880.277755 (without initial connection time)

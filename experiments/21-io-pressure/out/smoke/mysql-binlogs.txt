@@ -1,0 +1,3 @@
+-rw-r----- 1 mysql mysql   2996516 1792212589 /var/lib/mysql/binlog.000001
+-rw-r----- 1 mysql mysql 394842991 1792212739 /var/lib/mysql/binlog.000002
+-rw-r----- 1 mysql mysql        32 1792212591 /var/lib/mysql/binlog.index
