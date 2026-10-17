@@ -1,0 +1,32 @@
+===== 2부: 캡처의 부담 =====
+mysql off 1 tps=1273.34 p95_ms=11.45 capture_bytes=0
+1744823 packets captured 1744823 packets received by filter 0 packets dropped by kernel 
+mysql on 1 tps=1351.29 p95_ms=8.28 capture_bytes=1806651875
+mysql off 2 tps=1457.20 p95_ms=8.28 capture_bytes=0
+1714299 packets captured 1714299 packets received by filter 0 packets dropped by kernel 
+mysql on 2 tps=1327.73 p95_ms=8.90 capture_bytes=1775020921
+mysql off 3 tps=1482.16 p95_ms=7.98 capture_bytes=0
+1760498 packets captured 1760498 packets received by filter 0 packets dropped by kernel 
+mysql on 3 tps=1363.65 p95_ms=8.28 capture_bytes=1822909917
+mysql off 4 tps=450.78 p95_ms=39.65 capture_bytes=0
+654098 packets captured 654098 packets received by filter 0 packets dropped by kernel 
+mysql on 4 tps=505.95 p95_ms=41.10 capture_bytes=676533279
+mysql off 5 tps=1420.45 p95_ms=8.28 capture_bytes=0
+1766636 packets captured 1766636 packets received by filter 0 packets dropped by kernel 
+mysql on 5 tps=1368.34 p95_ms=7.98 capture_bytes=1829197870
+pg off 1 tps=2378.074970 latency_avg_ms=3.364 capture_bytes=0
+483139 packets captured 483139 packets received by filter 0 packets dropped by kernel 
+pg on 1 tps=1149.500489 latency_avg_ms=6.960 capture_bytes=60852860
+pg off 2 tps=5692.567850 latency_avg_ms=1.405 capture_bytes=0
+718715 packets captured 718715 packets received by filter 0 packets dropped by kernel 
+pg on 2 tps=1711.743799 latency_avg_ms=4.674 capture_bytes=90525528
+pg off 3 tps=2178.285077 latency_avg_ms=3.673 capture_bytes=0
+2107647 packets captured 2107647 packets received by filter 0 packets dropped by kernel 
+pg on 3 tps=5020.678700 latency_avg_ms=1.593 capture_bytes=265470766
+pg off 4 tps=5247.676264 latency_avg_ms=1.524 capture_bytes=0
+2410424 packets captured 2410424 packets received by filter 0 packets dropped by kernel 
+pg on 4 tps=5741.537909 latency_avg_ms=1.393 capture_bytes=303617243
+pg off 5 tps=5859.274042 latency_avg_ms=1.365 capture_bytes=0
+712359 packets captured 712359 packets received by filter 0 packets dropped by kernel 
+pg on 5 tps=1696.373521 latency_avg_ms=4.716 capture_bytes=89728036
+끝

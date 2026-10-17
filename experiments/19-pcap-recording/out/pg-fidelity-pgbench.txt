@@ -1,0 +1,15 @@
+pgbench (16.15 (Debian 16.15-1.pgdg13+2))
+transaction type: <builtin: TPC-B (sort of)>
+scaling factor: 5
+query mode: prepared
+number of clients: 4
+number of threads: 2
+maximum number of tries: 1
+duration: 10 s
+number of transactions actually processed: 954
+number of failed transactions: 0 (0.000%)
+latency average = 4.252 ms
+latency stddev = 2.236 ms
+rate limit schedule lag: avg 1.818 (max 19.279) ms
+initial connection time = 14.633 ms
+tps = 95.524392 (without initial connection time)

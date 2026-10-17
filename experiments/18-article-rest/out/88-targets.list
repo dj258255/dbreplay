@@ -1,0 +1,2 @@
+{"targets": [{"name": "primary", "evaluation": "80-eval.json",
+  "options": {"--url": "jdbc:mysql://127.0.0.1:33061/sbtest?sslMode=DISABLED&allowPublicKeyRetrieval=true", "--user": "root"}}]}

@@ -1,0 +1,18 @@
+== 첫 화면
+<h2>대상</h2>
+<h2>리포트</h2>
+80-eval
+== API 평가 목록
+["80-eval","87-stable"]
+== 토큰 없이
+401
+== 다른 Host 머리
+421
+== URL을 직접 주면
+{"error":"요청 본문을 읽을 수 없다. trace, target, speed, unit만 받는다"}
+== 작업 폴더 밖
+400
+== 재생 맡기기
+{"status":"/api/replays/1","id":1}
+같은 때 두 번째: 409
+{"id":1,"state":"done","summary":{"statements":38241,"errors":0,"originalErrors":0,"speed":2.0,"elapsedSeconds":5.388933,"replayerLateRatio":0.0014382469077691483,"durationP50Micros":1152,"durationP99Micros":8448},"error":null}

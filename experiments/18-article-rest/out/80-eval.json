@@ -1,0 +1,213 @@
+{
+  "evaluatedAt" : "2026-10-15T03:32:10Z",
+  "validDays" : 30,
+  "profile" : {
+    "innodb_buffer_pool_instances" : "1",
+    "innodb_buffer_pool_size" : "134217728",
+    "innodb_flush_log_at_trx_commit" : "1",
+    "innodb_flush_method" : "O_DIRECT",
+    "innodb_io_capacity" : "10000",
+    "innodb_io_capacity_max" : "20000",
+    "innodb_redo_log_capacity" : "104857600",
+    "innodb_thread_concurrency" : "0",
+    "max_connections" : "1000",
+    "sync_binlog" : "1",
+    "table_open_cache" : "4000",
+    "transaction_isolation" : "REPEATABLE-READ",
+    "version" : "8.4.11"
+  },
+  "alarms" : {
+    "alarm-metric" : "replica.active_sessions>=6,active_sessions>=400",
+    "alarm-sustain" : "3",
+    "slow-ms" : "100"
+  },
+  "unit" : "transaction",
+  "traffic" : {
+    "statements" : 38242,
+    "spanMicros" : 10774951,
+    "shares" : {
+      "SELECT c FROM sbtest2 WHERE id=?" : 0.13257674807802938,
+      "SELECT c FROM sbtest1 WHERE id=?" : 0.12760838868260027,
+      "SELECT c FROM sbtest3 WHERE id=?" : 0.12133256628837404,
+      "SELECT c FROM sbtest4 WHERE id=?" : 0.11845614769102035,
+      "BEGIN" : 0.04999738507400241,
+      "COMMIT" : 0.04999738507400241,
+      "SELECT SUM(k) FROM sbtest4 WHERE id BETWEEN ? AND ?" : 0.013414570367658595,
+      "UPDATE sbtest3 SET c=? WHERE id=?" : 0.013231525547826996,
+      "DELETE FROM sbtest2 WHERE id=?" : 0.013074629987971341,
+      "INSERT INTO sbtest2 (id, k, c, pad) VALUES (?+)" : 0.013074629987971341,
+      "SELECT DISTINCT c FROM sbtest1 WHERE id BETWEEN ? AND ? ORDER BY c" : 0.012996182208043513,
+      "UPDATE sbtest4 SET k=k+? WHERE id=?" : 0.012943883688091627,
+      "SELECT c FROM sbtest2 WHERE id BETWEEN ? AND ? ORDER BY c" : 0.012839286648187856,
+      "UPDATE sbtest1 SET c=? WHERE id=?" : 0.012839286648187856,
+      "UPDATE sbtest3 SET k=k+? WHERE id=?" : 0.012839286648187856,
+      "SELECT c FROM sbtest1 WHERE id BETWEEN ? AND ? ORDER BY c" : 0.012656241828356257,
+      "SELECT c FROM sbtest1 WHERE id BETWEEN ? AND ?" : 0.01257779404842843,
+      "SELECT DISTINCT c FROM sbtest4 WHERE id BETWEEN ? AND ? ORDER BY c" : 0.012525495528476545,
+      "SELECT c FROM sbtest4 WHERE id BETWEEN ? AND ?" : 0.012525495528476545,
+      "SELECT c FROM sbtest3 WHERE id BETWEEN ? AND ?" : 0.012499346268500602,
+      "DELETE FROM sbtest3 WHERE id=?" : 0.012420898488572774,
+      "INSERT INTO sbtest3 (id, k, c, pad) VALUES (?+)" : 0.012420898488572774,
+      "SELECT c FROM sbtest2 WHERE id BETWEEN ? AND ?" : 0.01239474922859683,
+      "SELECT DISTINCT c FROM sbtest3 WHERE id BETWEEN ? AND ? ORDER BY c" : 0.012368599968620888,
+      "SELECT c FROM sbtest4 WHERE id BETWEEN ? AND ? ORDER BY c" : 0.012342450708644946,
+      "DELETE FROM sbtest1 WHERE id=?" : 0.012264002928717117,
+      "INSERT INTO sbtest1 (id, k, c, pad) VALUES (?+)" : 0.012264002928717117,
+      "SELECT SUM(k) FROM sbtest2 WHERE id BETWEEN ? AND ?" : 0.012264002928717117,
+      "DELETE FROM sbtest4 WHERE id=?" : 0.012237853668741175,
+      "INSERT INTO sbtest4 (id, k, c, pad) VALUES (?+)" : 0.012237853668741175,
+      "SELECT SUM(k) FROM sbtest1 WHERE id BETWEEN ? AND ?" : 0.012185555148789289,
+      "UPDATE sbtest2 SET k=k+? WHERE id=?" : 0.012185555148789289,
+      "SELECT c FROM sbtest3 WHERE id BETWEEN ? AND ? ORDER BY c" : 0.012159405888813347,
+      "SELECT SUM(k) FROM sbtest3 WHERE id BETWEEN ? AND ?" : 0.012133256628837404,
+      "SELECT DISTINCT c FROM sbtest2 WHERE id BETWEEN ? AND ? ORDER BY c" : 0.012107107368861461,
+      "UPDATE sbtest1 SET k=k+? WHERE id=?" : 0.012028659588933633,
+      "UPDATE sbtest4 SET c=? WHERE id=?" : 0.012028659588933633,
+      "UPDATE sbtest2 SET c=? WHERE id=?" : 0.01189791328905392,
+      "SET GLOBAL slow_query_log=ON" : 2.614925997594268E-5,
+      "select @@version_comment limit ?" : 2.614925997594268E-5
+    },
+    "reads" : 26769,
+    "writes" : 7648
+  },
+  "ceilingSpeed" : 3.5,
+  "stoppedBy" : "OVERLOADED",
+  "ceilingQps" : 12422.051849702148,
+  "currentQps" : 3549.1576713434706,
+  "low" : 0.3,
+  "high" : 0.5,
+  "explorations" : [ [ {
+    "speed" : 1.0,
+    "verdict" : "HELD",
+    "reason" : null,
+    "distortion" : 0.023235832492808847,
+    "metrics" : {
+      "active_sessions" : [ 0.7288135593220338, 16.0 ],
+      "qps" : [ 3289.303930354736, 5116.15875859855 ],
+      "replica.active_sessions" : [ 0.15254237288135594, 2.0 ],
+      "replica.qps" : [ 2328.391594038834, 4058.633251427432 ],
+      "replica.slow_finished_total" : [ 0.0, 0.0 ],
+      "replica.slow_running" : [ 0.0, 0.0 ],
+      "replication_lag_seconds" : [ 0.0016830508474576268, 0.0605 ],
+      "slow_finished_total" : [ 8.94915254237288, 12.0 ],
+      "slow_running" : [ 0.0, 0.0 ]
+    }
+  }, {
+    "speed" : 2.0,
+    "verdict" : "HELD",
+    "reason" : null,
+    "distortion" : 0.03750607045463036,
+    "metrics" : {
+      "active_sessions" : [ 1.21875, 4.0 ],
+      "qps" : [ 6137.675991355591, 9351.577735302144 ],
+      "replica.active_sessions" : [ 0.53125, 8.0 ],
+      "replica.qps" : [ 4347.7346814652965, 6095.619738992342 ],
+      "replica.slow_finished_total" : [ 0.0, 0.0 ],
+      "replica.slow_running" : [ 0.0, 0.0 ],
+      "replication_lag_seconds" : [ 0.003796875, 0.0545 ],
+      "slow_finished_total" : [ 0.0, 0.0 ],
+      "slow_running" : [ 0.0, 0.0 ]
+    }
+  }, {
+    "speed" : 4.0,
+    "verdict" : "DISTORTED",
+    "reason" : "재생기가 늦은 문장이 31.7%",
+    "distortion" : 0.31693376667040235,
+    "metrics" : {
+      "active_sessions" : [ 6.947368421052632, 57.0 ],
+      "qps" : [ 10615.291355730027, 21783.10437701557 ],
+      "replica.active_sessions" : [ 1.9473684210526316, 25.0 ],
+      "replica.qps" : [ 7594.79674543326, 12953.383718172856 ],
+      "replica.slow_finished_total" : [ 0.0, 0.0 ],
+      "replica.slow_running" : [ 0.0, 0.0 ],
+      "replication_lag_seconds" : [ 0.40095263157894734, 0.8306 ],
+      "slow_finished_total" : [ 16.789473684210527, 29.0 ],
+      "slow_running" : [ 0.0, 0.0 ]
+    }
+  }, {
+    "speed" : 3.0,
+    "verdict" : "HELD",
+    "reason" : null,
+    "distortion" : 0.14998692517464232,
+    "metrics" : {
+      "active_sessions" : [ 6.25, 26.0 ],
+      "qps" : [ 8329.969684710877, 15652.64600749915 ],
+      "replica.active_sessions" : [ 1.7916666666666667, 33.0 ],
+      "replica.qps" : [ 6073.459632744051, 10965.971474868742 ],
+      "replica.slow_finished_total" : [ 0.0, 0.0 ],
+      "replica.slow_running" : [ 0.0, 0.0 ],
+      "replication_lag_seconds" : [ 0.23090833333333335, 0.631 ],
+      "slow_finished_total" : [ 0.0, 0.0 ],
+      "slow_running" : [ 0.0, 0.0 ]
+    }
+  }, {
+    "speed" : 3.5,
+    "verdict" : "HELD",
+    "reason" : null,
+    "distortion" : 0.12114759609996638,
+    "metrics" : {
+      "active_sessions" : [ 7.095238095238095, 48.0 ],
+      "qps" : [ 9496.244175024625, 15383.220765609536 ],
+      "replica.active_sessions" : [ 1.619047619047619, 17.0 ],
+      "replica.qps" : [ 6852.231385351224, 10597.74950990013 ],
+      "replica.slow_finished_total" : [ 0.0, 0.0 ],
+      "replica.slow_running" : [ 0.0, 0.0 ],
+      "replication_lag_seconds" : [ 0.08683809523809523, 0.2362 ],
+      "slow_finished_total" : [ 0.0, 0.0 ],
+      "slow_running" : [ 0.0, 0.0 ]
+    }
+  }, {
+    "speed" : 3.75,
+    "verdict" : "OVERLOADED",
+    "reason" : "replica.active_sessions이(가) 3번 연속 6 이상 (최대 295)",
+    "distortion" : 0.4057678658149352,
+    "metrics" : {
+      "active_sessions" : [ 30.095238095238095, 202.0 ],
+      "qps" : [ 9890.239330357459, 30697.29687194974 ],
+      "replica.active_sessions" : [ 23.285714285714285, 295.0 ],
+      "replica.qps" : [ 7012.222161758369, 14422.21285395411 ],
+      "replica.slow_finished_total" : [ 44.095238095238095, 314.0 ],
+      "replica.slow_running" : [ 15.238095238095237, 240.0 ],
+      "replication_lag_seconds" : [ 0.5208090909090909, 1.7192 ],
+      "slow_finished_total" : [ 65.42857142857143, 280.0 ],
+      "slow_running" : [ 3.9523809523809526, 44.0 ]
+    }
+  } ] ],
+  "replica" : {
+    "traffic" : {
+      "statements" : 30594,
+      "spanMicros" : 10778285,
+      "shares" : {
+        "SELECT c FROM sbtest2 WHERE id=?" : 0.1640844610054259,
+        "SELECT c FROM sbtest3 WHERE id=?" : 0.15852781591161666,
+        "SELECT c FROM sbtest1 WHERE id=?" : 0.15297117081780742,
+        "SELECT c FROM sbtest4 WHERE id=?" : 0.14937569458063674,
+        "BEGIN" : 0.06249591423154867,
+        "COMMIT" : 0.06249591423154867,
+        "SELECT SUM(k) FROM sbtest4 WHERE id BETWEEN ? AND ?" : 0.01627770151010002,
+        "SELECT DISTINCT c FROM sbtest4 WHERE id BETWEEN ? AND ? ORDER BY c" : 0.016146956919657448,
+        "SELECT DISTINCT c FROM sbtest2 WHERE id BETWEEN ? AND ? ORDER BY c" : 0.016081584624436165,
+        "SELECT c FROM sbtest1 WHERE id BETWEEN ? AND ?" : 0.01601621232921488,
+        "SELECT c FROM sbtest2 WHERE id BETWEEN ? AND ? ORDER BY c" : 0.01582009544355102,
+        "SELECT c FROM sbtest3 WHERE id BETWEEN ? AND ?" : 0.01582009544355102,
+        "SELECT c FROM sbtest4 WHERE id BETWEEN ? AND ? ORDER BY c" : 0.015722037000719096,
+        "SELECT SUM(k) FROM sbtest1 WHERE id BETWEEN ? AND ?" : 0.015689350853108453,
+        "SELECT c FROM sbtest1 WHERE id BETWEEN ? AND ? ORDER BY c" : 0.015623978557887167,
+        "SELECT DISTINCT c FROM sbtest3 WHERE id BETWEEN ? AND ? ORDER BY c" : 0.015591292410276524,
+        "SELECT c FROM sbtest4 WHERE id BETWEEN ? AND ?" : 0.015427861672223311,
+        "SELECT c FROM sbtest3 WHERE id BETWEEN ? AND ? ORDER BY c" : 0.015329803229391384,
+        "SELECT SUM(k) FROM sbtest2 WHERE id BETWEEN ? AND ?" : 0.01529711708178074,
+        "SELECT SUM(k) FROM sbtest3 WHERE id BETWEEN ? AND ?" : 0.015231744786559457,
+        "SELECT c FROM sbtest2 WHERE id BETWEEN ? AND ?" : 0.015231744786559457,
+        "SELECT DISTINCT c FROM sbtest1 WHERE id BETWEEN ? AND ? ORDER BY c" : 0.014676080277178531,
+        "SET GLOBAL slow_query_log=ON" : 3.268614761064261E-5,
+        "select @@version_comment limit ?" : 3.268614761064261E-5
+      },
+      "reads" : 26769,
+      "writes" : 0
+    },
+    "ceilingQps" : 9934.697403158294,
+    "currentQps" : 2838.484972330941,
+    "confirmed" : true
+  }
+}

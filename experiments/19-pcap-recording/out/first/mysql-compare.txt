@@ -1,0 +1,13 @@
+문장 수: 서버 로그 19702, 패킷 캡처 19671 (차이 -31)
+연결 수: 11, 4. 실패한 문장: 0, 0. 걸린 시간 중앙값(마이크로초): 35, 54
+모양 40개 가운데 횟수가 같은 것 23개
+     2270 →    2260  SELECT C FROM SBTEST3 WHERE ID=?
+      224 →     222  DELETE FROM SBTEST3 WHERE ID=?
+      248 →     246  SELECT C FROM SBTEST4 WHERE ID BETWEEN ? AND ? ORDER BY C
+      985 →     983  COMMIT
+      224 →     222  INSERT INTO SBTEST3 (ID, K, C, PAD) VALUES (?, ?, ?, ?)
+      232 →     230  UPDATE SBTEST3 SET K=K+? WHERE ID=?
+      985 →     984  BEGIN
+      247 →     246  SELECT SUM(K) FROM SBTEST3 WHERE ID BETWEEN ? AND ?
+      244 →     243  SELECT C FROM SBTEST2 WHERE ID BETWEEN ? AND ?
+        1 →       0  SELECT @@VERSION_COMMENT LIMIT ?

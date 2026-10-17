@@ -1,0 +1,33 @@
+===== 1부: 같은 부하를 서버 로그와 패킷 캡처로 동시에 =====
+34181 packets captured 47448 packets received by filter 0 packets dropped by kernel 
+로그 항목 22095개를 읽어 문장 21782개, 연결 종료 8개를 썼다 (연결 11개)
+뺀 것: 재생에 쓰지 않는 항목 305, 머리에서 잘린 트랜잭션의 문장 0
+패킷 캡처: 시작을 보지 못한 연결 0, 조각을 놓친 연결 0, 읽지 못한 연결(TLS, 모르는 명령) 0 (연결 4개 가운데)
+로그 항목 15668개를 읽어 문장 15668개, 연결 종료 0개를 썼다 (연결 4개)
+뺀 것: 재생에 쓰지 않는 항목 0, 머리에서 잘린 트랜잭션의 문장 0
+문장 수: 서버 로그 21782, 패킷 캡처 15668 (차이 -6114)
+연결 수: 11, 4. 실패한 문장: 0, 0. 걸린 시간 중앙값(마이크로초): 105, 243
+모양 40개 가운데 횟수가 같은 것 0개
+     2730 →    1840  SELECT C FROM SBTEST2 WHERE ID=?
+     2890 →    2060  SELECT C FROM SBTEST4 WHERE ID=?
+     2720 →    2000  SELECT C FROM SBTEST1 WHERE ID=?
+     2550 →    1938  SELECT C FROM SBTEST3 WHERE ID=?
+     1089 →     781  COMMIT
+     1089 →     785  BEGIN
+      280 →     185  UPDATE SBTEST2 SET C=? WHERE ID=?
+      266 →     176  UPDATE SBTEST1 SET K=K+? WHERE ID=?
+      284 →     195  DELETE FROM SBTEST2 WHERE ID=?
+      284 →     195  INSERT INTO SBTEST2 (ID, K, C, PAD) VALUES (?, ?, ?, ?)
+14717 packets captured 14717 packets received by filter 0 packets dropped by kernel 
+로그 항목 13902개를 읽어 문장 6927개, 연결 종료 16개를 썼다 (연결 16개)
+뺀 것: 재생에 쓰지 않는 항목 6959, 머리에서 잘린 트랜잭션의 문장 0
+읽지 못한 항목 0, 같은 연결의 앞 문장보다 이르게 계산돼 시각을 맞춘 문장 2788
+패킷 캡처: 시작을 보지 못한 연결 0, 조각을 놓친 연결 0, 읽지 못한 연결(TLS, 모르는 메시지) 0 (연결 5개 가운데)
+로그 항목 6930개를 읽어 문장 6925개, 연결 종료 5개를 썼다 (연결 5개)
+뺀 것: 재생에 쓰지 않는 항목 0, 머리에서 잘린 트랜잭션의 문장 0
+문장 수: 서버 로그 6927, 패킷 캡처 6925 (차이 -2)
+연결 수: 16, 5. 실패한 문장: 0, 0. 걸린 시간 중앙값(마이크로초): 28, 165
+모양 11개 가운데 횟수가 같은 것 9개
+        1 →       0  ALTER SYSTEM SET LOG_MIN_DURATION_STATEMENT = -?
+        1 →       0  SELECT PG_RELOAD_CONF()
+끝

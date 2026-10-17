@@ -1,0 +1,35 @@
+# 실험 19: 패킷 캡처로 녹화한다 (#79)
+name: dbreplay-exp19
+
+services:
+  mysql84:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: replay
+      MYSQL_DATABASE: sbtest
+    command:
+      - --slow-query-log=OFF
+      - --long-query-time=0
+      - --log-output=FILE
+      - --slow-query-log-file=/var/lib/mysql/slow.log
+      - --log-slow-extra=ON
+      - --max-connections=1000
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-uroot", "-preplay", "--silent"]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+
+  pg16:
+    image: postgres:16
+    environment:
+      POSTGRES_PASSWORD: replay
+      POSTGRES_DB: shop
+    command: ["postgres", "-c", "logging_collector=on", "-c", "log_destination=csvlog", "-c", "log_directory=log",
+              "-c", "log_filename=pg.log", "-c", "log_rotation_age=0", "-c", "log_rotation_size=0",
+              "-c", "log_timezone=UTC", "-c", "log_disconnections=on", "-c", "max_connections=300"]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 2s
+      timeout: 2s
+      retries: 60

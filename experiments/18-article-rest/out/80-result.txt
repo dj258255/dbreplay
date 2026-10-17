@@ -1,0 +1,15 @@
+== 한가할 때 5초
+active_sessions            25       0.00       0.00       0.00
+replica.active_sessions       25       0.00       0.04       1.00
+replication_lag_seconds       25       0.00       0.00       0.00
+== 주 DB에 쓰기를 거는 동안 10초 (종 DB에는 복제 적용만 있다)
+active_sessions            50       0.00       0.62       4.00
+replica.active_sessions       50       0.00       0.00       0.00
+replication_lag_seconds       50       0.00       0.00       0.00
+== 종 DB에 알람을 낮게 걸고 탐색
+6         3.75      2.87      3.22  770.048ms     40.6%       202  과부하: replica.active_sessions이(가) 3번 연속 6 이상 (최대 295)
+상한: 3.50배속
+종 DB에 함께 튼 트래픽: 녹화 구간의 초당 문장 수 2838, 상한 배속에서 9935
+종 DB의 수위: 29% (초당 2838 ÷ 상한 9935), 건강 구간 30~50% → 과잉
+  종 DB의 상한은 종 DB의 알람으로 확인됐다
+평가 파일의 replica: True

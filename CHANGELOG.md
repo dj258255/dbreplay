@@ -7,6 +7,31 @@
 
 다음 릴리스에 묶일 변경을 여기 쌓는다.
 
+v0.3.0으로 묶는다. 원문 대조에서 남은 "없음"과 "부분"을 메운다(상위 이슈 #90). 기능마다 실제 DB에서 한 번씩 돌려 봤다(실험 18, 19).
+
+### 더한 것
+
+- 대상만 걸러 내기(#83). `convert --database <이름>`과 `--exclude-user <계정>`. 건 조건은 트래픽 파일의 머리말에 남는다.
+- 패킷 캡처 녹화(#79). `convert --from mysql-pcap|postgres-pcap`은 `tcpdump -w`로 뜬 파일을 읽는다. 서버 로그를 켜지 않아도 된다.
+  준비한 문장(MySQL 바이너리 프로토콜, PostgreSQL 확장 질의)은 인자를 끼운 문장으로 남는다. 놓친 연결은 해석하지 않고 그 수를 알린다.
+  서버 로그와 동시에 떠서 MySQL 20,062 대 20,060, PostgreSQL 6,682 대 6,680이었다(실험 19).
+- 종 DB의 지표와 알람(#80). `--replica-url`을 주면 종 DB의 지표가 `replica.`을 붙여 떠지고 알람을 걸 수 있다. 종 DB의 알람이 탐색을 멈추면
+  평가 파일에 `replica.confirmed`가 남는다. 복제 적용 스레드는 `replica.active_sessions`에서 뺀다.
+- 운영 QPS를 도구가 잰다(#82). `check --measure-url`이 운영에 붙어 지금의 QPS를 재 수위를 다시 계산한다. PostgreSQL은 `pg_stat_statements`로 `qps`를 낸다.
+  `--server-log`를 주면 PostgreSQL의 서버 로그에서 느리게 끝난 문장의 수를 센다.
+- 쓰기만의 탐색과 나눠 틀기(#81). `--only writes`, 읽기를 여러 일꾼으로 트는 `--workers`, 여러 프로세스로 나눠 트는 `replay --shard i/n --start-at`.
+- 존 분포와 분할 권고(#85). `--zones a=2,b=1`을 주면 가장 많은 존이 빠져도 버티는 읽기 노드 수를 낸다. 쓰기에 필요한 배수가 `--max-write-scale`을 넘으면 분할을 권한다.
+- 확장의 확인과 되돌리기(#86). `--scale-verify-command`가 실패하면 `--scale-rollback-command`로 되돌린다. 불린 명령은 `--scale-log`에 지문으로 남는다.
+- 등록 규칙과 상주 평가(#87). 트래픽 모양이 안정적이고(`--register-max-distance`) QPS가 충분한(`--register-min-qps`) 대상만 평가한다. `manage --every <분>`은 떠 있으면서 주기마다 훑는다.
+- 샌드박스 띄우기(#84). `sandbox-create --like <운영>`이 같은 판의 도커 컨테이너를 띄우고 운영의 파라미터를 옮긴다. `sandbox-diff`, `sandbox-drop`.
+- 화면과 HTTP API(#88). `serve --dir <작업 폴더>`가 평가와 리포트를 보여 주고, `--targets`에 등록한 대상 이름으로만 재생을 맡는다. API는 토큰을 요구한다.
+
+### 알려진 한계
+
+- 패킷 캡처가 운영에 주는 부담은 판정하지 못했다(실험 19, #106). TLS 연결과 캡처를 켜기 전부터 열린 연결은 읽지 못한다.
+- `--workers`와 `--shard`가 재생기의 한계를 올리는지는 재지 않았다.
+- `serve`의 화면은 토큰 없이 열린다. 같은 장비의 다른 사용자는 평가와 리포트의 SQL을 볼 수 있다.
+
 ## [0.2.0] - 2026-10-17
 
 첫 릴리스다. 메이투안 글의 녹화, 재생, 전후 비교, 용량 탐색, 수위, 평가의 유효성을 MySQL 8.4와 PostgreSQL 16에서 명령줄 도구 하나로 따라간다.
