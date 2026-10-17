@@ -39,6 +39,11 @@ public final class JdbcTarget implements Target {
 		return new Endpoint(m.group(2), port, database);
 	}
 
+	/** 접속 URL. 암호가 들어 있을 수 있어 화면이나 파일에 싣지 않는다. */
+	public String url() {
+		return url;
+	}
+
 	public String user() {
 		return user;
 	}
