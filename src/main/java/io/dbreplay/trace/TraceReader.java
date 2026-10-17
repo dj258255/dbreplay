@@ -4,6 +4,7 @@ import java.io.BufferedReader;
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.Reader;
+import java.util.function.Predicate;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -14,8 +15,15 @@ public final class TraceReader implements Closeable {
 
 	private final BufferedReader in;
 	private final TraceHeader header;
+	private final Predicate<TraceRecord> keep;
 
 	public TraceReader(Reader in) throws IOException {
+		this(in, r -> true);
+	}
+
+	/** @param keep 이것이 참인 레코드만 돌려준다. 재생을 나눠 틀거나 쓰기만 틀 때 쓴다(#81) */
+	public TraceReader(Reader in, Predicate<TraceRecord> keep) throws IOException {
+		this.keep = keep;
 		this.in = new BufferedReader(in);
 		String first = this.in.readLine();
 		if (first == null) {
@@ -33,8 +41,13 @@ public final class TraceReader implements Closeable {
 
 	/** 다음 레코드. 끝이면 null. */
 	public TraceRecord next() throws IOException {
-		String line = in.readLine();
-		return line == null ? null : MAPPER.readValue(line, TraceRecord.class);
+		for (String line; (line = in.readLine()) != null;) {
+			TraceRecord r = MAPPER.readValue(line, TraceRecord.class);
+			if (keep.test(r)) {
+				return r;
+			}
+		}
+		return null;
 	}
 
 	@Override

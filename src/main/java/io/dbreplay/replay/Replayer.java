@@ -86,6 +86,7 @@ public final class Replayer {
 	private final ResultSink sink;
 	private final Options options;
 	private final SessionPool pool;
+	private final long fixedBaseMicros;
 
 	private final LongAdder statements = new LongAdder();
 	private final LongAdder errors = new LongAdder();
@@ -101,15 +102,27 @@ public final class Replayer {
 	private long originNanos;
 	private SpinTimer timer;
 
-	private Replayer(Target target, ResultSink sink, Options options) {
+	private Replayer(Target target, ResultSink sink, Options options, long fixedBaseMicros) {
 		this.target = target;
 		this.sink = sink;
 		this.options = options;
 		this.pool = new SessionPool(target, options.maxConnections());
+		this.fixedBaseMicros = fixedBaseMicros;
 	}
 
 	public static ReplaySummary run(TraceReader trace, Target target, ResultSink sink, Options options) throws IOException {
-		return new Replayer(target, sink, options).run(trace);
+		return new Replayer(target, sink, options, 0).run(trace);
+	}
+
+	/**
+	 * 원본의 기준 시각을 정해 두고 튼다. 트래픽을 나눠 여러 재생기가 함께 틀 때 쓴다(#81). 나눈 조각의 첫 문장은 전체의 첫 문장보다
+	 * 늦을 수 있다. 조각마다 제 첫 문장을 기준으로 삼으면 조각끼리 시각이 어긋난다.
+	 *
+	 * @param baseMicros 전체 트래픽의 첫 문장이 시작된 시각. 이 시각이 재생의 시작이다
+	 */
+	public static ReplaySummary run(TraceReader trace, Target target, ResultSink sink, Options options, long baseMicros)
+			throws IOException {
+		return new Replayer(target, sink, options, baseMicros).run(trace);
 	}
 
 	private ReplaySummary run(TraceReader trace) throws IOException {
@@ -129,7 +142,7 @@ public final class Replayer {
 						if (options.unit() != Unit.SESSION) {
 							pool.prewarm(r.db(), options.warmConnections());
 						}
-						baseMicros = r.startMicros();
+						baseMicros = fixedBaseMicros > 0 ? Math.min(fixedBaseMicros, r.startMicros()) : r.startMicros();
 						originNanos = System.nanoTime() + lookaheadNanos;
 					}
 					lastStartMicros = r.startMicros();

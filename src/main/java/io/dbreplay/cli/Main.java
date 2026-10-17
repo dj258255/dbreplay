@@ -20,6 +20,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Predicate;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
@@ -54,6 +55,7 @@ import io.dbreplay.replay.JdbcTarget;
 import io.dbreplay.replay.ReplaySummary;
 import io.dbreplay.replay.Replayer;
 import io.dbreplay.replay.ResultWriter;
+import io.dbreplay.replay.TraceSelection;
 import io.dbreplay.report.MarkdownReport;
 import io.dbreplay.report.NewErrors;
 import io.dbreplay.report.RunRecord;
@@ -62,6 +64,7 @@ import io.dbreplay.sandbox.Sandbox;
 import io.dbreplay.sandbox.Snapshot;
 import io.dbreplay.trace.PrivateFile;
 import io.dbreplay.trace.TraceReader;
+import io.dbreplay.trace.TraceRecord;
 
 public final class Main {
 
@@ -82,7 +85,9 @@ public final class Main {
 			  dbreplay replay  --trace <트래픽 파일> --url <JDBC URL> --user <계정> [--password <암호>]
 			                   [--speed 1] [--unit transaction|statement|session] [--max-connections 500]
 			                   [--only reads] [--out <결과 파일>] [--run-out <재생 기록 파일>] [--metrics on] [지표 옵션]
-			                   [--profile-command <명령>] [주종 옵션]
+			                   [--profile-command <명령>] [주종 옵션] [--shard <i>/<N> [--start-at <에포크 밀리초>]]
+			                   --shard는 원본의 연결 번호로 N개로 나눈 것 가운데 i번째만 튼다. 장비 여러 대가 나눠 틀 때
+			                   장비마다 같은 --start-at을 준다. 시각의 기준은 전체 트래픽의 첫 문장이다
 
 			  dbreplay compare --before <트래픽 파일> --after <트래픽 파일> [--top 3] [--min-count 100] [--rows 15]
 
@@ -97,7 +102,7 @@ public final class Main {
 			                   [--alarm-command <알람 확인 명령>] [--alarm-metric <이름>=<값>,...]
 			                   [--alarm-active-sessions <개수>] [--alarm-total <이름>=<값>,...] [--alarm-sustain 3] [--max-distortion 0.2]
 			                   [지표 옵션] [--profile-command <명령>] [주종 옵션]
-			                   [--unit transaction|statement|session] [--only reads] [--max-connections 500]
+			                   [--unit transaction|statement|session] [--only reads|writes] [--workers 1] [--max-connections 500]
 			                   [--start-speed 1] [--max-speed 64] [--precision 0.1] [--repeat 1]
 			                   [--current-qps <지금의 초당 문장 수>] [--current-read-qps <읽기>] [--current-write-qps <쓰기>]
 			                   [--current-replica-qps <종 DB의 지금의 초당 문장 수>]
@@ -166,6 +171,8 @@ public final class Main {
 			  statement    문장 하나가 한 단위다. 종 DB의 읽기 트래픽에 쓴다
 			  session      원본의 연결을 그대로 옮긴다. 세션 상태에 기대는 트래픽에 쓴다
 			--only reads를 주면 읽기 문장만 하나씩 독립으로 튼다. 읽기만 늘 때의 상한을 볼 때 쓴다
+			--only writes를 주면 쓰기가 든 트랜잭션만 트랜잭션 단위로 튼다. 쓰기의 상한을 볼 때 쓴다
+			--workers N을 주면 라운드마다 원본의 연결 번호로 나눈 재생기 N개를 나란히 돌린다. 재생기가 먼저 막힐 때 쓴다
 
 			확장·축소 권고(--read-nodes):
 			  읽기 수위가 건강 구간을 벗어나면 필요한 노드 수를 낸다. 읽기 상한이 노드 수에 비례한다는 가정이고 확인된 것이 아니다.
@@ -314,12 +321,16 @@ public final class Main {
 		Map<String, double[]> metrics = Map.of();
 		List<String> failures = List.of();
 		try (MetricSampler sampler = withMetrics ? sampler(target, options) : new MetricSampler();
-				TraceReader trace = openTrace(required(options, "--trace"));
+				TraceReader trace = openTrace(required(options, "--trace"), shardOf(options));
 				ResultWriter results = out == null ? null
 						: new ResultWriter(Files.newBufferedWriter(Path.of(out), StandardCharsets.UTF_8))) {
 			newErrors = new NewErrors(results == null ? result -> { } : results);
+			// 장비 여러 대가 나눠 틀 때는 같은 시각에 시작하고, 전체 트래픽의 첫 문장을 같은 기준으로 삼는다(#81)
+			waitUntil(options.get("--start-at"));
 			ReplicaRun replicaRun = ReplicaRun.start(options, replayOptions.speed());
-			s = Replayer.run(trace, target, newErrors, replayOptions);
+			s = options.containsKey("--shard")
+					? Replayer.run(trace, target, newErrors, replayOptions, firstStartMicros(required(options, "--trace"), r -> true))
+					: Replayer.run(trace, target, newErrors, replayOptions);
 			replicaSummary = replicaRun == null ? null : replicaRun.join();
 			metrics = sampler.stop();
 			failures = sampler.failures();
@@ -536,6 +547,13 @@ public final class Main {
 		try (TraceReader trace = openTrace(tracePath)) {
 			traffic = TrafficModel.of(trace);
 		}
+		// 쓰기만 틀면 쓰기가 든 트랜잭션만 고른다. 트랜잭션은 끝까지 봐야 알 수 있어 미리 한 번 읽는다(#81)
+		Predicate<TraceRecord> selection = r -> true;
+		if (writesOnly(options)) {
+			try (TraceReader trace = openTrace(tracePath)) {
+				selection = TraceSelection.writeUnits(trace);
+			}
+		}
 
 		// 상한을 하나로 낼지, 되풀이해 범위로 낼지. 되풀이하지 않았으면 출력이 지금과 글자 하나 다르지 않다
 		CeilingRange range = null;
@@ -544,7 +562,7 @@ public final class Main {
 		double ceilingSpeed;
 		RoundJudge.State stoppedBy;
 		if (repeat == 1) {
-			Explorer.Result result = exploreOnce(target, sandbox, resetCommand, tracePath, options, judge, exploreOptions);
+			Explorer.Result result = exploreOnce(target, sandbox, resetCommand, tracePath, selection, options, judge, exploreOptions);
 			results.add(result);
 			System.out.println();
 			if (result.ceilingSpeed() == 0) {
@@ -559,7 +577,7 @@ public final class Main {
 		else {
 			for (int i = 1; i <= repeat; i++) {
 				System.out.printf("=== 탐색 %d/%d ===%n", i, repeat);
-				Explorer.Result one = exploreOnce(target, sandbox, resetCommand, tracePath, options, judge, exploreOptions);
+				Explorer.Result one = exploreOnce(target, sandbox, resetCommand, tracePath, selection, options, judge, exploreOptions);
 				results.add(one);
 				System.out.printf("%n탐색 %d/%d의 상한: %s%n%n", i, repeat,
 						ceilingText(one.ceilingSpeed(), one.stoppedBy(), exploreOptions.startSpeed()));
@@ -577,9 +595,10 @@ public final class Main {
 		}
 
 		// 읽기만 튼 탐색이면 상한과 수위도 읽기의 것이다
-		double recordedQps = readsOnly(options) ? traffic.readQps() : traffic.qps();
+		double recordedQps = readsOnly(options) ? traffic.readQps() : writesOnly(options) ? traffic.writeQps() : traffic.qps();
 		double ceilingQps = recordedQps * ceilingSpeed;
-		double currentQps = number(options, readsOnly(options) ? "--current-read-qps" : "--current-qps", recordedQps);
+		double currentQps = number(options,
+				readsOnly(options) ? "--current-read-qps" : writesOnly(options) ? "--current-write-qps" : "--current-qps", recordedQps);
 		WaterLevel level = new WaterLevel(currentQps, ceilingQps,
 				number(options, "--level-low", 0.30), number(options, "--level-high", 0.50));
 		printLevel(level, recordedQps);
@@ -679,7 +698,9 @@ public final class Main {
 	 * 탐색 한 번의 알고리즘과 라운드의 내용은 되풀이를 넣기 전과 같다.
 	 */
 	private static Explorer.Result exploreOnce(JdbcTarget target, Sandbox sandbox, String resetCommand, String tracePath,
-			Map<String, String> options, RoundJudge judge, Explorer.Options exploreOptions) throws Exception {
+			Predicate<TraceRecord> selection, Map<String, String> options, RoundJudge judge, Explorer.Options exploreOptions)
+			throws Exception {
+		int workers = workers(options);
 		System.out.printf("%-6s %7s %9s %9s %10s %9s %9s  %s%n",
 				"라운드", "배속", "계획(초)", "실제(초)", "늦음 p99", "왜곡", "실행 중", "판정");
 		Explorer.Result result = Explorer.explore(speed -> {
@@ -693,9 +714,9 @@ public final class Main {
 			ReplaySummary s;
 			ReplaySummary replicaSummary;
 			Map<String, double[]> metrics;
-			try (MetricSampler sampler = sampler(target, options); TraceReader trace = openTrace(tracePath)) {
+			try (MetricSampler sampler = sampler(target, options)) {
 				ReplicaRun replicaRun = ReplicaRun.start(options, speed);
-				s = Replayer.run(trace, target, r -> { }, replayOptions(options, speed));
+				s = replayInShards(tracePath, selection, target, replayOptions(options, speed), workers);
 				replicaSummary = replicaRun == null ? null : replicaRun.join();
 				metrics = sampler.stop();
 				// 라운드 도중에 지표를 읽다 실패했으면 여기서 멈춘다. 그 뒤의 값이 없어 알람이 못 본 것을 버틴 것으로 읽게 된다
@@ -892,6 +913,10 @@ public final class Main {
 			System.out.println("읽기만 튼 탐색이다. 위의 초당 문장 수와 상한, 수위는 읽기 문장만 센 것이다");
 			return null;
 		}
+		if (writesOnly(options)) {
+			System.out.println("쓰기만 튼 탐색이다. 쓰기가 든 트랜잭션만 틀었고, 위의 초당 문장 수와 상한, 수위는 쓰기 문장만 센 것이다");
+			return null;
+		}
 		System.out.printf("%n읽기와 쓰기가 지금의 비율(읽기 %.0f%%)로 함께 늘 때:%n",
 				100.0 * traffic.reads() / (traffic.reads() + traffic.writes()));
 		WaterLevel[] levels = new WaterLevel[2];
@@ -1012,11 +1037,94 @@ public final class Main {
 	}
 
 	private static boolean readsOnly(Map<String, String> options) {
-		String only = options.get("--only");
-		if (only != null && !only.equals("reads")) {
-			throw new IllegalArgumentException("--only에는 reads만 줄 수 있다");
+		return "reads".equals(only(options));
+	}
+
+	/** --shard i/N을 줬으면 그 조각만, 아니면 전부. */
+	private static Predicate<TraceRecord> shardOf(Map<String, String> options) {
+		return options.containsKey("--shard") ? TraceSelection.shard(options.get("--shard")) : r -> true;
+	}
+
+	/** --start-at(에포크 밀리초)까지 기다린다. 없으면 바로 간다. */
+	private static void waitUntil(String epochMillis) throws InterruptedException {
+		if (epochMillis == null) {
+			return;
 		}
-		return only != null;
+		long wait = Long.parseLong(epochMillis) - System.currentTimeMillis();
+		if (wait > 0) {
+			Thread.sleep(wait);
+		}
+	}
+
+	/** 쓰기가 든 트랜잭션만 튼다. 쓰기의 상한을 따로 볼 때 쓴다(#81). 트랜잭션 단위로 내보낸다. */
+	private static boolean writesOnly(Map<String, String> options) {
+		return "writes".equals(only(options));
+	}
+
+	private static String only(Map<String, String> options) {
+		String only = options.get("--only");
+		if (only != null && !only.equals("reads") && !only.equals("writes")) {
+			throw new IllegalArgumentException("--only에는 reads나 writes를 준다");
+		}
+		return only;
+	}
+
+	/** 라운드마다 나란히 돌릴 재생기 수. 기본 1. */
+	static int workers(Map<String, String> options) {
+		int workers = nodes(options, "--workers", 1);
+		if (workers < 1) {
+			throw new IllegalArgumentException("--workers에는 1 이상의 정수를 준다");
+		}
+		return workers;
+	}
+
+	/**
+	 * 트래픽을 연결 번호로 나눠 재생기 여러 개가 함께 튼다(#81). 글은 재생 작업마다 Kubernetes Job을 띄워 재생기를 늘린다.
+	 * 이 도구는 한 프로세스 안에서 재생기를 여러 개 띄운다. 재생기마다 타이머, 넘겨주는 스레드, 연결 풀이 따로라 한 재생기가
+	 * 먼저 막히는 일(실험 07)을 나눈다. 조각들은 전체의 첫 문장 시각을 같은 기준으로 삼는다. 요약은 하나로 모은다.
+	 * 장비를 넘어 나누려면 장비마다 replay --shard를 같은 --start-at으로 돌린다.
+	 */
+	private static ReplaySummary replayInShards(String tracePath, Predicate<TraceRecord> selection, JdbcTarget target,
+			Replayer.Options replayOptions, int workers) throws Exception {
+		if (workers == 1) {
+			try (TraceReader trace = openTrace(tracePath, selection)) {
+				return Replayer.run(trace, target, r -> { }, replayOptions);
+			}
+		}
+		long base = firstStartMicros(tracePath, selection);
+		List<CompletableFuture<ReplaySummary>> parts = new ArrayList<>();
+		for (int i = 0; i < workers; i++) {
+			Predicate<TraceRecord> shard = selection.and(TraceSelection.shard(i, workers));
+			parts.add(CompletableFuture.supplyAsync(() -> {
+				try (TraceReader trace = openTrace(tracePath, shard)) {
+					return Replayer.run(trace, target, r -> { }, replayOptions, base);
+				}
+				catch (IOException e) {
+					throw new java.io.UncheckedIOException(e);
+				}
+			}, command -> Thread.ofPlatform().name("dbreplay-worker").start(command)));
+		}
+		List<ReplaySummary> summaries = new ArrayList<>();
+		for (CompletableFuture<ReplaySummary> part : parts) {
+			try {
+				summaries.add(part.join());
+			}
+			catch (java.util.concurrent.CompletionException e) {
+				if (e.getCause() instanceof java.io.UncheckedIOException io) {
+					throw io.getCause();
+				}
+				throw e;
+			}
+		}
+		return ReplaySummary.merge(summaries);
+	}
+
+	/** 고른 레코드 가운데 첫 문장의 시작 시각. 나눠 튼 조각들의 공통 기준이다. 없으면 0. */
+	private static long firstStartMicros(String tracePath, Predicate<TraceRecord> selection) throws IOException {
+		try (TraceReader trace = openTrace(tracePath, selection)) {
+			TraceRecord first = trace.next();
+			return first == null ? 0 : first.startMicros();
+		}
 	}
 
 	/** DB에서 읽은 설정에, --profile-command가 있으면 그 명령이 낸 장비 설정을 더한다. */
@@ -1337,7 +1445,8 @@ public final class Main {
 
 	private static Replayer.Options replayOptions(Map<String, String> options, double speed) {
 		Replayer.Options defaults = Replayer.Options.atSpeed(speed);
-		Replayer.Options chosen = readsOnly(options) ? defaults.onlyReads() : defaults.withUnit(unit(options));
+		Replayer.Options chosen = readsOnly(options) ? defaults.onlyReads()
+				: writesOnly(options) ? defaults.withUnit(Replayer.Unit.TRANSACTION) : defaults.withUnit(unit(options));
 		return chosen.withMaxConnections((int) number(options, "--max-connections", defaults.maxConnections()));
 	}
 
@@ -1437,6 +1546,10 @@ public final class Main {
 
 	private static TraceReader openTrace(String path) throws IOException {
 		return new TraceReader(Files.newBufferedReader(Path.of(path), StandardCharsets.UTF_8));
+	}
+
+	private static TraceReader openTrace(String path, Predicate<TraceRecord> keep) throws IOException {
+		return new TraceReader(Files.newBufferedReader(Path.of(path), StandardCharsets.UTF_8), keep);
 	}
 
 	private static double number(Map<String, String> options, String name, double fallback) {

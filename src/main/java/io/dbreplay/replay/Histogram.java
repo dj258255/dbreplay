@@ -32,6 +32,20 @@ public final class Histogram {
 		}
 	}
 
+	/** 다른 분포의 개수를 더한다. 나눠 튼 재생기들의 분포를 하나로 모을 때 쓴다(#81). */
+	public void add(Histogram other) {
+		for (int i = 0; i < counts.length(); i++) {
+			long n = other.counts.get(i);
+			if (n != 0) {
+				counts.addAndGet(i, n);
+			}
+		}
+		total.add(other.count());
+		synchronized (this) {
+			max = Math.max(max, other.max);
+		}
+	}
+
 	public long count() {
 		return total.sum();
 	}
