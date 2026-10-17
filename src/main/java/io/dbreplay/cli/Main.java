@@ -2,6 +2,7 @@ package io.dbreplay.cli;
 
 import java.io.BufferedWriter;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStreamWriter;
 import java.io.UncheckedIOException;
 import java.io.Reader;
@@ -16,6 +17,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.CompletableFuture;
 
@@ -26,6 +28,7 @@ import io.dbreplay.convert.ConvertSummary;
 import io.dbreplay.convert.HeadPolicy;
 import io.dbreplay.convert.LiteralMasker;
 import io.dbreplay.convert.RecordBuffer;
+import io.dbreplay.convert.ScopeFilter;
 import io.dbreplay.explore.Alarm;
 import io.dbreplay.explore.CeilingRange;
 import io.dbreplay.explore.Evaluation;
@@ -41,8 +44,10 @@ import io.dbreplay.metrics.CommandMetricSource;
 import io.dbreplay.metrics.DbMetricSource;
 import io.dbreplay.metrics.MetricSampler;
 import io.dbreplay.metrics.ReplicationLagSource;
+import io.dbreplay.mysql.MysqlCapture;
 import io.dbreplay.mysql.SlowLogConverter;
 import io.dbreplay.postgres.CsvLogConverter;
+import io.dbreplay.postgres.PostgresCapture;
 import io.dbreplay.replay.JdbcTarget;
 import io.dbreplay.replay.ReplaySummary;
 import io.dbreplay.replay.Replayer;
@@ -60,8 +65,13 @@ public final class Main {
 
 	private static final String USAGE = """
 			사용법:
-			  dbreplay convert --in <서버 로그> --out <트래픽 파일> [--from mysql-slow|postgres-csv]
+			  dbreplay convert --in <서버 로그> --out <트래픽 파일> [--from mysql-slow|postgres-csv|mysql-pcap|postgres-pcap]
+			                   [--port <DB 포트>]
+			                   mysql-pcap, postgres-pcap은 tcpdump -w로 뜬 패킷 캡처를 읽는다. 서버 로그를 켜지 않는다.
+			                   TLS 연결과 캡처 전부터 열려 있던 연결은 읽지 못하고, 놓친 수를 알린다
 			                   [--sort-memory-mb <힙의 4분의 1>] [--tmp-dir <출력 파일의 폴더>] [--mask none|strings|all]
+			                   [--database <이름>,...] [--exclude-user <계정>,...]
+			                   --database는 그 데이터베이스의 문장만, --exclude-user는 그 계정의 연결을 빼고 남긴다.
 			                   메모리에 다 들어가지 않는 로그는 임시 파일로 나눠 정렬한다. 로그만큼의 디스크가 더 든다
 			                   --mask strings는 글자로 된 값과 10자리 이상의 숫자를, all은 숫자까지 전부 가린다.
 			                   길이와 글자의 종류를 지키고 같은 값은 같은 값으로 바꾼다. 날짜 모양의 값은 가리지 않는다.
@@ -205,7 +215,7 @@ public final class Main {
 		long sortBytes = options.containsKey("--sort-memory-mb") ? (long) (number(options, "--sort-memory-mb", 0) * 1024 * 1024)
 				: Runtime.getRuntime().maxMemory() / 4;
 		String mask = options.getOrDefault("--mask", "none");
-		boolean mysql = from.equals("mysql-slow");
+		boolean mysql = from.startsWith("mysql");
 		LiteralMasker masker = switch (mask) {
 			case "none" -> null;
 			case "strings" -> new LiteralMasker(LiteralMasker.Level.STRINGS, mysql, LiteralMasker.randomKey());
@@ -213,23 +223,59 @@ public final class Main {
 			default -> throw new IllegalArgumentException("--mask에는 none, strings, all 중 하나를 준다");
 		};
 		String maskName = masker == null ? null : mask;
+		ScopeFilter scope = new ScopeFilter(names(options.get("--database")), names(options.get("--exclude-user")));
 		ConvertSummary s;
 		long spills;
 		// 트래픽 파일에는 값이 그대로 든 SQL이 들어 있다. 소유자만 읽을 수 있는 파일을 만들어 그 핸들에 바로
 		// 쓴다. 경로로 다시 열면 그 사이에 경로가 심볼릭 링크로 바뀌어 다른 파일로 갈 수 있다.
 		// 평가 파일·재생 결과·리포트는 값이 든 SQL이 없어 건드리지 않는다
-		try (Reader reader = Files.newBufferedReader(Path.of(required(options, "--in")), StandardCharsets.UTF_8);
-				Writer writer = new BufferedWriter(new OutputStreamWriter(PrivateFile.open(out), StandardCharsets.UTF_8));
-				RecordBuffer buffer = new RecordBuffer(tempParent, sortBytes)) {
-			s = switch (from) {
-				case "mysql-slow" -> SlowLogConverter.convert(reader, writer, HeadPolicy::byDefault, buffer, masker, maskName);
-				case "postgres-csv" -> CsvLogConverter.convert(reader, writer, HeadPolicy::byDefault, buffer, masker, maskName);
-				default -> throw new IllegalArgumentException("모르는 로그 종류: " + from);
-			};
-			spills = buffer.spills();
+		String losses = null;
+		if (from.endsWith("-pcap")) {
+			// 패킷 캡처. 서버 로그를 켜지 않고 녹화한 것이다(#79). 파일은 바이트로 읽는다
+			int port = (int) number(options, "--port", mysql ? 3306 : 5432);
+			try (InputStream in = new java.io.BufferedInputStream(Files.newInputStream(Path.of(required(options, "--in"))));
+					Writer writer = new BufferedWriter(new OutputStreamWriter(PrivateFile.open(out), StandardCharsets.UTF_8));
+					RecordBuffer buffer = new RecordBuffer(tempParent, sortBytes)) {
+				switch (from) {
+					case "mysql-pcap" -> {
+						MysqlCapture capture = new MysqlCapture(in, port);
+						s = SlowLogConverter.convert(capture, "pcap", writer, HeadPolicy::byDefault, buffer, masker, maskName, scope);
+						losses = capture.losses();
+					}
+					case "postgres-pcap" -> {
+						PostgresCapture capture = new PostgresCapture(in, port);
+						s = CsvLogConverter.convert(capture, writer, HeadPolicy::byDefault, buffer, masker, maskName, scope);
+						losses = capture.losses();
+					}
+					default -> throw new IllegalArgumentException("모르는 녹화 종류: " + from);
+				}
+				spills = buffer.spills();
+			}
+		}
+		else {
+			try (Reader reader = Files.newBufferedReader(Path.of(required(options, "--in")), StandardCharsets.UTF_8);
+					Writer writer = new BufferedWriter(new OutputStreamWriter(PrivateFile.open(out), StandardCharsets.UTF_8));
+					RecordBuffer buffer = new RecordBuffer(tempParent, sortBytes)) {
+				s = switch (from) {
+					case "mysql-slow" -> SlowLogConverter.convert(reader, writer, HeadPolicy::byDefault, buffer, masker, maskName, scope);
+					case "postgres-csv" -> CsvLogConverter.convert(reader, writer, HeadPolicy::byDefault, buffer, masker, maskName, scope);
+					default -> throw new IllegalArgumentException("모르는 로그 종류: " + from);
+				};
+				spills = buffer.spills();
+			}
+		}
+		if (losses != null) {
+			System.out.println("패킷 캡처: " + losses);
 		}
 		if (masker != null) {
 			System.out.printf("리터럴을 가렸다 (수준: %s). 날짜와 시각 모양의 값, 주석, 식별자는 그대로다%n", mask);
+		}
+		if (scope.active()) {
+			System.out.printf("걸러 냈다 (%s): 문장 %d개와 연결 종료 %d개를 뺐다%n", scope.describe(), scope.droppedStatements(),
+					scope.droppedCloses());
+			if (scope.unknownDatabase() > 0) {
+				System.out.printf("  데이터베이스를 알 수 없어 남긴 문장 %d개. 로그에 데이터베이스가 찍히기 전의 문장이다%n", scope.unknownDatabase());
+			}
 		}
 		if (spills > 0) {
 			System.out.printf("메모리에 다 올리지 않고 임시 파일 %d개로 나눠 정렬했다%n", spills);
@@ -1312,6 +1358,20 @@ public final class Main {
 
 	private static String ms(double micros) {
 		return String.format("%.3fms", micros / 1e3);
+	}
+
+	/** 쉼표로 나눈 이름들. 없으면 빈 집합. 이름 앞뒤의 공백은 뗀다 */
+	static Set<String> names(String value) {
+		if (value == null) {
+			return Set.of();
+		}
+		Set<String> names = new java.util.TreeSet<>();
+		for (String name : value.split(",")) {
+			if (!name.isBlank()) {
+				names.add(name.strip());
+			}
+		}
+		return names;
 	}
 
 	private static String required(Map<String, String> options, String name) {

@@ -25,6 +25,8 @@ import org.junit.jupiter.api.Test;
 
 import io.dbreplay.convert.ConvertSummary;
 import io.dbreplay.convert.HeadPolicy;
+import io.dbreplay.convert.RecordBuffer;
+import io.dbreplay.convert.ScopeFilter;
 import io.dbreplay.trace.TraceReader;
 import io.dbreplay.trace.TraceRecord;
 
@@ -238,5 +240,65 @@ class SlowLogConverterTest {
 				+ "# Query_time: " + queryTime + "  Lock_time: 0.000000 Rows_sent: 0  Rows_examined: 0\n"
 				+ "SET timestamp=1791676801;\n"
 				+ sql + ";\n";
+	}
+
+	/** 대상 데이터베이스의 문장만 남기고, 뺀 계정의 연결은 통째로 뺀다. 계정은 User@Host 줄에서 읽는다 (#83). */
+	@Test
+	void keepsOnlyTheTargetDatabaseAndDropsExcludedUsers() throws IOException {
+		String log = entryAs("2026-10-11T00:00:01.000000Z", "app", 3, "shop", "BEGIN")
+				+ entryAs("2026-10-11T00:00:01.001000Z", "app", 3, "shop", "UPDATE t SET v = 1")
+				+ entryAs("2026-10-11T00:00:01.002000Z", "backup", 4, "shop", "SELECT * FROM t")
+				+ entryAs("2026-10-11T00:00:01.003000Z", "app", 5, "billing", "SELECT 1")
+				// 걸러 낸 데이터베이스로 USE를 바꾼 뒤의 COMMIT은 빠지지만, 트랜잭션은 추적에서 끝난다
+				+ entryAs("2026-10-11T00:00:01.004000Z", "app", 3, "billing", "COMMIT")
+				+ entryAs("2026-10-11T00:00:01.005000Z", "app", 3, "shop", "SELECT 2")
+				+ quit("2026-10-11T00:00:01.100000Z", "app", 3)
+				+ quit("2026-10-11T00:00:01.100000Z", "backup", 4)
+				+ quit("2026-10-11T00:00:01.100000Z", "app", 5);
+		ScopeFilter scope = new ScopeFilter(Set.of("shop"), Set.of("backup"));
+		StringWriter out = new StringWriter();
+		try (RecordBuffer buffer = new RecordBuffer()) {
+			SlowLogConverter.convert(new StringReader(log), out, HeadPolicy::byDefault, buffer, null, null, scope);
+		}
+		List<TraceRecord> records = new ArrayList<>();
+		try (TraceReader reader = new TraceReader(new StringReader(out.toString()))) {
+			assertEquals("database=shop;exclude-user=backup", reader.header().scope());
+			for (TraceRecord r; (r = reader.next()) != null;) {
+				records.add(r);
+			}
+		}
+		assertEquals(List.of("BEGIN", "UPDATE t SET v = 1", "SELECT 2"),
+				records.stream().filter(r -> r.sql() != null).map(TraceRecord::sql).toList());
+		assertTrue(records.stream().allMatch(r -> r.session().equals("3")));
+		assertTrue(records.getLast().endsSession());
+		assertNull(records.get(2).txn(), "걸러 낸 COMMIT으로 끝난 트랜잭션 뒤의 문장이다");
+		assertEquals(3, scope.droppedStatements());
+		assertEquals(2, scope.droppedCloses());
+	}
+
+	/** 거르지 않으면 머리말에 조건이 없다. 예전 파일과 같은 머리말이다. */
+	@Test
+	void writesNoScopeWhenNothingIsFiltered() throws IOException {
+		StringWriter out = new StringWriter();
+		SlowLogConverter.convert(new StringReader(entryAs("2026-10-11T00:00:01.000000Z", "app", 3, "shop", "SELECT 1")), out);
+		assertFalse(out.toString().lines().findFirst().orElseThrow().contains("scope"));
+	}
+
+	/** 계정과 데이터베이스를 적은 항목 하나. */
+	private static String entryAs(String endTime, String user, long connectionId, String database, String sql) {
+		return "# Time: " + endTime + "\n"
+				+ "# User@Host: " + user + "[" + user + "] @ app1 [10.0.0.5]  Id: " + connectionId + "\n"
+				+ "# Query_time: 0.000100  Lock_time: 0.000000 Rows_sent: 0  Rows_examined: 0\n"
+				+ "use " + database + ";\n"
+				+ "SET timestamp=1791676801;\n"
+				+ sql + ";\n";
+	}
+
+	private static String quit(String endTime, String user, long connectionId) {
+		return "# Time: " + endTime + "\n"
+				+ "# User@Host: " + user + "[" + user + "] @ app1 [10.0.0.5]  Id: " + connectionId + "\n"
+				+ "# Query_time: 0.000001  Lock_time: 0.000000 Rows_sent: 0  Rows_examined: 0\n"
+				+ "SET timestamp=1791676801;\n"
+				+ "# administrator command: Quit;\n";
 	}
 }

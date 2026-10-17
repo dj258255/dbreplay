@@ -18,7 +18,7 @@ import java.util.regex.Pattern;
  * {@code SET timestamp=...;} 다음부터가 본문이다. 본문 안에 {@code # Time:}으로 시작하는 줄이 있으면
  * 거기서 항목이 잘린다. 로그 형식만으로는 구분할 수 없다.
  */
-public final class SlowLogParser {
+public final class SlowLogParser implements SlowLogSource {
 
 	private static final String TIME = "# Time: ";
 	private static final String USER_HOST = "# User@Host:";
@@ -27,6 +27,8 @@ public final class SlowLogParser {
 	private static final String ADMIN = "# administrator command: ";
 
 	private static final Pattern CONNECTION_ID = Pattern.compile("\\bId:\\s*(\\d+)");
+	// # User@Host: shop[shop] @ app1 [10.0.0.5]  Id:     8. 대괄호 앞이 로그인한 계정이다
+	private static final Pattern USER = Pattern.compile("^# User@Host:\\s*([^\\[\\s]*)\\[");
 	private static final Pattern FIELD = Pattern.compile("(\\w+):\\s+(\\S+)");
 	// 서버가 로그 파일을 (다시) 열 때 적는 세 줄짜리 머리말의 첫 줄
 	private static final Pattern BANNER = Pattern.compile("^\\S*mysqld\\S*, Version: .* started with:$");
@@ -40,11 +42,13 @@ public final class SlowLogParser {
 	}
 
 	/** 머리 줄이나 본문이 없거나 값이 깨져 버린 항목 수. 파일이 중간에 잘렸을 때 생긴다. */
+	@Override
 	public long skipped() {
 		return skipped;
 	}
 
 	/** 다음 항목. 끝이면 null. */
+	@Override
 	public SlowLogEntry next() throws IOException {
 		while (true) {
 			String line = lookahead != null ? lookahead : in.readLine();
@@ -70,6 +74,7 @@ public final class SlowLogParser {
 
 	private SlowLogEntry readEntry(long endMicros) throws IOException {
 		long connectionId = -1;
+		String user = null;
 		long durationMicros = -1;
 		long lockMicros = 0;
 		long startMicros = -1;
@@ -101,6 +106,10 @@ public final class SlowLogParser {
 				Matcher m = CONNECTION_ID.matcher(line);
 				if (m.find()) {
 					connectionId = Long.parseLong(m.group(1));
+				}
+				Matcher u = USER.matcher(line);
+				if (u.find()) {
+					user = u.group(1);
 				}
 			}
 			else if (line.startsWith(STATS)) {
@@ -135,9 +144,9 @@ public final class SlowLogParser {
 		String text = body.toString().strip();
 		if (text.startsWith(ADMIN)) {
 			String command = stripSemicolon(text.substring(ADMIN.length()));
-			return new SlowLogEntry(connectionId, startMicros, durationMicros, lockMicros, rowsSent, rowsExamined, errno, useDb, command, null);
+			return new SlowLogEntry(connectionId, user, startMicros, durationMicros, lockMicros, rowsSent, rowsExamined, errno, useDb, command, null);
 		}
-		return new SlowLogEntry(connectionId, startMicros, durationMicros, lockMicros, rowsSent, rowsExamined, errno, useDb, null, stripSemicolon(text));
+		return new SlowLogEntry(connectionId, user, startMicros, durationMicros, lockMicros, rowsSent, rowsExamined, errno, useDb, null, stripSemicolon(text));
 	}
 
 	private static String stripSemicolon(String s) {

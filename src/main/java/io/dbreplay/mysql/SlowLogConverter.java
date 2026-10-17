@@ -10,6 +10,7 @@ import io.dbreplay.convert.ConvertSummary;
 import io.dbreplay.convert.HeadPolicy;
 import io.dbreplay.convert.LiteralMasker;
 import io.dbreplay.convert.RecordBuffer;
+import io.dbreplay.convert.ScopeFilter;
 import io.dbreplay.convert.SessionHead;
 import io.dbreplay.convert.SqlWords;
 import io.dbreplay.trace.TraceHeader;
@@ -49,7 +50,21 @@ public final class SlowLogConverter {
 	 */
 	public static ConvertSummary convert(Reader slowLog, Writer trace, HeadPolicy headPolicy, RecordBuffer buffer,
 			LiteralMasker masker, String maskName) throws IOException {
-		SlowLogParser parser = new SlowLogParser(slowLog);
+		return convert(slowLog, trace, headPolicy, buffer, masker, maskName, ScopeFilter.all());
+	}
+
+	/** @param scope 재생 대상의 SQL만 남긴다. 계정은 {@code User@Host:} 줄에서, 데이터베이스는 {@code use} 줄에서 읽는다 */
+	public static ConvertSummary convert(Reader slowLog, Writer trace, HeadPolicy headPolicy, RecordBuffer buffer,
+			LiteralMasker masker, String maskName, ScopeFilter scope) throws IOException {
+		return convert(new SlowLogParser(slowLog), "slow-log", trace, headPolicy, buffer, masker, maskName, scope);
+	}
+
+	/**
+	 * @param parser 항목을 내는 곳. 서버 로그나 패킷 캡처
+	 * @param source 트래픽 파일의 머리말에 적을 녹화 입력의 종류
+	 */
+	public static ConvertSummary convert(SlowLogSource parser, String source, Writer trace, HeadPolicy headPolicy,
+			RecordBuffer buffer, LiteralMasker masker, String maskName, ScopeFilter scope) throws IOException {
 		Map<Long, Session> sessions = new HashMap<>();
 		// use db; 줄은 연결이 아니라 로그 파일 기준으로, 직전 항목과 데이터베이스가 다를 때만 찍힌다
 		String currentDb = null;
@@ -71,7 +86,9 @@ public final class SlowLogConverter {
 
 			if (e.adminCommand() != null) {
 				if (e.adminCommand().equals("Quit")) {
-					buffer.add(TraceRecord.close(sessionId, start));
+					if (scope.keepsClose(sessionId)) {
+						buffer.add(TraceRecord.close(sessionId, start));
+					}
 					sessions.remove(e.connectionId());
 				}
 				else {
@@ -87,10 +104,15 @@ public final class SlowLogConverter {
 			}
 			boolean orphanEnd = (kind == StatementKind.END || kind == StatementKind.END_AND_CHAIN)
 					&& !session.tracker.inTransaction();
+			// 걸러 내는 문장도 트랜잭션 추적에는 넣는다. 걸러 낸 COMMIT을 못 보면 남긴 문장들이 끝난 트랜잭션에 묶인다
 			Long txn = session.tracker.assign(kind, e.failed());
+			if (!scope.keeps(sessionId, currentDb, e.user())) {
+				continue;
+			}
 			long index = buffer.add(new TraceRecord(sessionId, start, e.durationMicros(),
 					masker == null ? e.sql() : masker.mask(e.sql()), currentDb,
-					e.errno(), e.lockMicros(), txn, e.rowsSent(), e.rowsExamined(), null));
+					e.errno(), e.lockMicros() < 0 ? null : e.lockMicros(), txn, e.rowsSent(),
+				e.rowsExamined() < 0 ? null : e.rowsExamined(), null));
 			if (isBoundary(kind)) {
 				session.head.boundary(sessionId, index, orphanEnd, e.sql(), headPolicy, buffer);
 			}
@@ -99,7 +121,7 @@ public final class SlowLogConverter {
 			}
 		}
 
-		RecordBuffer.Written w = buffer.write(trace, TraceHeader.of("mysql", "slow-log").withMask(maskName));
+		RecordBuffer.Written w = buffer.write(trace, TraceHeader.of("mysql", source).withMask(maskName).withScope(scope.describe()));
 		return new ConvertSummary(entries, w.statements(), w.closes(), w.sessions(), ignored,
 				buffer.droppedCount(), parser.skipped(), clamped);
 	}
