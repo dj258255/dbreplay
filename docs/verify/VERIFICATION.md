@@ -67,7 +67,7 @@
 | 라운드 도중에 지표 읽기가 실패하면 탐색이 멈춘다 (#68) | 탐색 중에 표본기의 연결을 서버에서 끊자 `explore`가 멈추고 `replay`는 알리며 끝까지 감. 끊지 않은 탐색은 멈추지 않음 | 실험 16, `MetricSamplerTest`, `DbMetricSourceTest` | 각 1회, 테스트로 고정 |
 | 종 DB의 수위를 따로 낸다 (#53) | 주 DB 17%(과잉), 종 DB 57%(부족). 읽기 노드 권고를 종 DB로 계산. 평가 파일, `check`, `report`에 남음. 그 권고로는 `--apply-scale yes`여도 확장 명령을 실행하지 않음 | 실험 16, `MainTest`, `EvaluationTest`, `MarkdownReportTest` | 1회, 테스트로 고정 |
 | 대상 DB와 계정만 걸러 낸다 (#83) | `--database sbtest`가 다른 DB의 401문장, `--exclude-user sb`가 sysbench의 10,440문장을 뺐다 | 실험 18, `ScopeFilterTest`, 변환기 테스트 | 1회 |
-| 패킷 캡처에서 녹화한다 (#79) | 서버 로그와 동시에 떠서 MySQL 20,062 대 20,060, PostgreSQL 6,682 대 6,680(빠진 둘은 루프백). 부담은 장비가 무너져 판정 못 함(#99) | 실험 19, `MysqlCaptureTest`, `PostgresCaptureTest` | 대조 1회(네 번째 설정), 부담 판정 불가 |
+| 패킷 캡처에서 녹화한다 (#79) | 서버 로그와 동시에 떠서 MySQL 20,062 대 20,060, PostgreSQL 6,682 대 6,680(빠진 둘은 루프백). 포화 상태의 처리량이 MySQL -7.4%, PostgreSQL -1.5%(#106, 탐침으로 무효를 가림. 무효 0) | 실험 19, `MysqlCaptureTest`, `PostgresCaptureTest` | 대조 1회(네 번째 설정), 부담 5쌍씩 1회 |
 | 종 DB의 지표와 알람 (#80) | 쓰기 중 `replica.active_sessions` 0, 종 DB의 알람이 탐색을 멈추고 `replica.confirmed: true` | 실험 18, `MainTest`, `PrefixedMetricSourceTest` | 1회 |
 | 운영 QPS를 잰다 (#82) | MySQL 1,922 대 sysbench 1,969, PostgreSQL `qps` 355, 서버 로그로 느린 문장 10 | 실험 18, `DbMetricSourceTest`, `ServerLogSlowSourceTest` | 1회 |
 | 쓰기만의 탐색, 나눠 틀기 (#81) | 두 조각 + 건너뛴 1 = 38,242. 재생기의 한계가 오르는지는 재지 않았다 | 실험 18, `TraceSelectionTest`, `HistogramMergeTest` | 1회 |
