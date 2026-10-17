@@ -418,9 +418,17 @@ public final class Main {
 	/** 종 DB에서 뜬 지표의 이름 앞에 붙인다. */
 	static final String REPLICA_PREFIX = "replica.";
 
-	private static MetricSampler sampler(JdbcTarget target, Map<String, String> options) throws Exception {
-		MetricSampler sampler = new MetricSampler()
-				.add(new DbMetricSource(target, (long) number(options, "--slow-ms", 100)), (long) number(options, "--sample-ms", 200));
+	static MetricSampler sampler(JdbcTarget target, Map<String, String> options) throws Exception {
+		MetricSampler sampler = new MetricSampler();
+		// 여러 서버에 나눠 붙는 URL로는 DB 지표를 뜨지 않는다. 표본마다 다른 서버를 읽어 qps가 초당 수백만으로 나왔다(실험 20, #108).
+		// 그 지표에 알람을 걸었으면 첫 라운드에서 "한 번도 떠지지 않았다"로 멈춘다(#66)
+		if (target.multiHost()) {
+			System.err.println("여러 서버에 나눠 붙는 URL이라 DB 지표를 뜨지 않는다. 표본마다 다른 서버를 읽어 값이 틀린다. "
+					+ "지표나 알람이 필요하면 --metric-command나 --alarm-command를 쓴다");
+		}
+		else {
+			sampler.add(new DbMetricSource(target, (long) number(options, "--slow-ms", 100)), (long) number(options, "--sample-ms", 200));
+		}
 		if (options.containsKey("--metric-command")) {
 			sampler.add(new CommandMetricSource(options.get("--metric-command")), (long) number(options, "--metric-command-ms", 1_000));
 		}
@@ -434,6 +442,11 @@ public final class Main {
 		}
 		JdbcTarget replica = replica(options);
 		if (replica != null) {
+			// 종 DB의 URL은 지표를 뜨려고 주는 것이다. 여러 서버로 나뉘면 쓸 수 없다(#108)
+			if (replica.multiHost() || target.multiHost()) {
+				throw new IllegalArgumentException("--replica-url을 줄 때는 --url과 --replica-url 모두 서버 하나의 URL이어야 한다. "
+						+ "여러 서버에 나눠 붙는 URL은 표본마다 다른 서버를 읽는다");
+			}
 			sampler.add(new ReplicationLagSource(target, replica), (long) number(options, "--sample-ms", 200));
 			// 종 DB에서도 같은 지표를 뜬다. 이름 앞의 replica.으로 가른다. 종 DB에 알람을 걸 수 있게 하려는 것이다(#80)
 			sampler.add(new PrefixedMetricSource(REPLICA_PREFIX, new DbMetricSource(replica, (long) number(options, "--slow-ms", 100))),
@@ -1776,7 +1789,10 @@ public final class Main {
 	}
 
 	/** 운영 DB의 초당 문장 수를 그 시간 동안 떠서 평균을 낸다. 표본기 자신의 조회는 뺀 값이다. */
-	private static double measureQps(JdbcTarget production, long seconds) throws Exception {
+	static double measureQps(JdbcTarget production, long seconds) throws Exception {
+		if (production.multiHost()) {
+			throw new IllegalArgumentException("--measure-url은 서버 하나의 URL이어야 한다. 여러 서버에 나눠 붙는 URL은 표본마다 다른 서버를 읽어 QPS가 틀린다(#108)");
+		}
 		Map<String, double[]> metrics;
 		List<String> failures;
 		try (MetricSampler sampler = new MetricSampler().add(new DbMetricSource(production, 100), 1_000)) {

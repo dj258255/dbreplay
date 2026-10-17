@@ -56,6 +56,26 @@ public final class JdbcTarget implements Target {
 		return url.startsWith("jdbc:postgresql:");
 	}
 
+	/**
+	 * 여러 서버에 나눠 붙는 URL인가. Connector/J의 loadbalance·replication·srv와 쉼표로 이은 호스트다. 이런 URL의 연결은
+	 * 문장마다 다른 서버로 갈 수 있어, 서버의 누적값을 표본끼리 빼는 지표가 서로 다른 서버의 값을 뺀다(실험 20, #108).
+	 */
+	public boolean multiHost() {
+		if (url.startsWith("jdbc:mysql:loadbalance:") || url.startsWith("jdbc:mysql:replication:")
+				|| url.startsWith("jdbc:mysql+srv:")) {
+			return true;
+		}
+		int start = url.indexOf("//");
+		if (start < 0) {
+			return false;
+		}
+		int end = start + 2;
+		while (end < url.length() && url.charAt(end) != '/' && url.charAt(end) != '?') {
+			end++;
+		}
+		return url.substring(start + 2, end).contains(",");
+	}
+
 	@Override
 	public TargetSession open(String db) throws SQLException {
 		return new Session(connect(db), !isPostgres());

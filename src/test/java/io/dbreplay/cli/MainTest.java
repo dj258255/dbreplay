@@ -406,4 +406,17 @@ class MainTest {
 		assertTrue(e.getMessage().contains("DbMetricSource이(가) 지표를 읽다 멈췄다"), e.getMessage());
 		assertTrue(e.getMessage().contains("탐색을 멈춘다"), e.getMessage());
 	}
+
+	/** 여러 서버에 나눠 붙는 URL로는 DB 지표를 뜨지 않는다. 붙어 보지도 않으므로 없는 주소여도 표본기가 만들어진다 (#108). */
+	@Test
+	void doesNotSampleDbMetricsThroughMultiHostUrls() throws Exception {
+		io.dbreplay.replay.JdbcTarget spread = new io.dbreplay.replay.JdbcTarget(
+				"jdbc:mysql:loadbalance://127.0.0.1:1,127.0.0.1:2/sbtest?connectTimeout=200", "u", "p");
+		try (var sampler = Main.sampler(spread, Map.of())) {
+			assertTrue(sampler != null);
+		}
+		assertThrows(IllegalArgumentException.class, () -> Main.sampler(spread,
+				Map.of("--replica-url", "jdbc:mysql://127.0.0.1:3/sbtest", "--user", "u")));
+		assertThrows(IllegalArgumentException.class, () -> Main.measureQps(spread, 1));
+	}
 }
