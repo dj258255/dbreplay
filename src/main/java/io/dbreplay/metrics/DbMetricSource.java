@@ -17,12 +17,13 @@ import io.dbreplay.replay.JdbcTarget;
  * <ul>
  * <li>{@code active_sessions}: 지금 문장을 실행 중인 연결 수. 이 표본기의 연결은 뺀다
  * <li>{@code slow_running}: 그중 시작한 지 기준 시간을 넘긴 문장 수
- * <li>{@code qps}(MySQL만): 직전 표본부터 지금까지의 초당 문장 수
+ * <li>{@code qps}: 직전 표본부터 지금까지의 초당 문장 수. PostgreSQL은 {@code pg_stat_statements}가 설치돼 있을 때만(#82)
  * <li>{@code tps}(PostgreSQL만): 직전 표본부터 지금까지의 초당 트랜잭션 수(커밋과 롤백)
  * <li>{@code slow_finished_total}(MySQL만): 표본을 뜨기 시작한 뒤 기준 시간을 넘겨 끝난 문장의 누적 수
  * </ul>
  *
- * <p>없는 값을 지어내지 않는다. PostgreSQL에는 문장 수를 세는 카운터가 기본으로 없어 {@code qps}를 내지 않는다.
+ * <p>없는 값을 지어내지 않는다. PostgreSQL에는 문장 수를 세는 카운터가 기본으로 없다. 확장 {@code pg_stat_statements}가
+ * 있으면 그 {@code calls}의 합으로 {@code qps}를 내고, 없으면 내지 않는다.
  * MySQL의 {@code tps}도 내지 않는다({@code Com_commit}은 자동 커밋된 문장을 세지 않아 틀린 값이 된다).
  *
  * <p>CPU와 Load Average는 DB 접속으로 읽을 수 없다. {@link CommandMetricSource}로 받는다.
@@ -59,6 +60,9 @@ public final class DbMetricSource implements MetricSource {
 			"/* dbreplay:sampler */ SELECT VARIABLE_VALUE FROM performance_schema.global_status WHERE VARIABLE_NAME = 'Questions'";
 	private static final String POSTGRES_RATE =
 			"/* dbreplay:sampler */ SELECT xact_commit + xact_rollback FROM pg_stat_database WHERE datname = current_database()";
+	// 확장이 없으면 준비가 실패하고 qps만 꺼진다. 모든 데이터베이스와 계정의 문장을 센다. 서버 전체의 부하라서다
+	private static final String POSTGRES_STATEMENTS =
+			"/* dbreplay:sampler */ SELECT COALESCE(SUM(calls), 0) FROM pg_stat_statements";
 	// BUCKET_TIMER_HIGH는 피코초다. 서버의 분포는 칸 단위라 기준 시간을 정확히 가를 수 없다. 기준이 걸쳐 있는 칸까지
 	// 센다(>=가 아니라 >다). 그러면 기준보다 조금 빠른 문장이 그 칸의 폭만큼 함께 세어지는데, 덜 세는 것보다 더 세는
 	// 쪽이 안전하다. 알람이 덜 울려 과부하를 못 보는 쪽으로 틀리면 안 된다
@@ -70,6 +74,7 @@ public final class DbMetricSource implements MetricSource {
 	private final PreparedStatement statement;
 	private final PreparedStatement rateStatement;
 	private final PreparedStatement slowFinishedStatement;
+	private final PreparedStatement statementsStatement;
 	private final Counters counters;
 
 	/** @param slowMillis 실행 중인 문장을 느리다고 볼 기준 시간 */
@@ -83,11 +88,17 @@ public final class DbMetricSource implements MetricSource {
 		// 조용히 안 울리게 된다
 		this.rateStatement = prepare(postgres ? POSTGRES_RATE : MYSQL_RATE, null);
 		this.slowFinishedStatement = postgres ? null : prepare(MYSQL_SLOW_FINISHED, slowMillis);
+		this.statementsStatement = postgres ? prepare(POSTGRES_STATEMENTS, null) : null;
 		// 표본기 자신이 보내는 조회 수는 Counters가 표본마다 센다. 상수로 빼면 느리게 끝난 문장 조회가 꺼졌을 때
 		// 실제보다 많이 빼게 된다
-		this.counters = new Counters(postgres ? TPS : QPS,
-				rateStatement == null ? null : new StatementCounter(rateStatement),
-				slowFinishedStatement == null ? null : new StatementCounter(slowFinishedStatement));
+		List<Rate> rates = new ArrayList<>();
+		if (rateStatement != null) {
+			rates.add(new Rate(postgres ? TPS : QPS, new StatementCounter(rateStatement)));
+		}
+		if (statementsStatement != null) {
+			rates.add(new Rate(QPS, new StatementCounter(statementsStatement)));
+		}
+		this.counters = new Counters(rates, slowFinishedStatement == null ? null : new StatementCounter(slowFinishedStatement));
 	}
 
 	/** 새 조회를 준비한다. 실패하면 null을 돌려준다(그 지표만 끈다). */
@@ -132,17 +143,28 @@ public final class DbMetricSource implements MetricSource {
 	 * 부르지 않는다. 다시 부르면 {@code read()}가 예외를 던져 표본기가 이 곳을 통째로 멈추고 {@code active_sessions}
 	 * 까지 사라진다. 어느 한쪽이 없어도({@code null}) 그 기종이 내지 못하는 지표이므로 건너뛴다.
 	 */
+	/** 초당 횟수를 낼 누적 값 하나. 이름과 읽는 곳, 직전 표본의 상태를 든다. */
+	static final class Rate {
+
+		final String name;
+		final Counter counter;
+		boolean produced;
+		boolean broken;
+		Double previous;
+		long previousNanos;
+
+		Rate(String name, Counter counter) {
+			this.name = name;
+			this.counter = counter;
+		}
+	}
+
 	static final class Counters {
 
-		private final String rateName;
-		private final Counter rate;
+		private final List<Rate> rates;
 		private final Counter slowFinished;
 		private final List<String> failures = new ArrayList<>();
 
-		private boolean rateProduced;
-		private boolean rateBroken;
-		private Double previousRate;
-		private long previousRateNanos;
 		private boolean slowProduced;
 		private boolean slowFinishedBroken;
 		private boolean slowSeen;
@@ -150,8 +172,12 @@ public final class DbMetricSource implements MetricSource {
 		private long slowSum;
 
 		Counters(String rateName, Counter rate, Counter slowFinished) {
-			this.rateName = rateName;
-			this.rate = rate;
+			this(rate == null ? List.of() : List.of(new Rate(rateName, rate)), slowFinished);
+		}
+
+		/** @param rates 초당 횟수를 낼 누적 값들. PostgreSQL은 tps와 qps 둘일 수 있다(#82) */
+		Counters(List<Rate> rates, Counter slowFinished) {
+			this.rates = List.copyOf(rates);
 			this.slowFinished = slowFinished;
 		}
 
@@ -160,18 +186,24 @@ public final class DbMetricSource implements MetricSource {
 		}
 
 		void addTo(Map<String, Double> values, long nanos) {
-			addRate(values, nanos);
+			// 이번 표본에서 자신이 보탠 조회 수는 읽기 전에 정한다. 이번에 끊긴 조회도 이번에는 보냈다
+			double own = ownCount();
+			for (Rate rate : rates) {
+				addRate(rate, values, nanos, own);
+			}
 			addSlowFinished(values);
 		}
 
 		/**
-		 * 두 초당 횟수 표본 사이에 이 연결이 보낸 조회 수. 기존 조회 하나 + 초당 횟수 조회 하나 + (느리게 끝난 문장
-		 * 조회가 켜져 있으면) 하나다. 꺼진 조회를 세면 실제보다 많이 빼게 된다.
+		 * 두 표본 사이에 이 연결이 보낸 조회 수. 기존 조회 하나 + 켜진 누적 값 조회마다 하나다. 꺼진 조회를 세면
+		 * 실제보다 많이 빼게 된다. 조회 하나는 자동 커밋이라 트랜잭션도 하나다.
 		 */
 		private double ownCount() {
 			double own = 1;
-			if (rate != null && !rateBroken) {
-				own++;
+			for (Rate rate : rates) {
+				if (!rate.broken) {
+					own++;
+				}
 			}
 			if (slowFinished != null && !slowFinishedBroken) {
 				own++;
@@ -180,28 +212,28 @@ public final class DbMetricSource implements MetricSource {
 		}
 
 		/** 직전 표본과 지금 표본의 누적 값 차이로 초당 횟수를 낸다. 첫 표본에는 직전 값이 없어 내지 않는다. */
-		private void addRate(Map<String, Double> values, long nanos) {
-			if (rate == null || rateBroken) {
+		private void addRate(Rate rate, Map<String, Double> values, long nanos, double own) {
+			if (rate.broken) {
 				return;
 			}
 			double current;
 			try {
-				current = rate.read();
+				current = rate.counter.read();
 			}
 			catch (SQLException e) {
-				rateBroken = true;
+				rate.broken = true;
 				// 처음부터 실패한 것은 그 지표가 원래 없는 것이다. 값을 낸 뒤 끊긴 것만 적는다
-				if (rateProduced) {
-					failures.add(rateName + " 조회가 도중에 실패했다 (" + state(e) + ")");
+				if (rate.produced) {
+					failures.add(rate.name + " 조회가 도중에 실패했다 (" + state(e) + ")");
 				}
 				return;
 			}
-			if (previousRate != null) {
-				values.put(rateName, rate(previousRate, previousRateNanos, current, nanos, ownCount()));
-				rateProduced = true;
+			if (rate.previous != null) {
+				values.put(rate.name, rate(rate.previous, rate.previousNanos, current, nanos, own));
+				rate.produced = true;
 			}
-			previousRate = current;
-			previousRateNanos = nanos;
+			rate.previous = current;
+			rate.previousNanos = nanos;
 		}
 
 		/**
@@ -279,6 +311,7 @@ public final class DbMetricSource implements MetricSource {
 	public void close() {
 		close(rateStatement);
 		close(slowFinishedStatement);
+		close(statementsStatement);
 		close(statement);
 		try {
 			connection.close();

@@ -84,6 +84,15 @@ class MainTest {
 		assertEquals("  탐색마다: 8.50, 12.00, 8.50, 3.75, 8.00", lines.get(1));
 	}
 
+	/** 운영에서 잰 qps의 평균. 없으면 지어내지 않고 이유를 알린다 (#82). */
+	@Test
+	void averagesTheMeasuredQpsOrExplainsWhyItIsMissing() {
+		assertEquals(150.0, Main.meanQps(Map.of("qps", new double[] {100, 200}), false), 1e-9);
+		IllegalStateException pg = assertThrows(IllegalStateException.class,
+				() -> Main.meanQps(Map.of("tps", new double[] {10}), true));
+		assertTrue(pg.getMessage().contains("pg_stat_statements"));
+	}
+
 	/** 한 번만 탐색했으면 상한이 흔들린다는 안내를 붙이고, 되풀이했으면 범위가 대신하므로 붙이지 않는다 (#76). */
 	@Test
 	void notesThatASingleExplorationCanSwing() {

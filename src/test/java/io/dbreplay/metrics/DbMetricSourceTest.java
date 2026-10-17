@@ -101,6 +101,28 @@ class DbMetricSourceTest {
 		assertEquals(55.0, values.get("slow_finished_total"));
 	}
 
+	/**
+	 * PostgreSQL에 pg_stat_statements가 있으면 tps와 qps를 함께 낸다. 자신이 보낸 조회는 셋(기존, tps, qps)이고
+	 * 트랜잭션도 셋이다. 둘 다에서 셋을 뺀다 (#82).
+	 */
+	@Test
+	void producesTpsAndQpsTogetherAndSubtractsAllOwnQueries() {
+		AtomicLong xacts = new AtomicLong(100);
+		AtomicLong calls = new AtomicLong(1_000);
+		Map<String, Double> values = new HashMap<>();
+		DbMetricSource.Counters counters = new DbMetricSource.Counters(List.of(
+				new DbMetricSource.Rate("tps", () -> xacts.get()),
+				new DbMetricSource.Rate("qps", () -> calls.get())), null);
+
+		counters.addTo(values, 0);
+		xacts.set(153);
+		calls.set(1_503);
+		counters.addTo(values, 1_000_000_000L);
+
+		assertEquals(50.0, values.get("tps"), 1e-9);
+		assertEquals(500.0, values.get("qps"), 1e-9);
+	}
+
 	/** 초당 횟수는 첫 표본에 내지 않고 둘째부터 낸다. */
 	@Test
 	void rateAppearsFromTheSecondSample() {
