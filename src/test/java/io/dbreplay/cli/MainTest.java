@@ -3,6 +3,7 @@ package io.dbreplay.cli;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
@@ -24,6 +25,7 @@ import io.dbreplay.explore.CeilingRange;
 import io.dbreplay.explore.Evaluation;
 import io.dbreplay.explore.Explorer;
 import io.dbreplay.explore.RoundJudge;
+import io.dbreplay.explore.ScaleRun;
 import io.dbreplay.explore.TrafficModel;
 import io.dbreplay.explore.WaterLevel;
 import io.dbreplay.explore.ZonePlan;
@@ -92,6 +94,20 @@ class MainTest {
 		IllegalStateException pg = assertThrows(IllegalStateException.class,
 				() -> Main.meanQps(Map.of("tps", new double[] {10}), true));
 		assertTrue(pg.getMessage().contains("pg_stat_statements"));
+	}
+
+	/** 확장이 실패했을 때의 문장. 무엇이 실패했고 되돌렸는지를 적고, 명령의 원문은 싣지 않는다 (#86). */
+	@Test
+	void describesAScaleFailure() {
+		ScaleRun.Entry scale = new ScaleRun.Entry("t", "scale", "fp", 0, 1, 2, 3);
+		ScaleRun.Entry verify = new ScaleRun.Entry("t", "verify", "fp", 4, 1, 2, 3);
+		ScaleRun.Entry rollback = new ScaleRun.Entry("t", "rollback", "fp", 0, 1, 2, 3);
+		assertEquals("확인 명령이 실패했다 (종료 코드 4). 되돌리기 명령을 실행했다",
+				Main.scaleFailure(new ScaleRun.Outcome(false, "verify", true, true, List.of(scale, verify, rollback))));
+		assertEquals("확장·축소 명령을 실행하지 못했다. 되돌리기 명령이 없어 그대로 두었다",
+				Main.scaleFailure(new ScaleRun.Outcome(false, "scale", false, false,
+						List.of(new ScaleRun.Entry("t", "scale", "fp", -1, 1, 2, 3)))));
+		assertNull(Main.scaleFailure(new ScaleRun.Outcome(true, null, false, false, List.of(scale))));
 	}
 
 	/** 존별 권고 줄과 재해 복구 점검 줄 (#85). */

@@ -38,6 +38,7 @@ import io.dbreplay.explore.ManagedTargets;
 import io.dbreplay.explore.RoundData;
 import io.dbreplay.explore.RoundJudge;
 import io.dbreplay.explore.ScaleAdvice;
+import io.dbreplay.explore.ScaleRun;
 import io.dbreplay.explore.ZonePlan;
 import io.dbreplay.explore.TargetProfile;
 import io.dbreplay.explore.TrafficModel;
@@ -109,7 +110,9 @@ public final class Main {
 			                   [--current-replica-qps <종 DB의 지금의 초당 문장 수>]
 			                   [--level-low 0.3] [--level-high 0.5]
 			                   [--read-nodes <읽기를 받는 노드 수>] [--min-read-nodes 1] [--max-read-nodes <한도>]
-			                   [--scale-command <명령> --apply-scale yes]
+			                   [--zones <존>=<노드 수>,... [--min-per-zone 1]] [--max-write-scale <주 DB를 키울 수 있는 배수>]
+			                   [--scale-command <명령> --apply-scale yes [--scale-verify-command <명령>]
+			                    [--scale-rollback-command <명령>] [--scale-log <기록 파일>]]
 			                   [--out <평가 파일>] [--valid-days 30]
 
 			  dbreplay check   --evaluation <평가 파일> --url <JDBC URL> --user <계정> [--password <암호>]
@@ -182,6 +185,8 @@ public final class Main {
 			  권한 수가 한도에 걸렸거나 상한이 알람으로 확인된 값이 아니면 실행하지 않는다. 명령이 실패하면 0이 아닌 값으로 끝난다
 			  --zones a=2,b=1을 주면 권한 노드를 존에 나눈다. 가장 적은 존부터 채우고 가장 많은 존부터 빼며 존마다 --min-per-zone을 지킨다.
 			  가장 많은 존 하나가 빠졌을 때 남은 노드의 수위를 함께 낸다. 존별 권고는 DBREPLAY_READ_NODES_BY_ZONE(a=3,b=2)로 받는다
+			  --scale-verify-command는 확장 명령 뒤에 부른다. 둘 중 하나가 실패하면 --scale-rollback-command를 부른다.
+			  되돌리기는 확장 전의 노드 수를 DBREPLAY_READ_NODES로 받는다. --scale-log에 단계마다 명령의 지문, 종료 코드, 걸린 시간을 쌓는다
 			  --max-write-scale을 주면 쓰기에 필요한 용량이 그 배수를 넘을 때 몇 조각으로 나눌지 권한다
 
 			되풀이 탐색(--repeat):
@@ -1075,22 +1080,59 @@ public final class Main {
 			System.out.println("확장·축소 명령을 실행하지 않았다. " + refused);
 			return;
 		}
-		ProcessBuilder builder = new ProcessBuilder("sh", "-c", command).inheritIO();
-		builder.environment().put("DBREPLAY_READ_NODES", Integer.toString(advice.recommendedReadNodes()));
-		builder.environment().put("DBREPLAY_READ_NODES_BEFORE", Integer.toString(advice.readNodes()));
-		int exit;
-		try {
-			exit = builder.start().waitFor();
+		Map<String, String> after = new HashMap<>();
+		after.put("DBREPLAY_READ_NODES", Integer.toString(advice.recommendedReadNodes()));
+		after.put("DBREPLAY_READ_NODES_BEFORE", Integer.toString(advice.readNodes()));
+		Map<String, String> before = new HashMap<>();
+		before.put("DBREPLAY_READ_NODES", Integer.toString(advice.readNodes()));
+		if (options.containsKey("--zones")) {
+			after.put("DBREPLAY_READ_NODES_BY_ZONE", zonePlan(options, advice, 0).afterText());
+			before.put("DBREPLAY_READ_NODES_BY_ZONE", options.get("--zones").replace(" ", ""));
 		}
-		catch (IOException e) {
-			// 명령에는 암호가 들어 있을 수 있다. 메시지에 싣지 않는다
-			throw new ScaleCommandFailed("확장·축소 명령을 실행하지 못했다");
+		ScaleRun.Outcome outcome = ScaleRun.execute(command, options.get("--scale-verify-command"),
+				options.get("--scale-rollback-command"), after, before, advice.readNodes(), advice.recommendedReadNodes(),
+				Main::runCommand, Main::fingerprint, java.time.Clock.systemUTC());
+		if (options.containsKey("--scale-log")) {
+			appendScaleLog(Path.of(options.get("--scale-log")), outcome.entries());
 		}
-		if (exit != 0) {
-			throw new ScaleCommandFailed("확장·축소 명령이 실패했다 (종료 코드 " + exit + ")");
+		String failure = scaleFailure(outcome);
+		if (failure != null) {
+			throw new ScaleCommandFailed(failure);
 		}
 		// 도구는 실제 노드 수를 모른다. 받은 값이 낡으면 다음 권고가 틀어진다
-		System.out.printf("확장·축소 명령을 실행했다. 다음부터는 --read-nodes %d로 준다%n", advice.recommendedReadNodes());
+		System.out.printf("확장·축소 명령을 실행했다%s. 다음부터는 --read-nodes %d로 준다%n",
+				options.containsKey("--scale-verify-command") ? "고 확인 명령이 성공했다" : "", advice.recommendedReadNodes());
+	}
+
+	private static int runCommand(String command, Map<String, String> env) throws IOException, InterruptedException {
+		ProcessBuilder builder = new ProcessBuilder("sh", "-c", command).inheritIO();
+		builder.environment().putAll(env);
+		return builder.start().waitFor();
+	}
+
+	/** 실패를 알리는 문장. 성공했으면 null. 되돌렸는지와 그 결과를 함께 적는다. 명령의 원문은 싣지 않는다. */
+	static String scaleFailure(ScaleRun.Outcome outcome) {
+		if (outcome.succeeded()) {
+			return null;
+		}
+		ScaleRun.Entry failed = outcome.entries().stream().filter(e -> e.step().equals(outcome.failedStep())).findFirst().orElseThrow();
+		String what = failed.step().equals("scale") ? "확장·축소 명령" : "확인 명령";
+		String message = failed.exit() < 0 ? what + "을 실행하지 못했다" : what + "이 실패했다 (종료 코드 " + failed.exit() + ")";
+		if (!outcome.rolledBack()) {
+			return message + ". 되돌리기 명령이 없어 그대로 두었다";
+		}
+		return message + (outcome.rollbackSucceeded() ? ". 되돌리기 명령을 실행했다" : ". 되돌리기 명령도 실패했다. 노드 수를 직접 확인한다");
+	}
+
+	/** 실행 기록을 JSON Lines로 덧붙인다. 여러 번의 실행이 한 파일에 쌓인다. */
+	private static void appendScaleLog(Path path, List<ScaleRun.Entry> entries) throws IOException {
+		ObjectMapper plain = new ObjectMapper();
+		StringBuilder lines = new StringBuilder();
+		for (ScaleRun.Entry e : entries) {
+			lines.append(plain.writeValueAsString(e)).append('\n');
+		}
+		Files.writeString(path, lines, StandardCharsets.UTF_8, java.nio.file.StandardOpenOption.CREATE,
+				java.nio.file.StandardOpenOption.APPEND);
 	}
 
 	private static boolean readsOnly(Map<String, String> options) {
