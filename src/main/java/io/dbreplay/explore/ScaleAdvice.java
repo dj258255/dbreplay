@@ -47,6 +47,22 @@ public record ScaleAdvice(int readNodes, int recommendedReadNodes, double writeC
 		}
 	}
 
+	/**
+	 * 쓰기가 모자라 주 DB를 키워야 하는데 키울 수 있는 한도를 넘으면 몇 조각으로 나눠야 하는가. 1이면 나누지 않는다.
+	 * 조각마다 쓰기가 고르게 나뉜다고 본다. 글은 위험한 클러스터를 분할한 사례만 들고 식은 없다(원문 대조 57, #85).
+	 *
+	 * @param maxWriteScale 주 DB의 용량을 지금의 몇 배까지 키울 수 있는가
+	 */
+	public int shards(double maxWriteScale) {
+		if (!(maxWriteScale >= 1) || Double.isInfinite(maxWriteScale)) {
+			throw new IllegalArgumentException("--max-write-scale에는 1 이상의 수를 준다");
+		}
+		if (writeVerdict != WaterLevel.Verdict.SHORT || !(writeCapacityFactor > maxWriteScale)) {
+			return 1;
+		}
+		return (int) Math.ceil(writeCapacityFactor / maxWriteScale - 1e-9);
+	}
+
 	public int readNodeChange() {
 		return recommendedReadNodes - readNodes;
 	}

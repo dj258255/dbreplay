@@ -38,6 +38,7 @@ import io.dbreplay.explore.ManagedTargets;
 import io.dbreplay.explore.RoundData;
 import io.dbreplay.explore.RoundJudge;
 import io.dbreplay.explore.ScaleAdvice;
+import io.dbreplay.explore.ZonePlan;
 import io.dbreplay.explore.TargetProfile;
 import io.dbreplay.explore.TrafficModel;
 import io.dbreplay.explore.WaterLevel;
@@ -179,6 +180,9 @@ public final class Main {
 			  쓰기는 주 DB 하나가 받으므로 노드 수 대신 필요한 용량의 배수를 낸다.
 			  --scale-command는 --apply-scale yes와 --max-read-nodes를 함께 줘야 실행된다. 권한 노드 수를 DBREPLAY_READ_NODES로 받는다
 			  권한 수가 한도에 걸렸거나 상한이 알람으로 확인된 값이 아니면 실행하지 않는다. 명령이 실패하면 0이 아닌 값으로 끝난다
+			  --zones a=2,b=1을 주면 권한 노드를 존에 나눈다. 가장 적은 존부터 채우고 가장 많은 존부터 빼며 존마다 --min-per-zone을 지킨다.
+			  가장 많은 존 하나가 빠졌을 때 남은 노드의 수위를 함께 낸다. 존별 권고는 DBREPLAY_READ_NODES_BY_ZONE(a=3,b=2)로 받는다
+			  --max-write-scale을 주면 쓰기에 필요한 용량이 그 배수를 넘을 때 몇 조각으로 나눌지 권한다
 
 			되풀이 탐색(--repeat):
 			  탐색을 N번 되풀이해 상한을 범위로 낸다(최소, 중앙값, 최대, 퍼짐). 수위와 평가 파일에는 가장 낮은 상한을 쓴다.
@@ -928,18 +932,73 @@ public final class Main {
 			System.out.printf("  %s: 초당 %.0f, 상한 %.0f, 수위 %.0f%%%n", kind, current, l.ceilingQps(), l.level() * 100);
 		}
 		System.out.println("  읽기만 늘 때의 상한은 --only reads로 따로 탐색한다");
-		if (!options.containsKey("--read-nodes")) {
+		if (!options.containsKey("--read-nodes") && !options.containsKey("--zones")) {
 			return null;
 		}
 		// 종 DB를 함께 틀었으면 읽기 노드는 종 DB다. 읽기 노드 권고를 종 DB의 수위로 계산한다
-		ScaleAdvice advice = ScaleAdvice.of(readLevelForAdvice(replicaLevel, levels[0]), levels[1],
-				nodes(options, "--read-nodes", 1), nodes(options, "--min-read-nodes", 1),
+		WaterLevel readLevel = readLevelForAdvice(replicaLevel, levels[0]);
+		ScaleAdvice advice = ScaleAdvice.of(readLevel, levels[1], readNodes(options), minReadNodes(options),
 				nodes(options, "--max-read-nodes", Integer.MAX_VALUE));
 		if (replicaLevel != null) {
 			System.out.println("  읽기 노드의 권고는 종 DB의 수위로 계산했다");
 		}
 		printScaleAdvice(advice);
+		if (options.containsKey("--zones")) {
+			zoneLines(zonePlan(options, advice, readLevel.level()), readLevel.high()).forEach(System.out::println);
+		}
+		if (options.containsKey("--max-write-scale")) {
+			double limit = number(options, "--max-write-scale", 1);
+			int shards = advice.shards(limit);
+			if (shards > 1) {
+				System.out.printf("  분할: 쓰기에 주 DB의 용량이 지금의 %.2f배 필요한데 키울 수 있는 한도는 %.2f배다. %d조각으로 나누는 것을 권한다%n",
+						advice.writeCapacityFactor(), limit, shards);
+			}
+		}
 		return advice;
+	}
+
+	/** 읽기를 받는 노드 수. --zones를 주면 존들의 합이고, --read-nodes도 주면 둘이 같아야 한다. */
+	static int readNodes(Map<String, String> options) {
+		if (!options.containsKey("--zones")) {
+			return nodes(options, "--read-nodes", 1);
+		}
+		int sum = ZonePlan.parse(options.get("--zones")).values().stream().mapToInt(Integer::intValue).sum();
+		if (options.containsKey("--read-nodes") && nodes(options, "--read-nodes", sum) != sum) {
+			throw new IllegalArgumentException("--read-nodes와 --zones의 합이 다르다");
+		}
+		return sum;
+	}
+
+	/** 지켜야 하는 최소 노드 수. 존마다의 최소를 주면 존의 수를 곱한 것보다 적게 권하지 않는다. */
+	static int minReadNodes(Map<String, String> options) {
+		int min = nodes(options, "--min-read-nodes", 1);
+		if (options.containsKey("--zones")) {
+			min = Math.max(min, nodes(options, "--min-per-zone", 1) * ZonePlan.parse(options.get("--zones")).size());
+		}
+		return min;
+	}
+
+	private static ZonePlan zonePlan(Map<String, String> options, ScaleAdvice advice, double readLevel) {
+		return ZonePlan.of(ZonePlan.parse(options.get("--zones")), advice.recommendedReadNodes(),
+				nodes(options, "--min-per-zone", 1), readLevel);
+	}
+
+	/** 존마다의 권고와 재해 복구 점검. 패키지 안에서 테스트할 수 있게 글자만 돌려준다. */
+	static List<String> zoneLines(ZonePlan plan, double high) {
+		StringBuilder zones = new StringBuilder();
+		plan.after().forEach((zone, n) -> zones.append(zones.isEmpty() ? "" : ", ").append(zone).append(' ')
+				.append(plan.before().get(zone)).append(" → ").append(n));
+		List<String> lines = new ArrayList<>();
+		lines.add("  존별: " + zones + " (가장 적은 존부터 채우고 가장 많은 존부터 뺀다)");
+		if (Double.isInfinite(plan.levelIfLost())) {
+			lines.add(String.format("  존 %s 하나가 빠지면 읽기 노드가 남지 않는다", plan.lostZone()));
+		}
+		else {
+			lines.add(String.format("  가장 많은 존(%s) 하나가 빠지면 남은 노드 %d개의 읽기 수위가 %.0f%%다. 건강 구간의 위 끝(%.0f%%)을 %s",
+					plan.lostZone(), plan.total() - plan.after().get(plan.lostZone()), plan.levelIfLost() * 100, high * 100,
+					plan.levelIfLost() > high ? "넘는다" : "넘지 않는다"));
+		}
+		return lines;
 	}
 
 	/** 읽기 노드 권고에 쓸 수위. 종 DB를 함께 틀었으면 종 DB의 수위, 아니면 주 DB 트래픽의 읽기 수위. */
@@ -948,8 +1007,7 @@ public final class Main {
 	}
 
 	private static void checkScaleOptions(Map<String, String> options) {
-		ScaleAdvice.checkNodes(nodes(options, "--read-nodes", 1), nodes(options, "--min-read-nodes", 1),
-				nodes(options, "--max-read-nodes", Integer.MAX_VALUE));
+		ScaleAdvice.checkNodes(readNodes(options), minReadNodes(options), nodes(options, "--max-read-nodes", Integer.MAX_VALUE));
 		checkQpsOptions(options);
 	}
 
