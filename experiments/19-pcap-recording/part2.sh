@@ -1,4 +1,6 @@
 #!/bin/sh
+# 네 번째 차례(#106): 디스크 탐침(실험 21)을 함께 띄워 장비가 무너진 실행을 가린다. 출력은 앞 차례를 덮지 않게 PREFIX로 이름을 붙인다.
+# 판정은 part2_judge.py가 한다. 쓸 수 있는 쌍이 셋 아래면 RUNS="6 7 8"처럼 이어 돈다(최대 10쌍).
 # 2부만 다시 돈다. 캡처를 컨테이너 안에 쓰는 설정(part1.sh와 같다)으로 부담을 다시 잰다. 캡처 파일은 꺼내지 않고,
 # 끔과 켬 모두 시작 전에 20초 쉰다.
 # 1부만 다시 돈다. 첫 실행에서는 부하가 끝나자마자 캡처를 멈춰 연결의 마지막 패킷이 파일에 쓰이지 않았다(README).
@@ -17,6 +19,8 @@ SB="docker run --rm --network $NET dbreplay-exp01-sysbench sysbench oltp_read_wr
 RUN="docker run --rm --network $NET -v $ROOT/build/install/dbreplay:/app:ro -v $HERE:/exp dbreplay-exp-runner"
 CSV=/var/lib/postgresql/data/log/pg.csv
 RUNS=${RUNS:-"1 2 3 4 5"}
+PREFIX=${PREFIX:-4}
+TIMES=out/part2-$PREFIX-times.txt
 
 # $1 DB 컨테이너, $2 포트, $3 파일 이름. 캡처를 켠다
 capture_on() { docker rm -f dbreplay-exp19-tcpdump >/dev/null 2>&1 || true; docker run -d --name dbreplay-exp19-tcpdump --net container:dbreplay-exp19-$1-1 dbreplay-exp19-tcpdump \
@@ -38,15 +42,22 @@ $SB cleanup >/dev/null 2>&1 </dev/null || true
 $SB --threads=4 prepare >/dev/null </dev/null
 docker compose exec -T pg16 pgbench -U postgres -i -s 5 -q shop </dev/null >/dev/null 2>&1
 
+# 디스크 탐침. 별도 컨테이너가 4KB를 fsync로 쓰는 시간(µs)을 1초마다 적는다(실험 21)
+docker rm -f dbreplay-exp19-disk >/dev/null 2>&1 || true
+docker run -d --name dbreplay-exp19-disk postgres:16 bash -c 'while true; do a=$EPOCHREALTIME
+  dd if=/dev/zero of=/tmp/probe bs=4k count=1 conv=fsync 2>/dev/null; b=$EPOCHREALTIME
+  echo "${a%.*} $(( ${b/./} - ${a/./} ))"; sleep 1; done' >/dev/null
+trap 'docker logs dbreplay-exp19-disk >> out/part2-$PREFIX-disk.txt 2>&1 || true; docker rm -f dbreplay-exp19-disk >/dev/null 2>&1 || true' EXIT
+
 echo "===== 2부: 캡처의 부담 ====="
 $SB --threads=8 --time=20 --report-interval=0 run </dev/null >/dev/null
 for i in $RUNS; do
   for mode in off on; do
     [ "$mode" = on ] && capture_on mysql84 3306 mysql-overhead
     sleep 20  # 앞 실행의 디스크 쓰기가 가라앉게 끔과 켬 모두 쉰다
-    $SB --threads=8 --time=30 --report-interval=0 --percentile=95 run </dev/null > "out/mysql2-$mode-$i.txt"
+    t0=$(date +%s); $SB --threads=8 --time=30 --report-interval=0 --percentile=95 run </dev/null > "out/mysql$PREFIX-$mode-$i.txt"; echo "mysql $mode $i $t0 $(date +%s)" >> "$TIMES"
     bytes=0; if [ "$mode" = on ]; then capture_off; bytes=$BYTES; fi
-    echo "mysql $mode $i tps=$(awk '/transactions:/ {gsub(/[()]/, "", $3); print $3}' "out/mysql2-$mode-$i.txt") p95_ms=$(awk '/95th percentile:/ {print $3}' "out/mysql2-$mode-$i.txt") capture_bytes=$bytes"
+    echo "mysql $mode $i tps=$(awk '/transactions:/ {gsub(/[()]/, "", $3); print $3}' "out/mysql$PREFIX-$mode-$i.txt") p95_ms=$(awk '/95th percentile:/ {print $3}' "out/mysql$PREFIX-$mode-$i.txt") capture_bytes=$bytes"
   done
 done
 # pgbench는 컨테이너 안에서 돌면 루프백으로 붙어 eth0에서 보이지 않는다. 같은 네트워크의 다른 컨테이너에서 건다
@@ -56,9 +67,9 @@ for i in $RUNS; do
   for mode in off on; do
     [ "$mode" = on ] && capture_on pg16 5432 pg-overhead
     sleep 20  # 앞 실행의 디스크 쓰기가 가라앉게 끔과 켬 모두 쉰다
-    $PGB </dev/null > "out/pg2-$mode-$i.txt" 2>&1
+    t0=$(date +%s); $PGB </dev/null > "out/pg$PREFIX-$mode-$i.txt" 2>&1; echo "pg $mode $i $t0 $(date +%s)" >> "$TIMES"
     bytes=0; if [ "$mode" = on ]; then capture_off; bytes=$BYTES; fi
-    echo "pg $mode $i tps=$(awk '/^tps = / {print $3}' "out/pg2-$mode-$i.txt") latency_avg_ms=$(awk '/^latency average = / {print $4}' "out/pg2-$mode-$i.txt") capture_bytes=$bytes"
+    echo "pg $mode $i tps=$(awk '/^tps = / {print $3}' "out/pg$PREFIX-$mode-$i.txt") latency_avg_ms=$(awk '/^latency average = / {print $4}' "out/pg$PREFIX-$mode-$i.txt") capture_bytes=$bytes"
   done
 done
 echo "끝"
