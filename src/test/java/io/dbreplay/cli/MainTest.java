@@ -84,6 +84,15 @@ class MainTest {
 		assertEquals("  탐색마다: 8.50, 12.00, 8.50, 3.75, 8.00", lines.get(1));
 	}
 
+	/** 운영에서 잰 qps의 평균. 없으면 지어내지 않고 이유를 알린다 (#82). */
+	@Test
+	void averagesTheMeasuredQpsOrExplainsWhyItIsMissing() {
+		assertEquals(150.0, Main.meanQps(Map.of("qps", new double[] {100, 200}), false), 1e-9);
+		IllegalStateException pg = assertThrows(IllegalStateException.class,
+				() -> Main.meanQps(Map.of("tps", new double[] {10}), true));
+		assertTrue(pg.getMessage().contains("pg_stat_statements"));
+	}
+
 	/** 한 번만 탐색했으면 상한이 흔들린다는 안내를 붙이고, 되풀이했으면 범위가 대신하므로 붙이지 않는다 (#76). */
 	@Test
 	void notesThatASingleExplorationCanSwing() {
@@ -170,12 +179,34 @@ class MainTest {
 		assertEquals(primaryRead, Main.readLevelForAdvice(null, primaryRead));
 	}
 
-	/** 종 DB의 수위로 계산한 권고는 확장 명령을 실행하지 않는다. 종 DB의 상한은 알람으로 확인된 적이 없다. */
+	/** 종 DB의 수위로 계산한 권고는 종 DB의 알람으로 확인됐을 때만 확장 명령을 실행한다 (#53, #80). */
 	@Test
 	void refusesToApplyAdviceComputedFromTheReplicaLevel() {
-		assertTrue(Main.scaleConfirmed(true, false), "주 DB의 권고이고 알람으로 확인됐다");
-		assertFalse(Main.scaleConfirmed(true, true), "종 DB의 권고다");
-		assertFalse(Main.scaleConfirmed(false, false), "알람으로 확인되지 않았다");
+		assertTrue(Main.scaleConfirmed(true, false, false), "주 DB의 권고이고 알람으로 확인됐다");
+		assertFalse(Main.scaleConfirmed(true, true, false), "종 DB의 권고이고 종 DB의 상한은 어림값이다");
+		assertTrue(Main.scaleConfirmed(true, true, true), "종 DB의 권고이고 종 DB의 알람이 탐색을 멈췄다");
+		assertFalse(Main.scaleConfirmed(false, true, true), "알람으로 확인되지 않았다");
+		assertFalse(Main.scaleConfirmed(false, false, false), "알람으로 확인되지 않았다");
+	}
+
+	/** 과부하로 판정된 가장 낮은 배속의 라운드를 멈춘 알람이 종 DB의 것일 때만 종 DB의 상한이 확인된 것이다 (#80). */
+	@Test
+	void confirmsTheReplicaCeilingOnlyWhenTheReplicaAlarmStoppedTheSearch() {
+		Explorer.Result byReplica = new Explorer.Result(List.of(
+				new Explorer.Round(1, 4, null, new RoundJudge.Verdict(RoundJudge.State.OVERLOADED, "active_sessions이(가) 3번 연속 32 이상")),
+				new Explorer.Round(2, 2, null, new RoundJudge.Verdict(RoundJudge.State.OVERLOADED, "replica.active_sessions이(가) 3번 연속 32 이상")),
+				new Explorer.Round(3, 1, null, new RoundJudge.Verdict(RoundJudge.State.HELD, null))), 1, RoundJudge.State.OVERLOADED);
+		Explorer.Result byPrimary = new Explorer.Result(List.of(
+				new Explorer.Round(1, 2, null, new RoundJudge.Verdict(RoundJudge.State.OVERLOADED, "active_sessions이(가) 3번 연속 32 이상")),
+				new Explorer.Round(2, 1, null, new RoundJudge.Verdict(RoundJudge.State.HELD, null))), 1, RoundJudge.State.OVERLOADED);
+		Explorer.Result noAlarm = new Explorer.Result(List.of(
+				new Explorer.Round(1, 2, null, new RoundJudge.Verdict(RoundJudge.State.HELD, null))), 2, null);
+
+		assertTrue(Main.replicaCeilingConfirmed(List.of(byReplica)));
+		assertFalse(Main.replicaCeilingConfirmed(List.of(byPrimary)));
+		assertFalse(Main.replicaCeilingConfirmed(List.of(byReplica, byPrimary)), "되풀이했으면 모든 탐색에서 그래야 한다");
+		assertFalse(Main.replicaCeilingConfirmed(List.of(noAlarm)));
+		assertFalse(Main.replicaCeilingConfirmed(List.of()));
 	}
 
 	/** check의 수 검사: 지금의 QPS 옵션에 음수·NaN·무한대를 주면 거른다. */

@@ -56,8 +56,16 @@ public record Evaluation(
 	 * @param traffic    종 DB에서 녹화한 트래픽의 모양
 	 * @param ceilingQps 종 DB의 상한 (초당 문장 수) = 종 DB의 녹화 QPS × 상한 배속
 	 * @param currentQps 수위를 낼 때 쓴 종 DB의 지금의 초당 문장 수
+	 * @param confirmed  탐색을 멈춘 알람이 종 DB의 지표에 건 것이었으면 true(종 DB의 상한이 알람으로 확인됨), 아니면 false.
+	 *                   이 칸이 생기기 전(#80)의 평가 파일에는 없다
 	 */
-	public record Replica(TrafficModel traffic, double ceilingQps, double currentQps) {
+	public record Replica(TrafficModel traffic, double ceilingQps, double currentQps,
+			@JsonInclude(JsonInclude.Include.NON_NULL) Boolean confirmed) {
+
+		/** 확인 여부를 적지 않은 예전 모양. */
+		public Replica(TrafficModel traffic, double ceilingQps, double currentQps) {
+			this(traffic, ceilingQps, currentQps, null);
+		}
 
 		/** 이 종 DB의 수위. 건강 구간은 주 DB와 같은 것을 쓴다. */
 		public WaterLevel level(double low, double high) {

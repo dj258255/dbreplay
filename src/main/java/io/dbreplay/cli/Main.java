@@ -43,7 +43,9 @@ import io.dbreplay.explore.WaterLevel;
 import io.dbreplay.metrics.CommandMetricSource;
 import io.dbreplay.metrics.DbMetricSource;
 import io.dbreplay.metrics.MetricSampler;
+import io.dbreplay.metrics.PrefixedMetricSource;
 import io.dbreplay.metrics.ReplicationLagSource;
+import io.dbreplay.metrics.ServerLogSlowSource;
 import io.dbreplay.mysql.MysqlCapture;
 import io.dbreplay.mysql.SlowLogConverter;
 import io.dbreplay.postgres.CsvLogConverter;
@@ -107,6 +109,9 @@ public final class Main {
 			  dbreplay check   --evaluation <평가 파일> --url <JDBC URL> --user <계정> [--password <암호>]
 			                   [--trace <지금의 트래픽 파일>] [--max-traffic-distance 0.2]
 			                   [--current-qps <지금의 초당 문장 수>] [--current-replica-qps <종 DB>] [--profile-command <명령>] [explore에 줬던 알람 옵션]
+			                   [--measure-url <운영 JDBC URL> [--measure-user <계정>] [--measure-seconds 60]]
+			                   --measure-url을 주면 운영 DB에서 그 시간 동안 초당 문장 수를 재서 수위를 다시 계산한다.
+			                   암호는 DBREPLAY_MEASURE_PASSWORD로 준다(없으면 --password와 같다). PostgreSQL은 pg_stat_statements가 있어야 한다
 
 			  dbreplay manage  --targets <대상 목록.json> [--force yes] [--max-traffic-distance 0.2]
 			                   등록한 대상을 훑어, 평가한 적이 없거나 만료됐거나 무효인 것만 다시 평가하고 수위를 한 표로 낸다.
@@ -132,10 +137,13 @@ public final class Main {
 			지표 옵션:
 			  --sample-ms 200            DB에서 지표를 뜨는 간격. active_sessions(실행 중인 연결)와
 			                             slow_running(실행 중이면서 --slow-ms를 넘긴 문장)을 뜬다
-			                             표본마다 DB가 내는 누적 값에서 qps(MySQL만, 직전 표본부터의 초당 문장 수),
-			                             tps(PostgreSQL만, 초당 트랜잭션 수), slow_finished_total(MySQL만, 표본을 뜨기
-			                             시작한 뒤 --slow-ms를 넘겨 끝난 문장의 누적 수. 기준 시간이 든 칸까지 센다)도 뜬다
+			                             표본마다 DB가 내는 누적 값에서 qps(직전 표본부터의 초당 문장 수. PostgreSQL은
+			                             pg_stat_statements가 있을 때만), tps(PostgreSQL만, 초당 트랜잭션 수),
+			                             slow_finished_total(MySQL만, 표본을 뜨기 시작한 뒤 --slow-ms를 넘겨 끝난 문장의
+			                             누적 수. 기준 시간이 든 칸까지 센다)도 뜬다
 			  --slow-ms 100              실행 중인 문장을 느리다고 볼 기준 시간
+			  --server-log <csvlog 경로> PostgreSQL의 서버 로그를 따라 읽어 slow_finished_total을 낸다.
+			                             log_min_duration_statement가 --slow-ms 이하로 켜져 있어야 한다
 			  --metric-command <명령>    DB 접속으로 못 읽는 지표(CPU, Load Average)를 받는다.
 			                             한 줄에 '이름 값'을 내는 명령을 --metric-command-ms(기본 1000)마다 실행한다
 
@@ -147,6 +155,9 @@ public final class Main {
 			  --replica-url <JDBC URL>   주 DB(--url)를 복제로 따라오는 종 DB. 주면 복제 지연을 replication_lag_seconds로 뜨고
 			                             (알람은 --alarm-metric 'replication_lag_seconds>=1'), 되돌린 뒤 종 DB가 따라올 때까지 기다린다.
 			                             MySQL은 GTID가 켜져 있어야 한다. 계정이 다르면 --replica-user, --replica-password
+			                             종 DB에서도 같은 지표를 replica.을 붙여 뜬다(replica.active_sessions 등). 종 DB에
+			                             알람을 걸면(--alarm-metric 'replica.active_sessions>=32') 그 알람이 탐색을 멈췄을 때
+			                             종 DB의 상한이 알람으로 확인된 것으로 본다
 			  --replica-trace <파일>     종 DB에서 녹화한 트래픽. 주 DB의 재생과 같은 배속으로 종 DB에 함께 튼다.
 			                             문장 하나씩 독립으로 나간다
 
@@ -364,15 +375,29 @@ public final class Main {
 		printFailures(failures);
 	}
 
+	/** 종 DB에서 뜬 지표의 이름 앞에 붙인다. */
+	static final String REPLICA_PREFIX = "replica.";
+
 	private static MetricSampler sampler(JdbcTarget target, Map<String, String> options) throws Exception {
 		MetricSampler sampler = new MetricSampler()
 				.add(new DbMetricSource(target, (long) number(options, "--slow-ms", 100)), (long) number(options, "--sample-ms", 200));
 		if (options.containsKey("--metric-command")) {
 			sampler.add(new CommandMetricSource(options.get("--metric-command")), (long) number(options, "--metric-command-ms", 1_000));
 		}
+		if (options.containsKey("--server-log")) {
+			// MySQL은 서버의 실행 시간 분포로 이미 센다. 같은 이름의 지표가 두 곳에서 오면 섞인다
+			if (!target.isPostgres()) {
+				throw new IllegalArgumentException("--server-log는 PostgreSQL의 csvlog에 쓴다. MySQL은 서버의 분포로 이미 센다");
+			}
+			sampler.add(new ServerLogSlowSource(Path.of(options.get("--server-log")), (long) number(options, "--slow-ms", 100)),
+					(long) number(options, "--sample-ms", 200));
+		}
 		JdbcTarget replica = replica(options);
 		if (replica != null) {
 			sampler.add(new ReplicationLagSource(target, replica), (long) number(options, "--sample-ms", 200));
+			// 종 DB에서도 같은 지표를 뜬다. 이름 앞의 replica.으로 가른다. 종 DB에 알람을 걸 수 있게 하려는 것이다(#80)
+			sampler.add(new PrefixedMetricSource(REPLICA_PREFIX, new DbMetricSource(replica, (long) number(options, "--slow-ms", 100))),
+					(long) number(options, "--sample-ms", 200));
 		}
 		return sampler;
 	}
@@ -573,6 +598,7 @@ public final class Main {
 		// 종 DB를 함께 틀었으면 그 수위도 따로 낸다. 종 DB의 지금 QPS는 --current-replica-qps, 없으면 녹화 QPS를 쓴다
 		Evaluation.Replica replica = null;
 		WaterLevel replicaLevel = null;
+		boolean replicaConfirmed = false;
 		if (options.containsKey("--replica-trace")) {
 			TrafficModel replicaTraffic;
 			try (TraceReader trace = openTrace(options.get("--replica-trace"))) {
@@ -584,8 +610,11 @@ public final class Main {
 			System.out.printf("종 DB에 함께 튼 트래픽: 녹화 구간의 초당 문장 수 %.0f, 상한 배속에서 %.0f%n",
 					replicaTraffic.qps(), replicaCeilingQps);
 			System.out.println(replicaLevelLine(currentReplicaQps, replicaCeilingQps, level.low(), level.high()));
+			replicaConfirmed = replicaCeilingConfirmed(results);
+			System.out.println(replicaConfirmed ? "  종 DB의 상한은 종 DB의 알람으로 확인됐다"
+					: "  종 DB의 상한은 주 DB가 버틴 배속을 곱한 어림값이다. 탐색을 멈춘 알람이 종 DB의 것이 아니다");
 			replicaLevel = new WaterLevel(currentReplicaQps, replicaCeilingQps, level.low(), level.high());
-			replica = new Evaluation.Replica(replicaTraffic, replicaCeilingQps, currentReplicaQps);
+			replica = new Evaluation.Replica(replicaTraffic, replicaCeilingQps, currentReplicaQps, replicaConfirmed);
 		}
 		ScaleAdvice advice = printReadWrite(options, traffic, ceilingSpeed, level, replicaLevel);
 
@@ -608,21 +637,41 @@ public final class Main {
 			// 되풀이했으면 N번 가운데 하나라도 알람으로 확인되지 않았으면 실행하지 않는다
 			boolean confirmed = range == null ? stoppedBy == RoundJudge.State.OVERLOADED : range.allConfirmed();
 			boolean adviceFromReplica = replicaLevel != null;
-			// 종 DB의 상한은 주 DB와 같은 배속 × 종 DB의 녹화 QPS로 어림한 값이다. 그 탐색을 멈춘 알람은 주 DB의
-			// 것이라, 종 DB의 한계가 알람으로 확인된 적은 없다. 왜 실행하지 않는지 먼저 밝힌다
-			if (adviceFromReplica && options.containsKey("--scale-command")) {
+			// 종 DB의 상한은 주 DB와 같은 배속 × 종 DB의 녹화 QPS다. 탐색을 멈춘 알람이 주 DB의 것이면 종 DB의 한계는
+			// 알람으로 확인된 적이 없는 어림값이다. 왜 실행하지 않는지 먼저 밝힌다
+			if (adviceFromReplica && !replicaConfirmed && options.containsKey("--scale-command")) {
 				System.out.println("  종 DB의 상한은 주 DB와 같은 배속을 곱해 어림한 값이라 확장 명령을 실행하지 않는다");
 			}
-			applyScale(options, advice, scaleConfirmed(confirmed, adviceFromReplica));
+			applyScale(options, advice, scaleConfirmed(confirmed, adviceFromReplica, replicaConfirmed));
 		}
 	}
 
 	/**
-	 * 확장 명령을 실행해도 되는가. 종 DB의 수위로 계산한 권고는 종 DB의 상한을 주 DB와 같은 배속을 곱해 어림한
-	 * 값이라 알람으로 확인된 것이 아니다. 부하 지표는 주 DB에서만 뜨고, 그 탐색을 멈춘 알람은 주 DB의 것이다.
+	 * 확장 명령을 실행해도 되는가. 종 DB의 수위로 계산한 권고는, 탐색을 멈춘 알람이 종 DB의 지표에 건 것일 때만
+	 * 종 DB의 상한이 알람으로 확인된 것이다. 아니면 주 DB가 버틴 배속을 곱한 어림값이다(#53, #80).
 	 */
-	static boolean scaleConfirmed(boolean ceilingConfirmed, boolean adviceFromReplica) {
-		return ceilingConfirmed && !adviceFromReplica;
+	static boolean scaleConfirmed(boolean ceilingConfirmed, boolean adviceFromReplica, boolean replicaConfirmed) {
+		return ceilingConfirmed && (!adviceFromReplica || replicaConfirmed);
+	}
+
+	/**
+	 * 종 DB의 상한이 종 DB의 알람으로 확인됐는가. 탐색마다 과부하로 판정된 가장 낮은 배속의 라운드를 멈춘 알람이
+	 * replica.으로 시작하는 지표에 건 것이어야 한다. 되풀이했으면 모든 탐색에서 그래야 한다.
+	 */
+	static boolean replicaCeilingConfirmed(List<Explorer.Result> results) {
+		if (results.isEmpty()) {
+			return false;
+		}
+		for (Explorer.Result result : results) {
+			Explorer.Round boundary = result.rounds().stream()
+					.filter(r -> r.verdict().state() == RoundJudge.State.OVERLOADED)
+					.min(java.util.Comparator.comparingDouble(Explorer.Round::speed))
+					.orElse(null);
+			if (boundary == null || boundary.verdict().reason() == null || !boundary.verdict().reason().startsWith(REPLICA_PREFIX)) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	/**
@@ -1140,6 +1189,13 @@ public final class Main {
 			System.out.println(currentQpsLine(evaluation.ceilingQps(), number(options, "--current-qps", 0),
 					evaluation.low(), evaluation.high()));
 		}
+		// 운영 DB에서 직접 잰다. 글의 수위는 운영 QPS ÷ 상한이다(원문 대조 51, #82)
+		if (options.containsKey("--measure-url")) {
+			long seconds = (long) number(options, "--measure-seconds", 60);
+			double measured = measureQps(measureTarget(options), seconds);
+			System.out.printf("  운영 DB에서 %d초 동안 잰 초당 문장 수: %.0f%n", seconds, measured);
+			System.out.println(currentQpsLine(evaluation.ceilingQps(), measured, evaluation.low(), evaluation.high()));
+		}
 		// 종 DB를 함께 틀어 평가했으면 그 수위도 보여 준다. --current-replica-qps를 주면 다시 계산한다
 		Evaluation.Replica replica = evaluation.replica();
 		if (replica != null) {
@@ -1292,6 +1348,38 @@ public final class Main {
 	private static JdbcTarget target(Map<String, String> options) {
 		String password = options.getOrDefault("--password", System.getenv().getOrDefault("DBREPLAY_PASSWORD", ""));
 		return new JdbcTarget(required(options, "--url"), required(options, "--user"), password);
+	}
+
+	/** 운영 DB. 계정은 --measure-user, 없으면 --user. 암호는 명령줄에 남지 않게 환경 변수로 받는다. */
+	private static JdbcTarget measureTarget(Map<String, String> options) {
+		String password = System.getenv().getOrDefault("DBREPLAY_MEASURE_PASSWORD",
+				options.getOrDefault("--password", System.getenv().getOrDefault("DBREPLAY_PASSWORD", "")));
+		return new JdbcTarget(options.get("--measure-url"), options.getOrDefault("--measure-user", required(options, "--user")),
+				password);
+	}
+
+	/** 운영 DB의 초당 문장 수를 그 시간 동안 떠서 평균을 낸다. 표본기 자신의 조회는 뺀 값이다. */
+	private static double measureQps(JdbcTarget production, long seconds) throws Exception {
+		Map<String, double[]> metrics;
+		List<String> failures;
+		try (MetricSampler sampler = new MetricSampler().add(new DbMetricSource(production, 100), 1_000)) {
+			Thread.sleep(seconds * 1_000);
+			metrics = sampler.stop();
+			failures = sampler.failures();
+		}
+		requireNoFailures(failures);
+		return meanQps(metrics, production.isPostgres());
+	}
+
+	/** 뜬 qps의 평균. 없으면 왜 없는지 알린다. 지어내지 않는다. */
+	static double meanQps(Map<String, double[]> metrics, boolean postgres) {
+		double[] qps = metrics.get(DbMetricSource.QPS);
+		if (qps == null || qps.length == 0) {
+			throw new IllegalStateException(postgres
+					? "운영 DB에서 초당 문장 수를 잴 수 없다. PostgreSQL은 pg_stat_statements 확장이 있어야 한다"
+					: "운영 DB에서 초당 문장 수를 잴 수 없다. 재는 시간을 늘리거나 performance_schema 권한을 본다");
+		}
+		return java.util.Arrays.stream(qps).average().orElseThrow();
 	}
 
 	/** 종 DB. --replica-url을 주지 않았으면 null. 계정과 암호를 따로 주지 않으면 주 DB의 것을 쓴다. */
