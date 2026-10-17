@@ -33,6 +33,33 @@ public record ReplaySummary(
 		Histogram origDuration) {
 
 	/**
+	 * 나눠 튼 재생기들의 요약을 하나로 모은다(#81). 개수는 더하고, 걸린 시간과 원본의 구간은 가장 긴 것을 쓴다(함께 시작했다).
+	 */
+	public static ReplaySummary merge(java.util.List<ReplaySummary> parts) {
+		if (parts.size() == 1) {
+			return parts.getFirst();
+		}
+		Histogram lag = new Histogram(), duration = new Histogram(), origDuration = new Histogram();
+		long statements = 0, sessions = 0, skipped = 0, errors = 0, origErrors = 0, late = 0, busy = 0, span = 0, elapsed = 0;
+		for (ReplaySummary p : parts) {
+			statements += p.statements;
+			sessions += p.sessions;
+			skipped += p.skipped;
+			errors += p.errors;
+			origErrors += p.origErrors;
+			late += p.late;
+			busy += p.lateSessionBusy;
+			span = Math.max(span, p.traceSpanMicros);
+			elapsed = Math.max(elapsed, p.elapsedMicros);
+			lag.add(p.lag);
+			duration.add(p.duration);
+			origDuration.add(p.origDuration);
+		}
+		return new ReplaySummary(statements, sessions, skipped, errors, origErrors, late, busy, parts.getFirst().speed, span, elapsed,
+				lag, duration, origDuration);
+	}
+
+	/**
 	 * 재생기 자신이 늦어 계획을 못 지킨 문장의 비율. 메이투안 글이 말한 왜곡의 신호다.
 	 * 글은 계획 시각을 이미 지나 즉시 실행된 문장이 많으면 재생기의 동시 처리가 모자란 것이라고 했다.
 	 */
