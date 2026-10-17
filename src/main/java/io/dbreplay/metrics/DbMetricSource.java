@@ -37,15 +37,18 @@ public final class DbMetricSource implements MetricSource {
 
 	// 실행 중인 연결은 스레드 목록에서 센다. Threads_running은 서버의 상주 스레드 하나(이벤트 스케줄러)를 함께 세서
 	// 한가할 때도 1이었다(#41). 종 DB에 바이너리 로그를 보내는 스레드도 뺀다. 언제나 실행 중으로 잡힌다(실험 11).
+	// 종 DB에서 뜰 때(#80)는 복제를 적용하는 스레드(thread/sql/replica_*)도 뺀다. 그 일은 복제 지연으로 본다
 	// TIMER_WAIT는 피코초다. 실행 중인 문장은 조회하는 순간까지 흐른 시간이 들어 있다
 	private static final String MYSQL = """
 			/* dbreplay:sampler */ SELECT
 			       (SELECT COUNT(*) FROM performance_schema.threads
 			         WHERE TYPE = 'FOREGROUND' AND PROCESSLIST_ID <> CONNECTION_ID()
-			           AND PROCESSLIST_COMMAND NOT IN ('Sleep', 'Daemon', 'Binlog Dump', 'Binlog Dump GTID')),
+			           AND PROCESSLIST_COMMAND NOT IN ('Sleep', 'Daemon', 'Binlog Dump', 'Binlog Dump GTID')
+			           AND NAME NOT LIKE 'thread/sql/replica\\_%'),
 			       (SELECT COUNT(*) FROM performance_schema.events_statements_current
 			         WHERE END_EVENT_ID IS NULL AND TIMER_WAIT > ? * 1000000000
-			           AND THREAD_ID NOT IN (SELECT THREAD_ID FROM performance_schema.threads WHERE PROCESSLIST_COMMAND LIKE 'Binlog Dump%'))""";
+			           AND THREAD_ID NOT IN (SELECT THREAD_ID FROM performance_schema.threads
+			                                  WHERE PROCESSLIST_COMMAND LIKE 'Binlog Dump%' OR NAME LIKE 'thread/sql/replica\\_%'))""";
 	private static final String POSTGRES = """
 			/* dbreplay:sampler */ SELECT count(*), count(*) FILTER (WHERE now() - query_start > ? * interval '1 millisecond')
 			  FROM pg_stat_activity

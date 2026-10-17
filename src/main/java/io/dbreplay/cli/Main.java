@@ -43,6 +43,7 @@ import io.dbreplay.explore.WaterLevel;
 import io.dbreplay.metrics.CommandMetricSource;
 import io.dbreplay.metrics.DbMetricSource;
 import io.dbreplay.metrics.MetricSampler;
+import io.dbreplay.metrics.PrefixedMetricSource;
 import io.dbreplay.metrics.ReplicationLagSource;
 import io.dbreplay.mysql.MysqlCapture;
 import io.dbreplay.mysql.SlowLogConverter;
@@ -147,6 +148,9 @@ public final class Main {
 			  --replica-url <JDBC URL>   주 DB(--url)를 복제로 따라오는 종 DB. 주면 복제 지연을 replication_lag_seconds로 뜨고
 			                             (알람은 --alarm-metric 'replication_lag_seconds>=1'), 되돌린 뒤 종 DB가 따라올 때까지 기다린다.
 			                             MySQL은 GTID가 켜져 있어야 한다. 계정이 다르면 --replica-user, --replica-password
+			                             종 DB에서도 같은 지표를 replica.을 붙여 뜬다(replica.active_sessions 등). 종 DB에
+			                             알람을 걸면(--alarm-metric 'replica.active_sessions>=32') 그 알람이 탐색을 멈췄을 때
+			                             종 DB의 상한이 알람으로 확인된 것으로 본다
 			  --replica-trace <파일>     종 DB에서 녹화한 트래픽. 주 DB의 재생과 같은 배속으로 종 DB에 함께 튼다.
 			                             문장 하나씩 독립으로 나간다
 
@@ -364,6 +368,9 @@ public final class Main {
 		printFailures(failures);
 	}
 
+	/** 종 DB에서 뜬 지표의 이름 앞에 붙인다. */
+	static final String REPLICA_PREFIX = "replica.";
+
 	private static MetricSampler sampler(JdbcTarget target, Map<String, String> options) throws Exception {
 		MetricSampler sampler = new MetricSampler()
 				.add(new DbMetricSource(target, (long) number(options, "--slow-ms", 100)), (long) number(options, "--sample-ms", 200));
@@ -373,6 +380,9 @@ public final class Main {
 		JdbcTarget replica = replica(options);
 		if (replica != null) {
 			sampler.add(new ReplicationLagSource(target, replica), (long) number(options, "--sample-ms", 200));
+			// 종 DB에서도 같은 지표를 뜬다. 이름 앞의 replica.으로 가른다. 종 DB에 알람을 걸 수 있게 하려는 것이다(#80)
+			sampler.add(new PrefixedMetricSource(REPLICA_PREFIX, new DbMetricSource(replica, (long) number(options, "--slow-ms", 100))),
+					(long) number(options, "--sample-ms", 200));
 		}
 		return sampler;
 	}
@@ -573,6 +583,7 @@ public final class Main {
 		// 종 DB를 함께 틀었으면 그 수위도 따로 낸다. 종 DB의 지금 QPS는 --current-replica-qps, 없으면 녹화 QPS를 쓴다
 		Evaluation.Replica replica = null;
 		WaterLevel replicaLevel = null;
+		boolean replicaConfirmed = false;
 		if (options.containsKey("--replica-trace")) {
 			TrafficModel replicaTraffic;
 			try (TraceReader trace = openTrace(options.get("--replica-trace"))) {
@@ -584,8 +595,11 @@ public final class Main {
 			System.out.printf("종 DB에 함께 튼 트래픽: 녹화 구간의 초당 문장 수 %.0f, 상한 배속에서 %.0f%n",
 					replicaTraffic.qps(), replicaCeilingQps);
 			System.out.println(replicaLevelLine(currentReplicaQps, replicaCeilingQps, level.low(), level.high()));
+			replicaConfirmed = replicaCeilingConfirmed(results);
+			System.out.println(replicaConfirmed ? "  종 DB의 상한은 종 DB의 알람으로 확인됐다"
+					: "  종 DB의 상한은 주 DB가 버틴 배속을 곱한 어림값이다. 탐색을 멈춘 알람이 종 DB의 것이 아니다");
 			replicaLevel = new WaterLevel(currentReplicaQps, replicaCeilingQps, level.low(), level.high());
-			replica = new Evaluation.Replica(replicaTraffic, replicaCeilingQps, currentReplicaQps);
+			replica = new Evaluation.Replica(replicaTraffic, replicaCeilingQps, currentReplicaQps, replicaConfirmed);
 		}
 		ScaleAdvice advice = printReadWrite(options, traffic, ceilingSpeed, level, replicaLevel);
 
@@ -608,21 +622,41 @@ public final class Main {
 			// 되풀이했으면 N번 가운데 하나라도 알람으로 확인되지 않았으면 실행하지 않는다
 			boolean confirmed = range == null ? stoppedBy == RoundJudge.State.OVERLOADED : range.allConfirmed();
 			boolean adviceFromReplica = replicaLevel != null;
-			// 종 DB의 상한은 주 DB와 같은 배속 × 종 DB의 녹화 QPS로 어림한 값이다. 그 탐색을 멈춘 알람은 주 DB의
-			// 것이라, 종 DB의 한계가 알람으로 확인된 적은 없다. 왜 실행하지 않는지 먼저 밝힌다
-			if (adviceFromReplica && options.containsKey("--scale-command")) {
+			// 종 DB의 상한은 주 DB와 같은 배속 × 종 DB의 녹화 QPS다. 탐색을 멈춘 알람이 주 DB의 것이면 종 DB의 한계는
+			// 알람으로 확인된 적이 없는 어림값이다. 왜 실행하지 않는지 먼저 밝힌다
+			if (adviceFromReplica && !replicaConfirmed && options.containsKey("--scale-command")) {
 				System.out.println("  종 DB의 상한은 주 DB와 같은 배속을 곱해 어림한 값이라 확장 명령을 실행하지 않는다");
 			}
-			applyScale(options, advice, scaleConfirmed(confirmed, adviceFromReplica));
+			applyScale(options, advice, scaleConfirmed(confirmed, adviceFromReplica, replicaConfirmed));
 		}
 	}
 
 	/**
-	 * 확장 명령을 실행해도 되는가. 종 DB의 수위로 계산한 권고는 종 DB의 상한을 주 DB와 같은 배속을 곱해 어림한
-	 * 값이라 알람으로 확인된 것이 아니다. 부하 지표는 주 DB에서만 뜨고, 그 탐색을 멈춘 알람은 주 DB의 것이다.
+	 * 확장 명령을 실행해도 되는가. 종 DB의 수위로 계산한 권고는, 탐색을 멈춘 알람이 종 DB의 지표에 건 것일 때만
+	 * 종 DB의 상한이 알람으로 확인된 것이다. 아니면 주 DB가 버틴 배속을 곱한 어림값이다(#53, #80).
 	 */
-	static boolean scaleConfirmed(boolean ceilingConfirmed, boolean adviceFromReplica) {
-		return ceilingConfirmed && !adviceFromReplica;
+	static boolean scaleConfirmed(boolean ceilingConfirmed, boolean adviceFromReplica, boolean replicaConfirmed) {
+		return ceilingConfirmed && (!adviceFromReplica || replicaConfirmed);
+	}
+
+	/**
+	 * 종 DB의 상한이 종 DB의 알람으로 확인됐는가. 탐색마다 과부하로 판정된 가장 낮은 배속의 라운드를 멈춘 알람이
+	 * replica.으로 시작하는 지표에 건 것이어야 한다. 되풀이했으면 모든 탐색에서 그래야 한다.
+	 */
+	static boolean replicaCeilingConfirmed(List<Explorer.Result> results) {
+		if (results.isEmpty()) {
+			return false;
+		}
+		for (Explorer.Result result : results) {
+			Explorer.Round boundary = result.rounds().stream()
+					.filter(r -> r.verdict().state() == RoundJudge.State.OVERLOADED)
+					.min(java.util.Comparator.comparingDouble(Explorer.Round::speed))
+					.orElse(null);
+			if (boundary == null || boundary.verdict().reason() == null || !boundary.verdict().reason().startsWith(REPLICA_PREFIX)) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	/**
