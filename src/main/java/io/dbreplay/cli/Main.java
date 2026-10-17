@@ -123,6 +123,9 @@ public final class Main {
 			                   암호는 DBREPLAY_MEASURE_PASSWORD로 준다(없으면 --password와 같다). PostgreSQL은 pg_stat_statements가 있어야 한다
 
 			  dbreplay manage  --targets <대상 목록.json> [--force yes] [--max-traffic-distance 0.2]
+			                   [--every <분>] [--register-max-distance 0.2] [--register-min-qps 0]
+			                   --every를 주면 떠 있으면서 그 주기마다 훑는다. 멈추라는 신호를 받으면 하던 대상을 끝내고 멈춘다.
+			                   대상에 traces(최근 트래픽 파일들)를 적고 --register-*를 주면 모양이 안정적이고 부하가 있는 대상만 평가한다.
 			                   등록한 대상을 훑어, 평가한 적이 없거나 만료됐거나 무효인 것만 다시 평가하고 수위를 한 표로 낸다.
 			                   대상 목록은 {"targets": [{"name": ..., "evaluation": <평가 파일>, "options": {explore의 옵션}}]} 꼴이다.
 			                   주기적으로 돌리려면 cron에 건다
@@ -1314,6 +1317,68 @@ public final class Main {
 	}
 
 	private static void manage(Map<String, String> options) throws Exception {
+		if (!options.containsKey("--every")) {
+			if (manageOnce(options)) {
+				System.exit(1);
+			}
+			return;
+		}
+		// 떠 있으면서 주기마다 훑는다(원문 대조 49a, 50a, #87). 멈추라는 신호를 받으면 하던 대상을 끝내고 멈춘다.
+		// 셧다운 훅이 끝나면 JVM이 멈추므로, 훅이 훑기가 끝나기를 기다린다
+		long everyMillis = (long) (number(options, "--every", 60) * 60_000);
+		java.util.concurrent.atomic.AtomicBoolean stopping = new java.util.concurrent.atomic.AtomicBoolean();
+		java.util.concurrent.atomic.AtomicBoolean sleeping = new java.util.concurrent.atomic.AtomicBoolean();
+		java.util.concurrent.CountDownLatch stopped = new java.util.concurrent.CountDownLatch(1);
+		Thread main = Thread.currentThread();
+		Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+			stopping.set(true);
+			// 평가 중에는 끊지 않는다. 쉬는 중일 때만 깨운다
+			if (sleeping.get()) {
+				main.interrupt();
+			}
+			try {
+				stopped.await();
+			}
+			catch (InterruptedException ignored) {
+				// 기다리다 끊기면 그냥 멈춘다
+			}
+		}));
+		try {
+			while (!stopping.get()) {
+				System.out.printf("%n##### %s 훑기 #####%n", Instant.now().truncatedTo(ChronoUnit.SECONDS));
+				try {
+					manageOnce(options);
+				}
+				catch (Exception e) {
+					if (stopping.get()) {
+						break;
+					}
+					// 대상 목록을 못 읽은 것 같은 일. 다음 주기에 다시 본다
+					System.out.println("훑지 못했다 (" + e.getClass().getSimpleName() + ")");
+				}
+				sleeping.set(true);
+				try {
+					if (stopping.get()) {
+						break;
+					}
+					Thread.sleep(everyMillis);
+				}
+				catch (InterruptedException e) {
+					break;
+				}
+				finally {
+					sleeping.set(false);
+				}
+			}
+			System.out.println("멈췄다");
+		}
+		finally {
+			stopped.countDown();
+		}
+	}
+
+	/** 대상들을 한 번 훑는다. @return 실패한 대상이 있었는가 */
+	private static boolean manageOnce(Map<String, String> options) throws Exception {
 		ManagedTargets managed = JSON.readValue(Path.of(required(options, "--targets")).toFile(), ManagedTargets.class);
 		boolean force = "yes".equals(options.get("--force"));
 		Map<String, ManagedTargets.Action> actions = new java.util.LinkedHashMap<>();
@@ -1328,6 +1393,12 @@ public final class Main {
 			Path file = Path.of(t.evaluation());
 			ManagedTargets.Action action;
 			try {
+				String notRegistered = registrationRule(options, t);
+				if (notRegistered != null) {
+					actions.put(t.name(), ManagedTargets.Action.NOT_REGISTERED);
+					why.put(t.name(), notRegistered);
+					continue;
+				}
 				if (!Files.exists(file)) {
 					action = ManagedTargets.Action.EVALUATED;
 					why.put(t.name(), "평가한 적이 없다");
@@ -1357,9 +1428,10 @@ public final class Main {
 				case EVALUATED -> "평가";
 				case REEVALUATED -> "다시 평가";
 				case FAILED -> "실패";
+				case NOT_REGISTERED -> "등록 안 됨";
 			};
 			Path file = Path.of(t.evaluation());
-			if (!Files.exists(file)) {
+			if (!Files.exists(file) || actions.get(t.name()) == ManagedTargets.Action.NOT_REGISTERED) {
 				System.out.printf("%-20s %-12s %8s %12s %6s %-6s  %s%n", t.name(), did, "-", "-", "-", "-", why.get(t.name()));
 				continue;
 			}
@@ -1375,9 +1447,28 @@ public final class Main {
 						case SHORT -> "부족";
 					}, e.evaluatedAt() + (actions.get(t.name()) == ManagedTargets.Action.FAILED ? " (" + why.get(t.name()) + ")" : "") + rangeSuffix);
 		}
-		if (actions.containsValue(ManagedTargets.Action.FAILED)) {
-			System.exit(1);
+		return actions.containsValue(ManagedTargets.Action.FAILED);
+	}
+
+	/**
+	 * 등록 규칙에 들지 않는 이유. 규칙 옵션을 주지 않았거나 대상에 traces가 없으면 늘 들고(null), 지금과 같다.
+	 * 기준은 {@link ManagedTargets#notRegisteredBecause}에 있다.
+	 */
+	private static String registrationRule(Map<String, String> options, ManagedTargets.Target t) throws IOException {
+		if (!options.containsKey("--register-max-distance") && !options.containsKey("--register-min-qps")) {
+			return null;
 		}
+		if (t.traces().isEmpty()) {
+			return null;
+		}
+		List<TrafficModel> models = new ArrayList<>();
+		for (String path : t.traces()) {
+			try (TraceReader trace = openTrace(path)) {
+				models.add(TrafficModel.of(trace));
+			}
+		}
+		return ManagedTargets.notRegisteredBecause(models, number(options, "--register-max-distance", 0.2),
+				number(options, "--register-min-qps", 0));
 	}
 
 	private static void check(Map<String, String> options) throws Exception {
