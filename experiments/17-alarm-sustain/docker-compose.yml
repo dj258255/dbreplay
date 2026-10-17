@@ -1,0 +1,22 @@
+# 실험 12: 같은 절차를 되풀이했을 때 상한이 얼마나 흔들리는가
+name: dbreplay-exp17
+
+services:
+  mysql84:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: replay
+      MYSQL_DATABASE: sbtest
+    command:
+      - --slow-query-log=OFF
+      - --long-query-time=0
+      - --log-output=FILE
+      - --slow-query-log-file=/var/lib/mysql/slow.log
+      - --log-slow-extra=ON
+      - --log-slow-admin-statements=ON
+      - --max-connections=1000
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-uroot", "-preplay", "--silent"]
+      interval: 2s
+      timeout: 2s
+      retries: 60

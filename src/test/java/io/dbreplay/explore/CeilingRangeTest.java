@@ -99,7 +99,9 @@ class CeilingRangeTest {
 		CeilingRange allZero = CeilingRange.of(List.of(overloaded(0), overloaded(0)));
 
 		assertEquals(2, allZero.notHeld());
-		assertEquals(0, allZero.spread(), 1e-9, "중앙값이 0이면 퍼짐도 0이다");
+		assertEquals(0, allZero.spread(), 1e-9, "전부 0이면 흔들림이 없다");
+		assertTrue(Double.isNaN(CeilingRange.of(List.of(overloaded(0), overloaded(0), overloaded(9))).spread()),
+				"중앙값이 0인데 갈렸으면 퍼짐을 낼 수 없다 (#91)");
 	}
 
 	/** 상한 범위가 확장 여부를 가르는 경우를 본다. 최솟값으로는 모자라지만 최댓값으로는 건강한 구간이다. */

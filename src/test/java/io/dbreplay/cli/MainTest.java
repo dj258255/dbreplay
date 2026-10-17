@@ -104,6 +104,23 @@ class MainTest {
 		assertEquals(List.of(), Main.singleRunNote(5));
 	}
 
+	/** 중앙값이 0이면 퍼짐을 0%로 찍지 않는다. 실험 17에서 [5.5, 19, 0, 0, 0]이 "퍼짐 0%"로 나왔다 (#91). */
+	@Test
+	void doesNotCallItZeroSpreadWhenTheMedianIsZero() {
+		CeilingRange split = CeilingRange.of(List.of(
+				new Explorer.Result(List.of(), 5.5, RoundJudge.State.OVERLOADED),
+				new Explorer.Result(List.of(), 19, RoundJudge.State.OVERLOADED),
+				new Explorer.Result(List.of(), 0, RoundJudge.State.OVERLOADED),
+				new Explorer.Result(List.of(), 0, RoundJudge.State.OVERLOADED),
+				new Explorer.Result(List.of(), 0, RoundJudge.State.OVERLOADED)));
+		assertEquals("상한: 최소 0.00, 중앙값 0.00, 최대 19.00배속 (5번 탐색, 퍼짐은 중앙값이 0이라 낼 수 없다)", Main.rangeLines(split).get(0));
+
+		CeilingRange none = CeilingRange.of(List.of(
+				new Explorer.Result(List.of(), 0, RoundJudge.State.OVERLOADED),
+				new Explorer.Result(List.of(), 0, RoundJudge.State.OVERLOADED)));
+		assertEquals(0.0, none.spread(), "전부 같으면 흔들림이 없다");
+	}
+
 	/** 알람 명령의 원문이 든 예전 평가를 고쳐도 되풀이한 상한 목록은 잃지 않는다. */
 	@Test
 	void keepsCeilingSpeedsWhenTheRawCommandIsFingerprinted() {
