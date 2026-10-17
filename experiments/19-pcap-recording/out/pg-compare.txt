@@ -1,0 +1,5 @@
+문장 수: 서버 로그 6682, 패킷 캡처 6680 (차이 -2)
+연결 수: 16, 5. 실패한 문장: 0, 0. 걸린 시간 중앙값(마이크로초): 30, 151
+모양 11개 가운데 횟수가 같은 것 9개
+        1 →       0  SELECT PG_RELOAD_CONF()
+        1 →       0  ALTER SYSTEM SET LOG_MIN_DURATION_STATEMENT = -?

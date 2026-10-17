@@ -1,0 +1,102 @@
+{
+  "evaluatedAt" : "2026-10-15T03:40:13Z",
+  "validDays" : 30,
+  "profile" : {
+    "innodb_buffer_pool_instances" : "1",
+    "innodb_buffer_pool_size" : "134217728",
+    "innodb_flush_log_at_trx_commit" : "1",
+    "innodb_flush_method" : "O_DIRECT",
+    "innodb_io_capacity" : "10000",
+    "innodb_io_capacity_max" : "20000",
+    "innodb_redo_log_capacity" : "104857600",
+    "innodb_thread_concurrency" : "0",
+    "max_connections" : "1000",
+    "sync_binlog" : "1",
+    "table_open_cache" : "4000",
+    "transaction_isolation" : "REPEATABLE-READ",
+    "version" : "8.4.11"
+  },
+  "alarms" : {
+    "alarm-metric" : "active_sessions>=400",
+    "alarm-sustain" : "3",
+    "slow-ms" : "100"
+  },
+  "unit" : "transaction",
+  "traffic" : {
+    "statements" : 38242,
+    "spanMicros" : 10774951,
+    "shares" : {
+      "SELECT c FROM sbtest2 WHERE id=?" : 0.13257674807802938,
+      "SELECT c FROM sbtest1 WHERE id=?" : 0.12760838868260027,
+      "SELECT c FROM sbtest3 WHERE id=?" : 0.12133256628837404,
+      "SELECT c FROM sbtest4 WHERE id=?" : 0.11845614769102035,
+      "BEGIN" : 0.04999738507400241,
+      "COMMIT" : 0.04999738507400241,
+      "SELECT SUM(k) FROM sbtest4 WHERE id BETWEEN ? AND ?" : 0.013414570367658595,
+      "UPDATE sbtest3 SET c=? WHERE id=?" : 0.013231525547826996,
+      "DELETE FROM sbtest2 WHERE id=?" : 0.013074629987971341,
+      "INSERT INTO sbtest2 (id, k, c, pad) VALUES (?+)" : 0.013074629987971341,
+      "SELECT DISTINCT c FROM sbtest1 WHERE id BETWEEN ? AND ? ORDER BY c" : 0.012996182208043513,
+      "UPDATE sbtest4 SET k=k+? WHERE id=?" : 0.012943883688091627,
+      "SELECT c FROM sbtest2 WHERE id BETWEEN ? AND ? ORDER BY c" : 0.012839286648187856,
+      "UPDATE sbtest1 SET c=? WHERE id=?" : 0.012839286648187856,
+      "UPDATE sbtest3 SET k=k+? WHERE id=?" : 0.012839286648187856,
+      "SELECT c FROM sbtest1 WHERE id BETWEEN ? AND ? ORDER BY c" : 0.012656241828356257,
+      "SELECT c FROM sbtest1 WHERE id BETWEEN ? AND ?" : 0.01257779404842843,
+      "SELECT DISTINCT c FROM sbtest4 WHERE id BETWEEN ? AND ? ORDER BY c" : 0.012525495528476545,
+      "SELECT c FROM sbtest4 WHERE id BETWEEN ? AND ?" : 0.012525495528476545,
+      "SELECT c FROM sbtest3 WHERE id BETWEEN ? AND ?" : 0.012499346268500602,
+      "DELETE FROM sbtest3 WHERE id=?" : 0.012420898488572774,
+      "INSERT INTO sbtest3 (id, k, c, pad) VALUES (?+)" : 0.012420898488572774,
+      "SELECT c FROM sbtest2 WHERE id BETWEEN ? AND ?" : 0.01239474922859683,
+      "SELECT DISTINCT c FROM sbtest3 WHERE id BETWEEN ? AND ? ORDER BY c" : 0.012368599968620888,
+      "SELECT c FROM sbtest4 WHERE id BETWEEN ? AND ? ORDER BY c" : 0.012342450708644946,
+      "DELETE FROM sbtest1 WHERE id=?" : 0.012264002928717117,
+      "INSERT INTO sbtest1 (id, k, c, pad) VALUES (?+)" : 0.012264002928717117,
+      "SELECT SUM(k) FROM sbtest2 WHERE id BETWEEN ? AND ?" : 0.012264002928717117,
+      "DELETE FROM sbtest4 WHERE id=?" : 0.012237853668741175,
+      "INSERT INTO sbtest4 (id, k, c, pad) VALUES (?+)" : 0.012237853668741175,
+      "SELECT SUM(k) FROM sbtest1 WHERE id BETWEEN ? AND ?" : 0.012185555148789289,
+      "UPDATE sbtest2 SET k=k+? WHERE id=?" : 0.012185555148789289,
+      "SELECT c FROM sbtest3 WHERE id BETWEEN ? AND ? ORDER BY c" : 0.012159405888813347,
+      "SELECT SUM(k) FROM sbtest3 WHERE id BETWEEN ? AND ?" : 0.012133256628837404,
+      "SELECT DISTINCT c FROM sbtest2 WHERE id BETWEEN ? AND ? ORDER BY c" : 0.012107107368861461,
+      "UPDATE sbtest1 SET k=k+? WHERE id=?" : 0.012028659588933633,
+      "UPDATE sbtest4 SET c=? WHERE id=?" : 0.012028659588933633,
+      "UPDATE sbtest2 SET c=? WHERE id=?" : 0.01189791328905392,
+      "SET GLOBAL slow_query_log=ON" : 2.614925997594268E-5,
+      "select @@version_comment limit ?" : 2.614925997594268E-5
+    },
+    "reads" : 26769,
+    "writes" : 7648
+  },
+  "ceilingSpeed" : 2.0,
+  "stoppedBy" : null,
+  "ceilingQps" : 7098.315342686941,
+  "currentQps" : 3549.1576713434706,
+  "low" : 0.3,
+  "high" : 0.5,
+  "explorations" : [ [ {
+    "speed" : 1.0,
+    "verdict" : "HELD",
+    "reason" : null,
+    "distortion" : 0.0012028974137705604,
+    "metrics" : {
+      "active_sessions" : [ 1.11864406779661, 11.0 ],
+      "qps" : [ 3282.370358671948, 5345.884973960568 ],
+      "slow_finished_total" : [ 0.0, 0.0 ],
+      "slow_running" : [ 0.0, 0.0 ]
+    }
+  }, {
+    "speed" : 2.0,
+    "verdict" : "HELD",
+    "reason" : null,
+    "distortion" : 0.002170445333542533,
+    "metrics" : {
+      "active_sessions" : [ 0.6875, 4.0 ],
+      "qps" : [ 6165.129952770135, 9673.939736826564 ],
+      "slow_finished_total" : [ 3.125, 4.0 ],
+      "slow_running" : [ 0.0, 0.0 ]
+    }
+  } ] ]
+}

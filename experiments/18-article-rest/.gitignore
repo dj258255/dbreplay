@@ -1,0 +1,7 @@
+out/*.jsonl
+out/*-slow.log
+out/*.csv
+out/*-snapshot.sql
+out/*.sql
+pglog/
+out/*.pcap

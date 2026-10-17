@@ -1,0 +1,10 @@
+{"targets": [
+  {"name": "stable", "evaluation": "/exp/out/87-stable.json",
+   "traces": ["/exp/out/primary.trace.jsonl", "/exp/out/primary.trace.jsonl"],
+   "options": {"--trace": "/exp/out/primary.trace.jsonl", "--url": "jdbc:mysql://mysql-primary:3306/sbtest?sslMode=DISABLED&allowPublicKeyRetrieval=true", "--user": "root", "--snapshot": "/exp/out/base.sql",
+               "--alarm-metric": "active_sessions>=400", "--start-speed": "1", "--max-speed": "2"}},
+  {"name": "unstable", "evaluation": "/exp/out/87-unstable.json",
+   "traces": ["/exp/out/primary.trace.jsonl", "/exp/out/replica.trace.jsonl"],
+   "options": {"--trace": "/exp/out/primary.trace.jsonl", "--url": "jdbc:mysql://mysql-primary:3306/sbtest?sslMode=DISABLED&allowPublicKeyRetrieval=true", "--user": "root", "--snapshot": "/exp/out/base.sql",
+               "--alarm-metric": "active_sessions>=400", "--start-speed": "1", "--max-speed": "2"}}
+]}

@@ -1,0 +1,52 @@
+===== 1부: 같은 부하를 서버 로그와 패킷 캡처로 동시에 =====
+로그 항목 20014개를 읽어 문장 19702개, 연결 종료 7개를 썼다 (연결 11개)
+뺀 것: 재생에 쓰지 않는 항목 305, 머리에서 잘린 트랜잭션의 문장 0
+패킷 캡처: 시작을 보지 못한 연결 0, 조각을 놓친 연결 0, 읽지 못한 연결(TLS, 모르는 명령) 0 (연결 4개 가운데)
+로그 항목 19671개를 읽어 문장 19671개, 연결 종료 0개를 썼다 (연결 4개)
+뺀 것: 재생에 쓰지 않는 항목 0, 머리에서 잘린 트랜잭션의 문장 0
+문장 수: 서버 로그 19702, 패킷 캡처 19671 (차이 -31)
+연결 수: 11, 4. 실패한 문장: 0, 0. 걸린 시간 중앙값(마이크로초): 35, 54
+모양 40개 가운데 횟수가 같은 것 23개
+     2270 →    2260  SELECT C FROM SBTEST3 WHERE ID=?
+      224 →     222  DELETE FROM SBTEST3 WHERE ID=?
+      248 →     246  SELECT C FROM SBTEST4 WHERE ID BETWEEN ? AND ? ORDER BY C
+      985 →     983  COMMIT
+      224 →     222  INSERT INTO SBTEST3 (ID, K, C, PAD) VALUES (?, ?, ?, ?)
+      232 →     230  UPDATE SBTEST3 SET K=K+? WHERE ID=?
+      985 →     984  BEGIN
+      247 →     246  SELECT SUM(K) FROM SBTEST3 WHERE ID BETWEEN ? AND ?
+      244 →     243  SELECT C FROM SBTEST2 WHERE ID BETWEEN ? AND ?
+        1 →       0  SELECT @@VERSION_COMMENT LIMIT ?
+로그 항목 14124개를 읽어 문장 7039개, 연결 종료 14개를 썼다 (연결 14개)
+뺀 것: 재생에 쓰지 않는 항목 7071, 머리에서 잘린 트랜잭션의 문장 0
+읽지 못한 항목 0, 같은 연결의 앞 문장보다 이르게 계산돼 시각을 맞춘 문장 3298
+패킷 캡처: 시작을 보지 못한 연결 0, 조각을 놓친 연결 0, 읽지 못한 연결(TLS, 모르는 메시지) 0 (연결 5개 가운데)
+로그 항목 7042개를 읽어 문장 7037개, 연결 종료 5개를 썼다 (연결 5개)
+뺀 것: 재생에 쓰지 않는 항목 0, 머리에서 잘린 트랜잭션의 문장 0
+문장 수: 서버 로그 7039, 패킷 캡처 7037 (차이 -2)
+연결 수: 14, 5. 실패한 문장: 0, 0. 걸린 시간 중앙값(마이크로초): 24, 135
+모양 11개 가운데 횟수가 같은 것 9개
+        1 →       0  SELECT PG_RELOAD_CONF()
+        1 →       0  ALTER SYSTEM SET LOG_MIN_DURATION_STATEMENT = -?
+===== 2부: 캡처의 부담 =====
+mysql off 1 tps=1480.59 p95_ms=7.84 capture_bytes=0
+mysql on 1 tps=1342.48 p95_ms=8.43 capture_bytes=299337869
+mysql off 2 tps=1477.33 p95_ms=8.13 capture_bytes=0
+mysql on 2 tps=1343.93 p95_ms=8.43 capture_bytes=306055397
+mysql off 3 tps=1418.05 p95_ms=8.74 capture_bytes=0
+mysql on 3 tps=1340.14 p95_ms=8.58 capture_bytes=306547818
+mysql off 4 tps=1489.79 p95_ms=7.98 capture_bytes=0
+mysql on 4 tps=1358.38 p95_ms=8.28 capture_bytes=306288526
+mysql off 5 tps=1462.25 p95_ms=8.28 capture_bytes=0
+mysql on 5 tps=1331.85 p95_ms=8.74 capture_bytes=316736005
+pg off 1 tps=5841.070799 latency_avg_ms=1.370 capture_bytes=0
+pg on 1 tps=4836.147757 latency_avg_ms=1.654 capture_bytes=45226965
+pg off 2 tps=5292.342332 latency_avg_ms=1.512 capture_bytes=0
+pg on 2 tps=4231.517446 latency_avg_ms=1.891 capture_bytes=40899860
+pg off 3 tps=5050.718287 latency_avg_ms=1.584 capture_bytes=0
+pg on 3 tps=4576.182818 latency_avg_ms=1.748 capture_bytes=43753363
+pg off 4 tps=5801.334608 latency_avg_ms=1.379 capture_bytes=0
+pg on 4 tps=4607.139064 latency_avg_ms=1.736 capture_bytes=44100979
+pg off 5 tps=4378.756993 latency_avg_ms=1.827 capture_bytes=0
+pg on 5 tps=4794.965366 latency_avg_ms=1.668 capture_bytes=44753326
+끝

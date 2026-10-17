@@ -1,0 +1,15 @@
+== MySQL: sysbench 초당 100 트랜잭션(oltp_read_write, 트랜잭션마다 문장 18개 안팎)을 거는 동안 20초 잰다
+평가: 2026-10-15T03:32:10Z, 상한 3.50배속 (초당 12422문장), 수위 29%
+  운영 DB에서 20초 동안 잰 초당 문장 수: 1922
+  지금의 초당 1922문장으로 다시 계산한 수위: 15% (건강 구간 30~50%) → 과잉
+  종 DB: 상한 초당 9935, 수위 29%
+    transactions:                        2955   (98.45 per sec.)
+    queries:                             59100  (1968.96 per sec.)
+== PostgreSQL: pgbench 초당 50 트랜잭션을 거는 동안 15초 뜬다. 그사이 0.2초짜리 문장 열 개
+qps                        74     137.73     354.84     733.20
+slow_finished_total        75       0.00       7.09      10.00
+tps                        74       0.00      57.86     265.76
+number of transactions actually processed: 1028
+tps = 51.418701 (without initial connection time)
+== MySQL에 --server-log를 주면 거절하는가
+Exception in thread "main" java.lang.IllegalArgumentException: --server-log는 PostgreSQL의 csvlog에 쓴다. MySQL은 서버의 분포로 이미 센다

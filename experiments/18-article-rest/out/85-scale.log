@@ -1,0 +1,3 @@
+{"at":"2026-10-15T03:34:51.005966382Z","step":"scale","command":"sha256:6fd6c48acf3c71ce","exit":0,"millis":6,"readNodesBefore":4,"readNodesAfter":9}
+{"at":"2026-10-15T03:34:51.014861090Z","step":"verify","command":"sha256:97cfd59953955b72","exit":3,"millis":1,"readNodesBefore":4,"readNodesAfter":9}
+{"at":"2026-10-15T03:34:51.015807090Z","step":"rollback","command":"sha256:053788c46b5bfaef","exit":0,"millis":1,"readNodesBefore":4,"readNodesAfter":9}

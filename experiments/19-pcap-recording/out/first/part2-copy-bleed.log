@@ -1,0 +1,8 @@
+===== 2부: 캡처의 부담 =====
+mysql off 1 tps=642.92 p95_ms=43.39 capture_bytes=0
+1264248 packets captured 1267109 packets received by filter 2861 packets dropped by kernel 
+mysql on 1 tps=981.02 p95_ms=17.63 capture_bytes=1308454347
+mysql off 2 tps=1225.64 p95_ms=13.95 capture_bytes=0
+1661757 packets captured 1661757 packets received by filter 0 packets dropped by kernel 
+mysql on 2 tps=1287.16 p95_ms=9.22 capture_bytes=1720706988
+mysql off 3 tps=703.01 p95_ms=41.10 capture_bytes=0
