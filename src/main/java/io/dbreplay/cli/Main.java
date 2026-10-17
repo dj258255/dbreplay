@@ -38,6 +38,8 @@ import io.dbreplay.explore.ManagedTargets;
 import io.dbreplay.explore.RoundData;
 import io.dbreplay.explore.RoundJudge;
 import io.dbreplay.explore.ScaleAdvice;
+import io.dbreplay.explore.ScaleRun;
+import io.dbreplay.explore.ZonePlan;
 import io.dbreplay.explore.TargetProfile;
 import io.dbreplay.explore.TrafficModel;
 import io.dbreplay.explore.WaterLevel;
@@ -108,7 +110,9 @@ public final class Main {
 			                   [--current-replica-qps <종 DB의 지금의 초당 문장 수>]
 			                   [--level-low 0.3] [--level-high 0.5]
 			                   [--read-nodes <읽기를 받는 노드 수>] [--min-read-nodes 1] [--max-read-nodes <한도>]
-			                   [--scale-command <명령> --apply-scale yes]
+			                   [--zones <존>=<노드 수>,... [--min-per-zone 1]] [--max-write-scale <주 DB를 키울 수 있는 배수>]
+			                   [--scale-command <명령> --apply-scale yes [--scale-verify-command <명령>]
+			                    [--scale-rollback-command <명령>] [--scale-log <기록 파일>]]
 			                   [--out <평가 파일>] [--valid-days 30]
 
 			  dbreplay check   --evaluation <평가 파일> --url <JDBC URL> --user <계정> [--password <암호>]
@@ -119,6 +123,9 @@ public final class Main {
 			                   암호는 DBREPLAY_MEASURE_PASSWORD로 준다(없으면 --password와 같다). PostgreSQL은 pg_stat_statements가 있어야 한다
 
 			  dbreplay manage  --targets <대상 목록.json> [--force yes] [--max-traffic-distance 0.2]
+			                   [--every <분>] [--register-max-distance 0.2] [--register-min-qps 0]
+			                   --every를 주면 떠 있으면서 그 주기마다 훑는다. 멈추라는 신호를 받으면 하던 대상을 끝내고 멈춘다.
+			                   대상에 traces(최근 트래픽 파일들)를 적고 --register-*를 주면 모양이 안정적이고 부하가 있는 대상만 평가한다.
 			                   등록한 대상을 훑어, 평가한 적이 없거나 만료됐거나 무효인 것만 다시 평가하고 수위를 한 표로 낸다.
 			                   대상 목록은 {"targets": [{"name": ..., "evaluation": <평가 파일>, "options": {explore의 옵션}}]} 꼴이다.
 			                   주기적으로 돌리려면 cron에 건다
@@ -179,6 +186,11 @@ public final class Main {
 			  쓰기는 주 DB 하나가 받으므로 노드 수 대신 필요한 용량의 배수를 낸다.
 			  --scale-command는 --apply-scale yes와 --max-read-nodes를 함께 줘야 실행된다. 권한 노드 수를 DBREPLAY_READ_NODES로 받는다
 			  권한 수가 한도에 걸렸거나 상한이 알람으로 확인된 값이 아니면 실행하지 않는다. 명령이 실패하면 0이 아닌 값으로 끝난다
+			  --zones a=2,b=1을 주면 권한 노드를 존에 나눈다. 가장 적은 존부터 채우고 가장 많은 존부터 빼며 존마다 --min-per-zone을 지킨다.
+			  가장 많은 존 하나가 빠졌을 때 남은 노드의 수위를 함께 낸다. 존별 권고는 DBREPLAY_READ_NODES_BY_ZONE(a=3,b=2)로 받는다
+			  --scale-verify-command는 확장 명령 뒤에 부른다. 둘 중 하나가 실패하면 --scale-rollback-command를 부른다.
+			  되돌리기는 확장 전의 노드 수를 DBREPLAY_READ_NODES로 받는다. --scale-log에 단계마다 명령의 지문, 종료 코드, 걸린 시간을 쌓는다
+			  --max-write-scale을 주면 쓰기에 필요한 용량이 그 배수를 넘을 때 몇 조각으로 나눌지 권한다
 
 			되풀이 탐색(--repeat):
 			  탐색을 N번 되풀이해 상한을 범위로 낸다(최소, 중앙값, 최대, 퍼짐). 수위와 평가 파일에는 가장 낮은 상한을 쓴다.
@@ -929,18 +941,73 @@ public final class Main {
 			System.out.printf("  %s: 초당 %.0f, 상한 %.0f, 수위 %.0f%%%n", kind, current, l.ceilingQps(), l.level() * 100);
 		}
 		System.out.println("  읽기만 늘 때의 상한은 --only reads로 따로 탐색한다");
-		if (!options.containsKey("--read-nodes")) {
+		if (!options.containsKey("--read-nodes") && !options.containsKey("--zones")) {
 			return null;
 		}
 		// 종 DB를 함께 틀었으면 읽기 노드는 종 DB다. 읽기 노드 권고를 종 DB의 수위로 계산한다
-		ScaleAdvice advice = ScaleAdvice.of(readLevelForAdvice(replicaLevel, levels[0]), levels[1],
-				nodes(options, "--read-nodes", 1), nodes(options, "--min-read-nodes", 1),
+		WaterLevel readLevel = readLevelForAdvice(replicaLevel, levels[0]);
+		ScaleAdvice advice = ScaleAdvice.of(readLevel, levels[1], readNodes(options), minReadNodes(options),
 				nodes(options, "--max-read-nodes", Integer.MAX_VALUE));
 		if (replicaLevel != null) {
 			System.out.println("  읽기 노드의 권고는 종 DB의 수위로 계산했다");
 		}
 		printScaleAdvice(advice);
+		if (options.containsKey("--zones")) {
+			zoneLines(zonePlan(options, advice, readLevel.level()), readLevel.high()).forEach(System.out::println);
+		}
+		if (options.containsKey("--max-write-scale")) {
+			double limit = number(options, "--max-write-scale", 1);
+			int shards = advice.shards(limit);
+			if (shards > 1) {
+				System.out.printf("  분할: 쓰기에 주 DB의 용량이 지금의 %.2f배 필요한데 키울 수 있는 한도는 %.2f배다. %d조각으로 나누는 것을 권한다%n",
+						advice.writeCapacityFactor(), limit, shards);
+			}
+		}
 		return advice;
+	}
+
+	/** 읽기를 받는 노드 수. --zones를 주면 존들의 합이고, --read-nodes도 주면 둘이 같아야 한다. */
+	static int readNodes(Map<String, String> options) {
+		if (!options.containsKey("--zones")) {
+			return nodes(options, "--read-nodes", 1);
+		}
+		int sum = ZonePlan.parse(options.get("--zones")).values().stream().mapToInt(Integer::intValue).sum();
+		if (options.containsKey("--read-nodes") && nodes(options, "--read-nodes", sum) != sum) {
+			throw new IllegalArgumentException("--read-nodes와 --zones의 합이 다르다");
+		}
+		return sum;
+	}
+
+	/** 지켜야 하는 최소 노드 수. 존마다의 최소를 주면 존의 수를 곱한 것보다 적게 권하지 않는다. */
+	static int minReadNodes(Map<String, String> options) {
+		int min = nodes(options, "--min-read-nodes", 1);
+		if (options.containsKey("--zones")) {
+			min = Math.max(min, nodes(options, "--min-per-zone", 1) * ZonePlan.parse(options.get("--zones")).size());
+		}
+		return min;
+	}
+
+	private static ZonePlan zonePlan(Map<String, String> options, ScaleAdvice advice, double readLevel) {
+		return ZonePlan.of(ZonePlan.parse(options.get("--zones")), advice.recommendedReadNodes(),
+				nodes(options, "--min-per-zone", 1), readLevel);
+	}
+
+	/** 존마다의 권고와 재해 복구 점검. 패키지 안에서 테스트할 수 있게 글자만 돌려준다. */
+	static List<String> zoneLines(ZonePlan plan, double high) {
+		StringBuilder zones = new StringBuilder();
+		plan.after().forEach((zone, n) -> zones.append(zones.isEmpty() ? "" : ", ").append(zone).append(' ')
+				.append(plan.before().get(zone)).append(" → ").append(n));
+		List<String> lines = new ArrayList<>();
+		lines.add("  존별: " + zones + " (가장 적은 존부터 채우고 가장 많은 존부터 뺀다)");
+		if (Double.isInfinite(plan.levelIfLost())) {
+			lines.add(String.format("  존 %s 하나가 빠지면 읽기 노드가 남지 않는다", plan.lostZone()));
+		}
+		else {
+			lines.add(String.format("  가장 많은 존(%s) 하나가 빠지면 남은 노드 %d개의 읽기 수위가 %.0f%%다. 건강 구간의 위 끝(%.0f%%)을 %s",
+					plan.lostZone(), plan.total() - plan.after().get(plan.lostZone()), plan.levelIfLost() * 100, high * 100,
+					plan.levelIfLost() > high ? "넘는다" : "넘지 않는다"));
+		}
+		return lines;
 	}
 
 	/** 읽기 노드 권고에 쓸 수위. 종 DB를 함께 틀었으면 종 DB의 수위, 아니면 주 DB 트래픽의 읽기 수위. */
@@ -949,8 +1016,7 @@ public final class Main {
 	}
 
 	private static void checkScaleOptions(Map<String, String> options) {
-		ScaleAdvice.checkNodes(nodes(options, "--read-nodes", 1), nodes(options, "--min-read-nodes", 1),
-				nodes(options, "--max-read-nodes", Integer.MAX_VALUE));
+		ScaleAdvice.checkNodes(readNodes(options), minReadNodes(options), nodes(options, "--max-read-nodes", Integer.MAX_VALUE));
 		checkQpsOptions(options);
 	}
 
@@ -1018,22 +1084,59 @@ public final class Main {
 			System.out.println("확장·축소 명령을 실행하지 않았다. " + refused);
 			return;
 		}
-		ProcessBuilder builder = new ProcessBuilder("sh", "-c", command).inheritIO();
-		builder.environment().put("DBREPLAY_READ_NODES", Integer.toString(advice.recommendedReadNodes()));
-		builder.environment().put("DBREPLAY_READ_NODES_BEFORE", Integer.toString(advice.readNodes()));
-		int exit;
-		try {
-			exit = builder.start().waitFor();
+		Map<String, String> after = new HashMap<>();
+		after.put("DBREPLAY_READ_NODES", Integer.toString(advice.recommendedReadNodes()));
+		after.put("DBREPLAY_READ_NODES_BEFORE", Integer.toString(advice.readNodes()));
+		Map<String, String> before = new HashMap<>();
+		before.put("DBREPLAY_READ_NODES", Integer.toString(advice.readNodes()));
+		if (options.containsKey("--zones")) {
+			after.put("DBREPLAY_READ_NODES_BY_ZONE", zonePlan(options, advice, 0).afterText());
+			before.put("DBREPLAY_READ_NODES_BY_ZONE", options.get("--zones").replace(" ", ""));
 		}
-		catch (IOException e) {
-			// 명령에는 암호가 들어 있을 수 있다. 메시지에 싣지 않는다
-			throw new ScaleCommandFailed("확장·축소 명령을 실행하지 못했다");
+		ScaleRun.Outcome outcome = ScaleRun.execute(command, options.get("--scale-verify-command"),
+				options.get("--scale-rollback-command"), after, before, advice.readNodes(), advice.recommendedReadNodes(),
+				Main::runCommand, Main::fingerprint, java.time.Clock.systemUTC());
+		if (options.containsKey("--scale-log")) {
+			appendScaleLog(Path.of(options.get("--scale-log")), outcome.entries());
 		}
-		if (exit != 0) {
-			throw new ScaleCommandFailed("확장·축소 명령이 실패했다 (종료 코드 " + exit + ")");
+		String failure = scaleFailure(outcome);
+		if (failure != null) {
+			throw new ScaleCommandFailed(failure);
 		}
 		// 도구는 실제 노드 수를 모른다. 받은 값이 낡으면 다음 권고가 틀어진다
-		System.out.printf("확장·축소 명령을 실행했다. 다음부터는 --read-nodes %d로 준다%n", advice.recommendedReadNodes());
+		System.out.printf("확장·축소 명령을 실행했다%s. 다음부터는 --read-nodes %d로 준다%n",
+				options.containsKey("--scale-verify-command") ? "고 확인 명령이 성공했다" : "", advice.recommendedReadNodes());
+	}
+
+	private static int runCommand(String command, Map<String, String> env) throws IOException, InterruptedException {
+		ProcessBuilder builder = new ProcessBuilder("sh", "-c", command).inheritIO();
+		builder.environment().putAll(env);
+		return builder.start().waitFor();
+	}
+
+	/** 실패를 알리는 문장. 성공했으면 null. 되돌렸는지와 그 결과를 함께 적는다. 명령의 원문은 싣지 않는다. */
+	static String scaleFailure(ScaleRun.Outcome outcome) {
+		if (outcome.succeeded()) {
+			return null;
+		}
+		ScaleRun.Entry failed = outcome.entries().stream().filter(e -> e.step().equals(outcome.failedStep())).findFirst().orElseThrow();
+		String what = failed.step().equals("scale") ? "확장·축소 명령" : "확인 명령";
+		String message = failed.exit() < 0 ? what + "을 실행하지 못했다" : what + "이 실패했다 (종료 코드 " + failed.exit() + ")";
+		if (!outcome.rolledBack()) {
+			return message + ". 되돌리기 명령이 없어 그대로 두었다";
+		}
+		return message + (outcome.rollbackSucceeded() ? ". 되돌리기 명령을 실행했다" : ". 되돌리기 명령도 실패했다. 노드 수를 직접 확인한다");
+	}
+
+	/** 실행 기록을 JSON Lines로 덧붙인다. 여러 번의 실행이 한 파일에 쌓인다. */
+	private static void appendScaleLog(Path path, List<ScaleRun.Entry> entries) throws IOException {
+		ObjectMapper plain = new ObjectMapper();
+		StringBuilder lines = new StringBuilder();
+		for (ScaleRun.Entry e : entries) {
+			lines.append(plain.writeValueAsString(e)).append('\n');
+		}
+		Files.writeString(path, lines, StandardCharsets.UTF_8, java.nio.file.StandardOpenOption.CREATE,
+				java.nio.file.StandardOpenOption.APPEND);
 	}
 
 	private static boolean readsOnly(Map<String, String> options) {
@@ -1215,6 +1318,68 @@ public final class Main {
 	}
 
 	private static void manage(Map<String, String> options) throws Exception {
+		if (!options.containsKey("--every")) {
+			if (manageOnce(options)) {
+				System.exit(1);
+			}
+			return;
+		}
+		// 떠 있으면서 주기마다 훑는다(원문 대조 49a, 50a, #87). 멈추라는 신호를 받으면 하던 대상을 끝내고 멈춘다.
+		// 셧다운 훅이 끝나면 JVM이 멈추므로, 훅이 훑기가 끝나기를 기다린다
+		long everyMillis = (long) (number(options, "--every", 60) * 60_000);
+		java.util.concurrent.atomic.AtomicBoolean stopping = new java.util.concurrent.atomic.AtomicBoolean();
+		java.util.concurrent.atomic.AtomicBoolean sleeping = new java.util.concurrent.atomic.AtomicBoolean();
+		java.util.concurrent.CountDownLatch stopped = new java.util.concurrent.CountDownLatch(1);
+		Thread main = Thread.currentThread();
+		Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+			stopping.set(true);
+			// 평가 중에는 끊지 않는다. 쉬는 중일 때만 깨운다
+			if (sleeping.get()) {
+				main.interrupt();
+			}
+			try {
+				stopped.await();
+			}
+			catch (InterruptedException ignored) {
+				// 기다리다 끊기면 그냥 멈춘다
+			}
+		}));
+		try {
+			while (!stopping.get()) {
+				System.out.printf("%n##### %s 훑기 #####%n", Instant.now().truncatedTo(ChronoUnit.SECONDS));
+				try {
+					manageOnce(options);
+				}
+				catch (Exception e) {
+					if (stopping.get()) {
+						break;
+					}
+					// 대상 목록을 못 읽은 것 같은 일. 다음 주기에 다시 본다
+					System.out.println("훑지 못했다 (" + e.getClass().getSimpleName() + ")");
+				}
+				sleeping.set(true);
+				try {
+					if (stopping.get()) {
+						break;
+					}
+					Thread.sleep(everyMillis);
+				}
+				catch (InterruptedException e) {
+					break;
+				}
+				finally {
+					sleeping.set(false);
+				}
+			}
+			System.out.println("멈췄다");
+		}
+		finally {
+			stopped.countDown();
+		}
+	}
+
+	/** 대상들을 한 번 훑는다. @return 실패한 대상이 있었는가 */
+	private static boolean manageOnce(Map<String, String> options) throws Exception {
 		ManagedTargets managed = JSON.readValue(Path.of(required(options, "--targets")).toFile(), ManagedTargets.class);
 		boolean force = "yes".equals(options.get("--force"));
 		Map<String, ManagedTargets.Action> actions = new java.util.LinkedHashMap<>();
@@ -1229,6 +1394,12 @@ public final class Main {
 			Path file = Path.of(t.evaluation());
 			ManagedTargets.Action action;
 			try {
+				String notRegistered = registrationRule(options, t);
+				if (notRegistered != null) {
+					actions.put(t.name(), ManagedTargets.Action.NOT_REGISTERED);
+					why.put(t.name(), notRegistered);
+					continue;
+				}
 				if (!Files.exists(file)) {
 					action = ManagedTargets.Action.EVALUATED;
 					why.put(t.name(), "평가한 적이 없다");
@@ -1258,9 +1429,10 @@ public final class Main {
 				case EVALUATED -> "평가";
 				case REEVALUATED -> "다시 평가";
 				case FAILED -> "실패";
+				case NOT_REGISTERED -> "등록 안 됨";
 			};
 			Path file = Path.of(t.evaluation());
-			if (!Files.exists(file)) {
+			if (!Files.exists(file) || actions.get(t.name()) == ManagedTargets.Action.NOT_REGISTERED) {
 				System.out.printf("%-20s %-12s %8s %12s %6s %-6s  %s%n", t.name(), did, "-", "-", "-", "-", why.get(t.name()));
 				continue;
 			}
@@ -1276,9 +1448,28 @@ public final class Main {
 						case SHORT -> "부족";
 					}, e.evaluatedAt() + (actions.get(t.name()) == ManagedTargets.Action.FAILED ? " (" + why.get(t.name()) + ")" : "") + rangeSuffix);
 		}
-		if (actions.containsValue(ManagedTargets.Action.FAILED)) {
-			System.exit(1);
+		return actions.containsValue(ManagedTargets.Action.FAILED);
+	}
+
+	/**
+	 * 등록 규칙에 들지 않는 이유. 규칙 옵션을 주지 않았거나 대상에 traces가 없으면 늘 들고(null), 지금과 같다.
+	 * 기준은 {@link ManagedTargets#notRegisteredBecause}에 있다.
+	 */
+	private static String registrationRule(Map<String, String> options, ManagedTargets.Target t) throws IOException {
+		if (!options.containsKey("--register-max-distance") && !options.containsKey("--register-min-qps")) {
+			return null;
 		}
+		if (t.traces().isEmpty()) {
+			return null;
+		}
+		List<TrafficModel> models = new ArrayList<>();
+		for (String path : t.traces()) {
+			try (TraceReader trace = openTrace(path)) {
+				models.add(TrafficModel.of(trace));
+			}
+		}
+		return ManagedTargets.notRegisteredBecause(models, number(options, "--register-max-distance", 0.2),
+				number(options, "--register-min-qps", 0));
 	}
 
 	private static void check(Map<String, String> options) throws Exception {

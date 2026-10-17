@@ -3,6 +3,7 @@ package io.dbreplay.cli;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
@@ -24,8 +25,10 @@ import io.dbreplay.explore.CeilingRange;
 import io.dbreplay.explore.Evaluation;
 import io.dbreplay.explore.Explorer;
 import io.dbreplay.explore.RoundJudge;
+import io.dbreplay.explore.ScaleRun;
 import io.dbreplay.explore.TrafficModel;
 import io.dbreplay.explore.WaterLevel;
+import io.dbreplay.explore.ZonePlan;
 
 class MainTest {
 
@@ -91,6 +94,38 @@ class MainTest {
 		IllegalStateException pg = assertThrows(IllegalStateException.class,
 				() -> Main.meanQps(Map.of("tps", new double[] {10}), true));
 		assertTrue(pg.getMessage().contains("pg_stat_statements"));
+	}
+
+	/** 확장이 실패했을 때의 문장. 무엇이 실패했고 되돌렸는지를 적고, 명령의 원문은 싣지 않는다 (#86). */
+	@Test
+	void describesAScaleFailure() {
+		ScaleRun.Entry scale = new ScaleRun.Entry("t", "scale", "fp", 0, 1, 2, 3);
+		ScaleRun.Entry verify = new ScaleRun.Entry("t", "verify", "fp", 4, 1, 2, 3);
+		ScaleRun.Entry rollback = new ScaleRun.Entry("t", "rollback", "fp", 0, 1, 2, 3);
+		assertEquals("확인 명령이 실패했다 (종료 코드 4). 되돌리기 명령을 실행했다",
+				Main.scaleFailure(new ScaleRun.Outcome(false, "verify", true, true, List.of(scale, verify, rollback))));
+		assertEquals("확장·축소 명령을 실행하지 못했다. 되돌리기 명령이 없어 그대로 두었다",
+				Main.scaleFailure(new ScaleRun.Outcome(false, "scale", false, false,
+						List.of(new ScaleRun.Entry("t", "scale", "fp", -1, 1, 2, 3)))));
+		assertNull(Main.scaleFailure(new ScaleRun.Outcome(true, null, false, false, List.of(scale))));
+	}
+
+	/** 존별 권고 줄과 재해 복구 점검 줄 (#85). */
+	@Test
+	void describesTheZonePlan() {
+		ZonePlan plan = ZonePlan.of(ZonePlan.parse("a=2,b=1,c=2"), 8, 1, 0.8);
+		List<String> lines = Main.zoneLines(plan, 0.5);
+		assertEquals("  존별: a 2 → 3, b 1 → 3, c 2 → 2 (가장 적은 존부터 채우고 가장 많은 존부터 뺀다)", lines.get(0));
+		assertEquals("  가장 많은 존(a) 하나가 빠지면 남은 노드 5개의 읽기 수위가 80%다. 건강 구간의 위 끝(50%)을 넘는다", lines.get(1));
+	}
+
+	/** --zones와 --read-nodes가 어긋나면 거르고, 존마다의 최소는 전체 최소를 끌어올린다 (#85). */
+	@Test
+	void checksZonesAgainstReadNodes() {
+		assertEquals(5, Main.readNodes(Map.of("--zones", "a=2,b=3")));
+		assertThrows(IllegalArgumentException.class, () -> Main.readNodes(Map.of("--zones", "a=2,b=3", "--read-nodes", "4")));
+		assertEquals(4, Main.minReadNodes(Map.of("--zones", "a=2,b=3", "--min-per-zone", "2")));
+		assertEquals(3, Main.minReadNodes(Map.of("--zones", "a=2,b=3", "--min-read-nodes", "3")));
 	}
 
 	/** 한 번만 탐색했으면 상한이 흔들린다는 안내를 붙이고, 되풀이했으면 범위가 대신하므로 붙이지 않는다 (#76). */
