@@ -74,11 +74,17 @@ public record CeilingRange(List<Double> ceilings, RoundJudge.State stoppedByAtMi
 		return sorted.get(sorted.size() - 1);
 	}
 
-	/** (최대 - 최소) / 중앙값. 중앙값이 0이면 0 */
+	/**
+	 * (최대 - 최소) / 중앙값. 전부 같으면 0이다. 중앙값이 0인데 최대와 최소가 다르면 낼 수 없어 NaN이다. 0을 돌려주면
+	 * 시작 배속에서 버티지 못한 탐색이 절반을 넘을 때 "흔들림이 없다"로 읽힌다(실험 17, #91).
+	 */
 	public double spread() {
 		double median = median();
-		if (median == 0) {
+		if (max() == min()) {
 			return 0;
+		}
+		if (median == 0) {
+			return Double.NaN;
 		}
 		return (max() - min()) / median;
 	}
