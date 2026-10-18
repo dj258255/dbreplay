@@ -1,0 +1,27 @@
+2026-10-18 15:00:28 +0900 Sleep               	Entering Sleep state due to 'Clamshell Sleep':TCPKeepAlive=active Using B
+2026-10-18 15:00:29 +0900 Wake Requests       	[process=dasd request=SleepService deltaSecs=6027 wakeAt=2026-10-18 16:40
+2026-10-18 15:08:49 +0900 DarkWake            	DarkWake from Deep Idle [CDNP] : due to smc.sysState.Wake(0x70070000) wif
+2026-10-18 15:08:58 +0900 Sleep               	Entering Sleep state due to 'Maintenance Sleep':TCPKeepAlive=active Using
+2026-10-18 15:09:00 +0900 Wake Requests       	[process=dasd request=SleepService deltaSecs=5514 wakeAt=2026-10-18 16:40
+2026-10-18 15:09:25 +0900 DarkWake            	DarkWake from Deep Idle [CDNP] : due to smc.sysState.Wake(0x70070000) wif
+2026-10-18 15:09:34 +0900 Sleep               	Entering Sleep state due to 'Maintenance Sleep':TCPKeepAlive=active Using
+2026-10-18 15:09:35 +0900 Wake Requests       	[process=dasd request=SleepService deltaSecs=62299907503 wakeAt=4001-01-0
+2026-10-18 15:09:38 +0900 DarkWake            	DarkWake from Deep Idle [CDNP] : due to smc.sysState.Wake(0x70070000) wif
+2026-10-18 15:09:43 +0900 Sleep               	Entering Sleep state due to 'Maintenance Sleep':TCPKeepAlive=active Using
+2026-10-18 15:09:45 +0900 Wake Requests       	[process=dasd request=SleepService deltaSecs=62299907434 wakeAt=4001-01-0
+2026-10-18 15:09:59 +0900 DarkWake            	DarkWake from Deep Idle [CDNP] : due to smc.sysState.Wake(0x70070000) wif
+2026-10-18 15:10:06 +0900 Sleep               	Entering Sleep state due to 'Maintenance Sleep':TCPKeepAlive=active Using
+2026-10-18 15:10:07 +0900 Wake Requests       	[process=dasd request=SleepService deltaSecs=62299907546 wakeAt=4001-01-0
+2026-10-18 15:16:59 +0900 DarkWake            	DarkWake from Deep Idle [CDNP] : due to smc.sysState.Wake(0x70070000) wif
+2026-10-18 15:17:11 +0900 Sleep               	Entering Sleep state due to 'Maintenance Sleep':TCPKeepAlive=active Using
+2026-10-18 15:17:13 +0900 Wake Requests       	[process=dasd request=SleepService deltaSecs=5047 wakeAt=2026-10-18 16:41
+2026-10-18 15:17:55 +0900 DarkWake            	DarkWake from Deep Idle [CDNP] : due to smc.sysState.Wake(0x70070000) wif
+2026-10-18 15:18:15 +0900 Sleep               	Entering Sleep state due to 'Maintenance Sleep':TCPKeepAlive=active Using
+2026-10-18 15:18:16 +0900 Wake Requests       	[process=dasd request=SleepService deltaSecs=62299906936 wakeAt=4001-01-0
+2026-10-18 16:09:58 +0900 DarkWake            	DarkWake from Deep Idle [CDNP] : due to AOP.OutboxNotEmpty spu_queue_over
+2026-10-18 16:10:04 +0900 Sleep               	Entering Sleep state due to 'Maintenance Sleep':TCPKeepAlive=active Using
+2026-10-18 16:10:05 +0900 Wake Requests       	[process=dasd request=SleepService deltaSecs=62299903878 wakeAt=4001-01-0
+2026-10-18 16:15:49 +0900 DarkWake            	DarkWake from Deep Idle [CDNP] : due to smc.sysState.Wake(0x70070000) wif
+2026-10-18 16:16:06 +0900 Sleep               	Entering Sleep state due to 'Maintenance Sleep':TCPKeepAlive=active Using
+2026-10-18 16:16:07 +0900 Wake Requests       	[process=dasd request=SleepService deltaSecs=62299903590 wakeAt=4001-01-0
+2026-10-18 17:00:22 +0900 Wake                	Wake from Deep Idle [CDNVA] : due to smc.sysState.Wake(0x70070000) lid SM

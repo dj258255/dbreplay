@@ -1,2 +1,4 @@
 out/*.jsonl
 out/*-slow.log
+out/**/*.jsonl
+out/**/*-slow.log
