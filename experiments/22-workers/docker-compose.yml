@@ -1,0 +1,22 @@
+# 실험 22: --workers로 나누면 읽기만의 탐색에서 재생기의 한계가 오르는가 (#113). 실험 07과 같은 구성
+name: dbreplay-exp22
+
+services:
+  mysql84:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: replay
+      MYSQL_DATABASE: sbtest
+    command:
+      - --slow-query-log=OFF
+      - --long-query-time=0
+      - --log-output=FILE
+      - --slow-query-log-file=/var/lib/mysql/slow.log
+      - --log-slow-extra=ON
+      - --log-slow-admin-statements=ON
+      - --max-connections=1000
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-uroot", "-preplay", "--silent"]
+      interval: 2s
+      timeout: 2s
+      retries: 60
