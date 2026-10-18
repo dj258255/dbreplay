@@ -10,7 +10,7 @@ SB="docker run --rm --network $NET dbreplay-exp01-sysbench sysbench oltp_read_wr
     --mysql-host=mysql84 --mysql-user=sb --mysql-password=sb --mysql-db=sbtest --tables=4 --table-size=100000"
 RUN="docker run --rm --network $NET -v $ROOT/build/install/dbreplay:/app:ro -v $HERE:/exp -e DBREPLAY_PASSWORD=replay dbreplay-exp-runner"
 URL="jdbc:mysql://mysql84:3306/sbtest?sslMode=DISABLED&allowPublicKeyRetrieval=true"
-PAIRS=${PAIRS:-5}; O=out
+PAIRS=${PAIRS:-5}; O=${OUT:-out}   # #115의 두 번째 실행은 OUT=out/shared-timer
 
 mkdir -p $O; rm -f $O/times.txt $O/w*-*.txt
 [ -n "${SKIP_BUILD:-}" ] || (cd "$ROOT" && ./gradlew -q installDist)

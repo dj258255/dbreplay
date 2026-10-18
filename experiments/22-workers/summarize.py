@@ -1,17 +1,21 @@
 """#113의 판정. 기준은 재기 전에 #113에 적었다.
 
 - 무효: 탐색 동안 디스크 탐침(앞뒤 5개 중앙값)이 8,180µs 이상인 때가 30초 넘게 이어졌다(#99의 explore 규칙)
+- 무효: 탐색 동안 탐침의 표본 사이가 5초 넘게 비었다. 장비가 잠든 것이다. 잠든 동안에는 표본이 없어 위 규칙이 잡지 못한다.
+  #115의 첫 실행에서 덮개가 닫혀 장비가 잠든 뒤에 더했다(2026-10-18). 판정 기준은 바꾸지 않았다
 - 조건마다 쓸 수 있는 실행이 셋 미만이면 판정하지 않는다
 - 오른다: (가) workers 4의 과반이 알람으로 끝나고 그 중앙값이 workers 1의 중앙값 이상, 또는 (나) workers 4의 최솟값 > workers 1의 최댓값
 - 오르지 않는다: workers 4의 과반이 재생기의 한계로 끝나고 그 최댓값이 workers 1의 최댓값 이하
 - 그 밖은 판정하지 못한다
+- #115: workers 4 중앙값 ÷ workers 1 중앙값이 0.9 이상이면 "타이머가 주된 원인", 0.7 이하면 "타이머는 원인이 아니다", 사이면 "일부만 설명한다".
+  공유 타이머를 넣은 뒤의 실행(OUT=out/shared-timer)에 쓴다
 """
 import os
 import re
 import statistics
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-OUT = os.path.join(HERE, "out")
+OUT = os.path.join(HERE, os.environ.get("OUT", "out"))
 SLOW = 8180
 
 
@@ -45,6 +49,12 @@ def longest_slow(d, t0, t1):
 	return longest
 
 
+def longest_gap(d, t0, t1):
+	"""탐색 동안 탐침 표본 사이의 가장 긴 빈틈(초). 앞뒤 경계도 센다."""
+	times = [t0] + [t for t, _ in d if t0 <= t <= t1] + [t1]
+	return max(b - a for a, b in zip(times, times[1:]))
+
+
 def result(name):
 	"""탐색 하나의 상한 값과 끝난 까닭. 알람, 재생기의 한계, 최고 배속 가운데 하나다."""
 	path = os.path.join(OUT, name + ".txt")
@@ -70,17 +80,18 @@ def main():
 	w = windows()
 	names = sorted((n for n in w), key=lambda n: (int(n.split("-")[1]), n))
 	got = {"1": [], "4": []}
-	print("| 탐색 | 상한 | 끝난 까닭 | 왜곡이 가장 큰 라운드(배속, 늦음 p99, 왜곡) | 탐침이 이어서 넘은 초 | 쓰는가 |")
-	print("|---|---|---|---|---|---|")
+	print("| 탐색 | 상한 | 끝난 까닭 | 왜곡이 가장 큰 라운드(배속, 늦음 p99, 왜곡) | 탐침이 이어서 넘은 초 | 탐침의 가장 긴 빈틈(초) | 쓰는가 |")
+	print("|---|---|---|---|---|---|---|")
 	for n in names:
 		r = result(n)
 		slow = longest_slow(d, *w[n]) if d else None
-		use = r is not None and slow is not None and slow <= 30
+		gap = longest_gap(d, *w[n]) if d else None
+		use = r is not None and slow is not None and slow <= 30 and gap <= 5
 		late = max_late(n)
 		late_s = f"{late[0]:.2f}, {late[1]:.3f}ms, {late[2]:.1f}%" if late else ""
 		if use:
 			got[n[1:].split("-")[0]].append(r)
-		print(f"| {n} | {f'{r[0]:.2f}' if r else '값 없음'} | {r[1] if r else ''} | {late_s} | {slow if slow is not None else '기록 없음'} | {'쓴다' if use else '무효'} |")
+		print(f"| {n} | {f'{r[0]:.2f}' if r else '값 없음'} | {r[1] if r else ''} | {late_s} | {slow if slow is not None else '기록 없음'} | {gap if gap is not None else ''} | {'쓴다' if use else '무효'} |")
 	print()
 	one, four = got["1"], got["4"]
 	if len(one) < 3 or len(four) < 3:
@@ -100,6 +111,9 @@ def main():
 	else:
 		verdict = "판정하지 못한다"
 	print(f"- 판정: {verdict}")
+	ratio = statistics.median(v4) / statistics.median(v1)
+	cause = "타이머가 주된 원인" if ratio >= 0.9 else "타이머는 원인이 아니다" if ratio <= 0.7 else "일부만 설명한다"
+	print(f"- workers 4 중앙값 ÷ workers 1 중앙값: {ratio:.2f}배 (#115의 기준으로는 {cause}. 공유 타이머를 넣은 실행에만 쓴다)")
 
 
 if __name__ == "__main__":

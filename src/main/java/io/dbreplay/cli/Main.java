@@ -1314,8 +1314,9 @@ public final class Main {
 
 	/**
 	 * 트래픽을 연결 번호로 나눠 재생기 여러 개가 함께 튼다(#81). 글은 재생 작업마다 Kubernetes Job을 띄워 재생기를 늘린다.
-	 * 이 도구는 한 프로세스 안에서 재생기를 여러 개 띄운다. 재생기마다 타이머, 넘겨주는 스레드, 연결 풀이 따로라 한 재생기가
+	 * 이 도구는 한 프로세스 안에서 재생기를 여러 개 띄운다. 재생기마다 넘겨주는 스레드와 연결 풀이 따로라 한 재생기가
 	 * 먼저 막히는 일(실험 07)을 나누려던 것이다. 재 보니 한 장비 안에서 넷으로 나누면 재생기가 오히려 더 일찍 막혔다(실험 22, #113).
+	 * 그래서 타이머는 하나를 함께 쓴다(#115).
 	 * 조각들은 전체의 첫 문장 시각을 같은 기준으로 삼는다. 요약은 하나로 모은다.
 	 * 장비를 넘어 나누려면 장비마다 replay --shard를 같은 --start-at으로 돌린다.
 	 */
@@ -1327,31 +1328,18 @@ public final class Main {
 			}
 		}
 		long base = firstStartMicros(tracePath, selection);
-		List<CompletableFuture<ReplaySummary>> parts = new ArrayList<>();
-		for (int i = 0; i < workers; i++) {
-			Predicate<TraceRecord> shard = selection.and(TraceSelection.shard(i, workers));
-			parts.add(CompletableFuture.supplyAsync(() -> {
-				try (TraceReader trace = openTrace(tracePath, shard)) {
-					return Replayer.run(trace, target, r -> { }, replayOptions, base);
-				}
-				catch (IOException e) {
-					throw new java.io.UncheckedIOException(e);
-				}
-			}, command -> Thread.ofPlatform().name("dbreplay-worker").start(command)));
-		}
-		List<ReplaySummary> summaries = new ArrayList<>();
-		for (CompletableFuture<ReplaySummary> part : parts) {
-			try {
-				summaries.add(part.join());
+		List<TraceReader> traces = new ArrayList<>();
+		try {
+			for (int i = 0; i < workers; i++) {
+				traces.add(openTrace(tracePath, selection.and(TraceSelection.shard(i, workers))));
 			}
-			catch (java.util.concurrent.CompletionException e) {
-				if (e.getCause() instanceof java.io.UncheckedIOException io) {
-					throw io.getCause();
-				}
-				throw e;
+			return Replayer.runTogether(traces, target, replayOptions, base);
+		}
+		finally {
+			for (TraceReader trace : traces) {
+				trace.close();
 			}
 		}
-		return ReplaySummary.merge(summaries);
 	}
 
 	/** 고른 레코드 가운데 첫 문장의 시작 시각. 나눠 튼 조각들의 공통 기준이다. 없으면 0. */

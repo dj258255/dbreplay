@@ -1,10 +1,15 @@
 package io.dbreplay.replay;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -87,6 +92,7 @@ public final class Replayer {
 	private final Options options;
 	private final SessionPool pool;
 	private final long fixedBaseMicros;
+	private final SpinTimer sharedTimer;
 
 	private final LongAdder statements = new LongAdder();
 	private final LongAdder errors = new LongAdder();
@@ -102,16 +108,18 @@ public final class Replayer {
 	private long originNanos;
 	private SpinTimer timer;
 
-	private Replayer(Target target, ResultSink sink, Options options, long fixedBaseMicros) {
+	/** @param sharedTimer 다른 재생기와 함께 쓰는 타이머. null이면 이 재생기가 제 것을 띄운다 */
+	private Replayer(Target target, ResultSink sink, Options options, long fixedBaseMicros, SpinTimer sharedTimer) {
 		this.target = target;
 		this.sink = sink;
 		this.options = options;
 		this.pool = new SessionPool(target, options.maxConnections());
 		this.fixedBaseMicros = fixedBaseMicros;
+		this.sharedTimer = sharedTimer;
 	}
 
 	public static ReplaySummary run(TraceReader trace, Target target, ResultSink sink, Options options) throws IOException {
-		return new Replayer(target, sink, options, 0).run(trace);
+		return new Replayer(target, sink, options, 0, null).run(trace);
 	}
 
 	/**
@@ -122,7 +130,45 @@ public final class Replayer {
 	 */
 	public static ReplaySummary run(TraceReader trace, Target target, ResultSink sink, Options options, long baseMicros)
 			throws IOException {
-		return new Replayer(target, sink, options, baseMicros).run(trace);
+		return new Replayer(target, sink, options, baseMicros, null).run(trace);
+	}
+
+	/**
+	 * 나눈 조각들을 재생기 여러 개로 함께 튼다(#81). 재생기마다 넘겨주는 스레드와 연결 풀은 따로이고, 타이머는 하나를 함께 쓴다.
+	 * 타이머는 코어 하나를 쉬지 않고 돌린다. 재생기마다 띄우면 넷으로 나눌 때 코어 넷이 시계만 본다. 그때 한 장비 안에서
+	 * 넷으로 나눈 재생기가 하나보다 더 일찍 막혔다(실험 22, #113). 함께 쓰게 한 까닭이다(#115).
+	 *
+	 * @param baseMicros 전체 트래픽의 첫 문장이 시작된 시각. 조각들의 공통 기준이다
+	 * @return 조각들의 요약을 하나로 모은 것
+	 */
+	public static ReplaySummary runTogether(List<TraceReader> traces, Target target, Options options, long baseMicros)
+			throws IOException {
+		List<ReplaySummary> summaries = new ArrayList<>();
+		try (SpinTimer shared = new SpinTimer()) {
+			List<CompletableFuture<ReplaySummary>> parts = new ArrayList<>();
+			for (TraceReader trace : traces) {
+				parts.add(CompletableFuture.supplyAsync(() -> {
+					try {
+						return new Replayer(target, r -> { }, options, baseMicros, shared).run(trace);
+					}
+					catch (IOException e) {
+						throw new UncheckedIOException(e);
+					}
+				}, command -> Thread.ofPlatform().name("dbreplay-worker").start(command)));
+			}
+			for (CompletableFuture<ReplaySummary> part : parts) {
+				try {
+					summaries.add(part.join());
+				}
+				catch (CompletionException e) {
+					if (e.getCause() instanceof UncheckedIOException io) {
+						throw io.getCause();
+					}
+					throw e;
+				}
+			}
+		}
+		return ReplaySummary.merge(summaries);
 	}
 
 	private ReplaySummary run(TraceReader trace) throws IOException {
@@ -131,8 +177,9 @@ public final class Replayer {
 		long baseMicros = 0;
 		long lastStartMicros = 0;
 
-		try (SpinTimer spinTimer = new SpinTimer()) {
-			timer = spinTimer;
+		// 함께 쓰는 타이머는 띄운 쪽(runTogether)이 닫는다. 자원이 null이면 try는 닫지 않는다
+		try (SpinTimer own = sharedTimer == null ? new SpinTimer() : null) {
+			timer = sharedTimer == null ? own : sharedTimer;
 			try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
 				Dispatcher dispatcher = options.unit() == Unit.SESSION
 						? new SessionDispatcher(executor)

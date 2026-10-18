@@ -106,6 +106,23 @@ class ReplayerTest {
 	}
 
 	@Test
+	void replaysShardsTogetherOnOneTimerFromACommonBase() throws IOException {
+		FakeTarget target = new FakeTarget();
+		// 두 번째 조각의 첫 문장은 전체의 첫 문장보다 300ms 늦다. 공통 기준을 따르면 그만큼 기다렸다 나간다.
+		// 기준 0은 "정하지 않음"이라 1초부터 시작한다
+		ReplaySummary summary = Replayer.runTogether(List.of(
+				trace(statement("A", 1_000, "a1"), statement("A", 1_010, "a2")),
+				trace(statement("B", 1_300, "b1"), statement("B", 1_310, "b2"))),
+				target, BY_STATEMENT, 1_000_000);
+
+		assertEquals(4, summary.statements());
+		assertEquals(4, target.executed.size());
+		assertTrue(target.executed.stream().anyMatch(s -> s.endsWith(":b2")));
+		assertTrue(summary.elapsedMicros() >= 300_000, "조각마다 제 첫 문장을 기준으로 삼으면 300ms보다 일찍 끝난다: "
+				+ summary.elapsedMicros());
+	}
+
+	@Test
 	void replaysEachSessionInOrderOnItsOwnConnection() throws IOException {
 		FakeTarget target = new FakeTarget();
 		Run run = run(target, FAST,
