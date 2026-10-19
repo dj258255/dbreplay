@@ -1,0 +1,16 @@
+# 실험 25: 읽기만 24배속에서 도커의 CPU가 다 차는가 (#123). 실험 22, 24와 같은 구성
+name: dbreplay-exp25
+
+services:
+  mysql84:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: replay
+      MYSQL_DATABASE: sbtest
+    command:
+      - --max-connections=1000
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-uroot", "-preplay", "--silent"]
+      interval: 2s
+      timeout: 2s
+      retries: 60
