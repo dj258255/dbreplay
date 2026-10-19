@@ -1,0 +1,16 @@
+# 실험 24: 읽기만 틀 때 늦은 문장이 그 자리에서 새 연결을 연 탓인가 (#119). 실험 22와 같은 구성
+name: dbreplay-exp24
+
+services:
+  mysql84:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: replay
+      MYSQL_DATABASE: sbtest
+    command:
+      - --max-connections=1000
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-uroot", "-preplay", "--silent"]
+      interval: 2s
+      timeout: 2s
+      retries: 60
