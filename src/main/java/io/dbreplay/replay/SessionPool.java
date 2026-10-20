@@ -30,6 +30,8 @@ final class SessionPool {
 	private static final long WAIT_NANOS = 1_000_000;
 
 	private final Target target;
+	// 연결이 데이터베이스를 바꿀 수 있으면 칸을 하나만 둔다. 첫 레코드의 데이터베이스로 미리 연 연결을 다른 데이터베이스의 문장도 쓴다(#141)
+	private final boolean oneBucket;
 	private final Semaphore inUse;
 	private final Semaphore opening = new Semaphore(MAX_OPENING);
 	private final Map<String, BlockingDeque<TargetSession>> idle = new ConcurrentHashMap<>();
@@ -37,6 +39,7 @@ final class SessionPool {
 
 	SessionPool(Target target, int maxConnections) {
 		this.target = target;
+		this.oneBucket = target.switchesDatabase();
 		this.inUse = new Semaphore(maxConnections);
 	}
 
@@ -106,6 +109,6 @@ final class SessionPool {
 
 	// PostgreSQL은 연결이 데이터베이스 하나에 묶여서 데이터베이스별로 따로 모은다
 	private BlockingDeque<TargetSession> idleFor(String db) {
-		return idle.computeIfAbsent(db == null ? "" : db, k -> new LinkedBlockingDeque<>());
+		return idle.computeIfAbsent(oneBucket || db == null ? "" : db, k -> new LinkedBlockingDeque<>());
 	}
 }

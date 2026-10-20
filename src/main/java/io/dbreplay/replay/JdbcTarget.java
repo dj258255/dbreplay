@@ -76,6 +76,12 @@ public final class JdbcTarget implements Target {
 		return url.substring(start + 2, end).contains(",");
 	}
 
+	/** MySQL은 연결을 둔 채 기본 데이터베이스를 바꾼다(Session.execute의 setCatalog). PostgreSQL은 못 바꾼다. */
+	@Override
+	public boolean switchesDatabase() {
+		return !isPostgres();
+	}
+
 	@Override
 	public TargetSession open(String db) throws SQLException {
 		return new Session(connect(db), !isPostgres());
