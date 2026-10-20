@@ -35,6 +35,7 @@ import io.dbreplay.explore.CeilingRange;
 import io.dbreplay.explore.Evaluation;
 import io.dbreplay.explore.Explorer;
 import io.dbreplay.explore.ManagedTargets;
+import io.dbreplay.explore.PeakWindow;
 import io.dbreplay.explore.RoundData;
 import io.dbreplay.explore.RoundJudge;
 import io.dbreplay.explore.ScaleAdvice;
@@ -67,8 +68,10 @@ import io.dbreplay.serve.Server;
 import io.dbreplay.sandbox.Sandbox;
 import io.dbreplay.sandbox.Snapshot;
 import io.dbreplay.trace.PrivateFile;
+import io.dbreplay.trace.TraceHeader;
 import io.dbreplay.trace.TraceReader;
 import io.dbreplay.trace.TraceRecord;
+import io.dbreplay.trace.TraceWriter;
 
 public final class Main {
 
@@ -150,6 +153,10 @@ public final class Main {
 
 			  dbreplay sample  --url <JDBC URL> --user <계정> [--password <암호>] --seconds <초> [지표 옵션]
 			                   녹화하는 동안 운영 쪽의 부하 지표를 떠 둘 때 쓴다
+
+			  dbreplay peak    --trace <트래픽 파일> --minutes <분> [--out <잘라 낸 트래픽 파일>]
+			                   긴 녹화에서 문장이 가장 많은 구간을 찾는다. --out을 주면 그 구간만 잘라 쓴다.
+			                   구간 앞에서 시작한 트랜잭션의 문장은 뺀다. 탐색에는 피크의 트래픽을 쓴다(원문 그림 1의 피크 구간 분석)
 
 			  dbreplay reset   --url <JDBC URL> --user <계정> [--password <암호>] --snapshot <덤프 파일> [되돌리기 옵션]
 			                   샌드박스를 녹화 시작 시점으로 되돌린다. mysql이나 psql 클라이언트가 있어야 한다
@@ -249,6 +256,7 @@ public final class Main {
 			case "report" -> report(options);
 			case "check" -> check(options);
 			case "sample" -> sample(options);
+			case "peak" -> peak(options);
 			case "reset" -> reset(options);
 			case "snapshot" -> snapshot(options);
 			case "manage" -> manage(options);
@@ -1968,6 +1976,46 @@ public final class Main {
 		ReplaySummary join() {
 			return summary.join();
 		}
+	}
+
+	/** 긴 녹화에서 문장이 가장 많은 구간을 찾고, --out을 주면 잘라 낸다(#130). */
+	private static void peak(Map<String, String> options) throws Exception {
+		String path = required(options, "--trace");
+		double minutes = number(options, "--minutes", Double.NaN);
+		if (!(minutes > 0) || Double.isInfinite(minutes)) {
+			throw new IllegalArgumentException("--minutes에는 0보다 큰 수를 준다");
+		}
+		PeakWindow.Peak p;
+		try (TraceReader trace = openTrace(path)) {
+			p = PeakWindow.find(trace, Math.round(minutes * 60e6));
+		}
+		System.out.printf("문장이 가장 많은 %s: %s ~ %s (녹화 %s 가운데)%n", length(p.endMicros() - p.startMicros()),
+				instant(p.startMicros()), instant(p.endMicros()), length(p.spanMicros()));
+		System.out.printf("  초당 문장 %.0f (읽기 %.0f, 쓰기 %.0f). 녹화 전체의 평균은 %.0f%n", p.qps(),
+				p.reads() / ((p.endMicros() - p.startMicros()) / 1e6), p.writes() / ((p.endMicros() - p.startMicros()) / 1e6), p.averageQps());
+		if (!options.containsKey("--out")) {
+			return;
+		}
+		Path out = Path.of(options.get("--out"));
+		PeakWindow.Cut cut;
+		// 잘라 낸 파일에도 값이 든 SQL이 있다. convert처럼 소유자만 읽는 파일로 쓴다
+		try (TraceReader in = openTrace(path);
+				Writer writer = new BufferedWriter(new OutputStreamWriter(PrivateFile.open(out), StandardCharsets.UTF_8))) {
+			TraceHeader h = in.header();
+			String peak = "peak=" + instant(p.startMicros()) + "~" + instant(p.endMicros());
+			TraceWriter w = new TraceWriter(writer, h.withScope(h.scope() == null ? peak : h.scope() + ";" + peak));
+			cut = PeakWindow.cut(in, w, p.startMicros(), p.endMicros());
+		}
+		System.out.printf("잘라 낸 파일 %s: %,d줄. 구간 앞에서 시작한 트랜잭션의 문장 %,d개를 뺐다%n", out, cut.written(), cut.dropped());
+	}
+
+	/** 1분 아래는 초로, 그 위는 분으로 적는다. 0.25분을 "0.3분"으로 찍지 않는다. */
+	static String length(long micros) {
+		return micros < 60_000_000L ? String.format("%.0f초", micros / 1e6) : String.format("%.1f분", micros / 60e6);
+	}
+
+	private static String instant(long micros) {
+		return java.time.Instant.EPOCH.plus(micros, java.time.temporal.ChronoUnit.MICROS).toString();
 	}
 
 	private static TraceReader openTrace(String path) throws IOException {

@@ -166,6 +166,13 @@ class MainTest {
 		assertThrows(IllegalArgumentException.class, () -> Main.checkQpsOptions(Map.of("--growth", "-1")));
 	}
 
+	/** 1분 아래는 초로 적는다 (#130). */
+	@Test
+	void writesShortLengthsInSeconds() {
+		assertEquals("15초", Main.length(15_000_000));
+		assertEquals("2.5분", Main.length(150_000_000));
+	}
+
 	/** 역할의 옵션이 있으면 그것을, 없으면 함께 쓰는 --level-*을, 그것도 없으면 30~50%를 쓴다 (#129). */
 	@Test
 	void picksTheHealthyBandPerRole() {

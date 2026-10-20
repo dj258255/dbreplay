@@ -38,6 +38,7 @@ dbreplay reset   --url <JDBC URL> --user <계정> --snapshot <덤프 파일>
 dbreplay check   --evaluation <평가 파일> --url <JDBC URL> --user <계정>
 dbreplay manage  --targets <대상 목록.json>
 dbreplay sample  --url <JDBC URL> --user <계정> --seconds <초>
+dbreplay peak    --trace <트래픽 파일> --minutes <분> [--out <잘라 낸 트래픽 파일>]
 dbreplay serve   --dir <작업 폴더> [--targets <대상 목록.json>]
 dbreplay sandbox-create --like <운영 JDBC URL> --user <계정> --name <이름> --port <포트>
 ```
