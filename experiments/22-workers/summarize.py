@@ -60,10 +60,16 @@ def result(name):
 	path = os.path.join(OUT, name + ".txt")
 	if not os.path.exists(path):
 		return None
-	m = re.search(r"^상한: ([0-9.]+)배속(.*)$", open(path, encoding="utf-8").read(), re.M)
+	text = open(path, encoding="utf-8").read()
+	m = re.search(r"^상한: ([0-9.]+)배속(.*)$", text, re.M)
 	if not m:
 		return None
 	rest = m.group(2)
+	if "버티지 못했다" in rest:
+		# 첫 라운드부터 못 버텼다. 상한은 0이다. 까닭은 그 라운드의 판정에서 읽는다. 출력의 "녹화한 부하보다 낮다"는
+		# 왜곡으로 끝났을 때도 붙어서(#146) 그것으로 알람이라고 읽으면 틀린다. #144에서 1배속의 왜곡을 알람으로 셌다
+		first = re.search(r"^1\s+\S+.*?(왜곡|알람|과부하)", text, re.M)
+		return 0.0, "재생기의 한계" if first and first.group(1) == "왜곡" else "알람"
 	why = "재생기의 한계" if "재생기가 내지 못해" in rest else "최고 배속" if "알람이 울리지 않았다" in rest else "알람"
 	return float(m.group(1)), why
 
