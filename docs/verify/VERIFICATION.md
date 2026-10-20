@@ -92,6 +92,7 @@
 | 증가 비율을 곱한 행사 때의 수위 (#132) | 같은 평가에 `--growth 2`를 주면 수위가 두 배(20% → 40%)가 되고 판정이 과잉에서 적정으로, 4배면 부족과 읽기 노드 2 → 4개로 나온다. 0 이하는 거른다 | `MainTest.growthMultipliesTheBaseQpsBeforeJudging`, `MainTest.rejectsANonPositiveGrowth` | 단위 테스트 |
 | 리포트의 실행 시간이 가장 긴 SQL 상위 10 (#131) | 한 번의 실행이 가장 오래 걸린 모양이 첫 줄에 오고, 횟수·비율·평균·최대를 전후로 낸다. 변경 후에만 있는 모양도 넣는다 | `MarkdownReportTest.listsTheSlowestStatementsAfterTheChangeWithShareAndMax` | 단위 테스트 |
 | 긴 녹화에서 피크 구간을 찾아 잘라 낸다 (#130) | 초당 10문장인 10초를 찾고, 잘라 낸 파일에 구간 앞에서 시작한 트랜잭션의 문장이 없다. 실험 22의 트래픽(30초)에서 15초 창은 초당 4,076문장(전체 평균 3,942)이었고 잘라 낸 61,125줄 가운데 걸친 트랜잭션의 문장 16개를 뺐다 | `PeakWindowTest`, 실험 22의 트래픽 파일로 한 번(2026-10-20) | 단위 테스트, 실제 파일 한 번 |
+| 재생기가 매초 자기 상태를 남긴다 (#127) | 2초 넘게 틀면 상태가 둘 이상 오고 마지막 상태의 끝난 수가 요약과 같다. 건너뛴 트랜잭션 제어는 넘긴 수에 들지 않는다. 실제 MySQL 16배속에서 2초째에 넘긴 82,446개 가운데 23,133개만 나간 것이 보였다 | `ReplayerTest.reportsProgressEverySecondAndALastStateThatMatchesTheSummary`, `MainTest.writesProgressLinesUnderOneHeader`, 실험 24 (`out/progress/`) | 단위 테스트, 실제 DB 한 번(배터리) |
 
 ## 확인하지 못한 것
 
