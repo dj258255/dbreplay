@@ -630,7 +630,7 @@ public final class Main {
 			results.add(result);
 			System.out.println();
 			if (result.ceilingSpeed() == 0) {
-				System.out.println("상한: " + firstRoundFailed(exploreOptions.startSpeed()));
+				System.out.println("상한: " + firstRoundFailed(exploreOptions.startSpeed(), result.stoppedBy()));
 				return;
 			}
 			System.out.printf("상한: %.2f배속%s%n", result.ceilingSpeed(), stoppedBySuffix(result.stoppedBy()));
@@ -848,8 +848,15 @@ public final class Main {
 	}
 
 	/** 되풀이한 탐색 한 번의 "탐색 i/N의 상한:" 줄의 뒷부분. 시작 배속에서도 못 버틴 탐색은 다르게 적는다. */
-	/** 첫 라운드부터 못 버텼을 때. 시작 배속 밑은 재지 않았으므로, 1배속보다 높게 시작했으면 녹화한 부하를 버티는지는 모른다(#128). */
-	static String firstRoundFailed(double startSpeed) {
+	/**
+	 * 첫 라운드부터 못 버텼을 때. 시작 배속 밑은 재지 않았으므로, 1배속보다 높게 시작했으면 녹화한 부하를 버티는지는 모른다(#128).
+	 * 왜곡으로 끝났으면 재생기가 계획을 못 지킨 것이라 대상의 한계는 본 적이 없다. 그때 "녹화한 부하보다 낮다"고 하면 대상이 지금의
+	 * 부하도 못 버틴다는 틀린 말이 된다(#146, 실험 22의 1배속 왜곡)
+	 */
+	static String firstRoundFailed(double startSpeed, RoundJudge.State stoppedBy) {
+		if (stoppedBy == RoundJudge.State.DISTORTED) {
+			return String.format("%.2f배속에서 재생기가 계획을 지키지 못했다(왜곡). 대상의 한계는 보지 못했다", startSpeed);
+		}
 		if (startSpeed <= 1) {
 			return String.format("%.2f배속에서도 버티지 못했다. 녹화한 부하보다 낮다", startSpeed);
 		}
@@ -859,7 +866,8 @@ public final class Main {
 
 	private static String ceilingText(double ceilingSpeed, RoundJudge.State stoppedBy, double startSpeed) {
 		if (ceilingSpeed == 0) {
-			return String.format("%.2f배속에서도 버티지 못했다", startSpeed);
+			return stoppedBy == RoundJudge.State.DISTORTED ? firstRoundFailed(startSpeed, stoppedBy)
+					: String.format("%.2f배속에서도 버티지 못했다", startSpeed);
 		}
 		return String.format("%.2f배속%s", ceilingSpeed, stoppedBySuffix(stoppedBy));
 	}

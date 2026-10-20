@@ -65,7 +65,7 @@ def result(name):
 	if not m:
 		return None
 	rest = m.group(2)
-	if "버티지 못했다" in rest:
+	if "버티지 못했다" in rest or "계획을 지키지 못했다" in rest:
 		# 첫 라운드부터 못 버텼다. 상한은 0이다. 까닭은 그 라운드의 판정에서 읽는다. 출력의 "녹화한 부하보다 낮다"는
 		# 왜곡으로 끝났을 때도 붙어서(#146) 그것으로 알람이라고 읽으면 틀린다. #144에서 1배속의 왜곡을 알람으로 셌다
 		first = re.search(r"^1\s+\S+.*?(왜곡|알람|과부하)", text, re.M)

@@ -185,6 +185,14 @@ class MainTest {
 		assertNull(Main.progressFile(Map.of(), "-"));
 	}
 
+	/** 첫 라운드가 왜곡으로 끝났으면 대상의 한계를 본 적이 없다. "녹화한 부하보다 낮다"고 하지 않는다 (#146). */
+	@Test
+	void aFirstRoundEndedByDistortionDoesNotBlameTheTarget() {
+		String distorted = Main.firstRoundFailed(1, RoundJudge.State.DISTORTED);
+		assertFalse(distorted.contains("녹화한 부하보다 낮다"), distorted);
+		assertTrue(distorted.contains("재생기") && distorted.contains("왜곡"), distorted);
+	}
+
 	/** 1분 아래는 초로 적는다 (#130). */
 	@Test
 	void writesShortLengthsInSeconds() {
@@ -205,8 +213,8 @@ class MainTest {
 	/** 2배속에서 시작해 첫 라운드부터 못 버티면 1배와 2배 사이는 모른다. "녹화한 부하보다 낮다"고 하면 틀린다 (#128). */
 	@Test
 	void aFailedFirstRoundAboveOneSpeedDoesNotClaimTheRecordedLoadFails() {
-		assertTrue(Main.firstRoundFailed(1).endsWith("녹화한 부하보다 낮다"));
-		String two = Main.firstRoundFailed(2);
+		assertTrue(Main.firstRoundFailed(1, RoundJudge.State.OVERLOADED).endsWith("녹화한 부하보다 낮다"));
+		String two = Main.firstRoundFailed(2, RoundJudge.State.OVERLOADED);
 		assertTrue(two.contains("녹화한 부하의 2.00배보다 낮다"));
 		assertTrue(two.contains("--start-speed 1"));
 	}
