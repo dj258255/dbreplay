@@ -155,6 +155,20 @@ class ReplayerTest {
 		assertTrue(beats.getFirst().done() < end.done(), "도중의 상태는 끝보다 적게 끝났어야 한다");
 	}
 
+	/** 미리 여는 연결 수만큼 시작 전에 연다. 연결 상한보다 크면 상한까지만 연다(#126). 음수는 거른다. */
+	@Test
+	void opensTheWarmConnectionsBeforeTheFirstStatement() throws IOException {
+		FakeTarget target = new FakeTarget();
+		Replayer.run(trace(statement("A", 0, "a1")), target, r -> { }, BY_STATEMENT.withWarmConnections(5));
+		assertEquals(5, target.opened.get(), "문장 하나에 연결 다섯이 열려 있어야 한다");
+
+		FakeTarget capped = new FakeTarget();
+		Replayer.run(trace(statement("A", 0, "a1")), capped, r -> { }, BY_STATEMENT.withMaxConnections(3).withWarmConnections(10));
+		assertEquals(3, capped.opened.get());
+
+		org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class, () -> BY_STATEMENT.withWarmConnections(-1));
+	}
+
 	/**
 	 * 슬로우 로그의 첫 줄은 녹화를 켠 SET GLOBAL이라 데이터베이스가 없다. 그 칸에 미리 열면 나머지 문장이 쓰지 못해 도중에 다 새로 열었다
 	 * (#126의 첫 측정, #141). 데이터베이스를 바꿀 수 있는 대상(MySQL)은 칸이 하나라 미리 연 연결로 끝나고, 못 바꾸는 대상(PostgreSQL)은

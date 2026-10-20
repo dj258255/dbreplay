@@ -1,0 +1,16 @@
+# 실험 26: 미리 여는 연결 수가 늦음을 줄이는가 (#126). 실험 22, 24와 같은 구성
+name: dbreplay-exp26
+
+services:
+  mysql84:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: replay
+      MYSQL_DATABASE: sbtest
+    command:
+      - --max-connections=1000
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-uroot", "-preplay", "--silent"]
+      interval: 2s
+      timeout: 2s
+      retries: 60

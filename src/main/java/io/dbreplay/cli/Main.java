@@ -92,7 +92,7 @@ public final class Main {
 			                   all은 값들 사이의 관계를 지키지 못한다. 범위 조회의 폭이 달라져 재생이 다른 부하가 된다(실험 13)
 
 			  dbreplay replay  --trace <트래픽 파일> --url <JDBC URL> --user <계정> [--password <암호>]
-			                   [--speed 1] [--unit transaction|statement|session] [--max-connections 500]
+			                   [--speed 1] [--unit transaction|statement|session] [--max-connections 500] [--warm-connections 16]
 			                   [--only reads] [--out <결과 파일>] [--run-out <재생 기록 파일>] [--metrics on] [지표 옵션]
 			                   [--profile-command <명령>] [주종 옵션] [--shard <i>/<N> [--start-at <에포크 밀리초>]]
 			                   [--progress <상태 파일>]
@@ -114,7 +114,7 @@ public final class Main {
 			                   [--alarm-command <알람 확인 명령>] [--alarm-metric <이름>=<값>,...]
 			                   [--alarm-active-sessions <개수>] [--alarm-total <이름>=<값>,...] [--alarm-sustain 3] [--max-distortion 0.2]
 			                   [지표 옵션] [--profile-command <명령>] [주종 옵션]
-			                   [--unit transaction|statement|session] [--only reads|writes] [--workers 1] [--max-connections 500]
+			                   [--unit transaction|statement|session] [--only reads|writes] [--workers 1] [--max-connections 500] [--warm-connections 16]
 			                   [--start-speed 2] [--max-speed 64] [--precision 0.05] [--repeat 1]
 			                   [--current-qps <지금의 초당 문장 수>] [--current-read-qps <읽기>] [--current-write-qps <쓰기>]
 			                   [--current-replica-qps <종 DB의 지금의 초당 문장 수>]
@@ -1936,7 +1936,8 @@ public final class Main {
 		Replayer.Options defaults = Replayer.Options.atSpeed(speed);
 		Replayer.Options chosen = readsOnly(options) ? defaults.onlyReads()
 				: writesOnly(options) ? defaults.withUnit(Replayer.Unit.TRANSACTION) : defaults.withUnit(unit(options));
-		return chosen.withMaxConnections((int) number(options, "--max-connections", defaults.maxConnections()));
+		return chosen.withMaxConnections((int) number(options, "--max-connections", defaults.maxConnections()))
+				.withWarmConnections((int) number(options, "--warm-connections", defaults.warmConnections()));
 	}
 
 	private static Replayer.Unit unit(Map<String, String> options) {
@@ -1998,7 +1999,8 @@ public final class Main {
 	private static Replayer.Options replicaOptions(Map<String, String> options, double speed) {
 		Replayer.Options defaults = Replayer.Options.atSpeed(speed);
 		return defaults.withUnit(Replayer.Unit.STATEMENT)
-				.withMaxConnections((int) number(options, "--max-connections", defaults.maxConnections()));
+				.withMaxConnections((int) number(options, "--max-connections", defaults.maxConnections()))
+				.withWarmConnections((int) number(options, "--warm-connections", defaults.warmConnections()));
 	}
 
 	/** 종 DB의 트래픽을 주 DB의 재생과 나란히 튼다. 두 재생은 각자의 첫 문장을 기준으로 시각을 맞춘다. */
