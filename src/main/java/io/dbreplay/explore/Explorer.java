@@ -20,8 +20,14 @@ public final class Explorer {
 	 */
 	public record Options(double startSpeed, double maxSpeed, double precision, int maxRounds) {
 
+		/**
+		 * 시작 배속 2와 정밀도 5%는 원문의 그림에서 왔다. 그림 9의 탐색 리포트가 시작 배속을 2로 적고, 그림 5와 9의 라운드가
+		 * 2, 4, 8, 6, 5, 5.5, 5.25 순서로 가서 5.25에서 끝난다. 이 순서가 나오려면 정밀도가 4.8% 이상 10% 미만이어야 하고,
+		 * 5%는 그 가운데 둥근 값이다. 그림에 정밀도 값 자체는 없다. 그 전에는 1과 10%였다(#14, #128).
+		 * 최대 배속 64와 라운드 12는 근거 없이 고른 그대로다
+		 */
 		public static Options defaults() {
-			return new Options(1, 64, 0.1, 12);
+			return new Options(2, 64, 0.05, 12);
 		}
 	}
 
