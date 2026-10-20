@@ -59,6 +59,11 @@ public final class TraceComparison {
 			return durations.quantile(q);
 		}
 
+		/** 한 번의 실행이 가장 오래 걸린 시간. */
+		public long maxMicros() {
+			return durations.max();
+		}
+
 		/** 읽은 행 수를 아는 문장이 하나라도 있는가. PostgreSQL의 로그에는 없다. */
 		public boolean knowsRows() {
 			return withRows > 0;
@@ -189,6 +194,16 @@ public final class TraceComparison {
 		return rows(minCount).stream()
 				.filter(r -> r.before().knowsRows() && r.after().knowsRows() && r.rowsRatio() >= minRatio)
 				.sorted(Comparator.comparingDouble(Row::rowsRatio).reversed()).limit(n).toList();
+	}
+
+	/**
+	 * 변경 후에 한 번의 실행이 가장 오래 걸린 모양들. 원문 그림 4의 "재생 실행 시간이 가장 긴 SQL 상위 10"이다(#131).
+	 * 변경 후에만 있는 모양도 넣는다. 그때 변경 전 쪽은 빈 집계다. 횟수 제한을 두지 않는다. 한 번 오래 걸린 것도 보려는 표다.
+	 */
+	public List<Row> slowestAfter(int n) {
+		List<Row> all = new ArrayList<>(rows);
+		onlyAfter.forEach((shape, side) -> all.add(new Row(shape, new Side(), side)));
+		return all.stream().sorted(Comparator.comparingLong((Row r) -> r.after().maxMicros()).reversed()).limit(n).toList();
 	}
 
 	/** 오류 번호의 구성이 달라진 모양들. 횟수 제한 없이 전부 본다. 한 번 난 오류도 호환성 문제일 수 있다. */

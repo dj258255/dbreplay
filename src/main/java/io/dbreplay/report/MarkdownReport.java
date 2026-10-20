@@ -60,6 +60,7 @@ public final class MarkdownReport {
 
 		rows(out, "나빠진 SQL 상위 " + in.top(), c.worst(in.top(), in.minCount()));
 		rows(out, "좋아진 SQL 상위 " + in.top(), c.best(in.top(), in.minCount()));
+		slowest(out, c);
 
 		out.printf("## 읽은 행 수가 2배 이상 늘어난 SQL%n%n");
 		if (!b.knowsRows() || !a.knowsRows()) {
@@ -126,6 +127,34 @@ public final class MarkdownReport {
 					ms(r.before().quantile(0.99)), ms(r.after().quantile(0.99)));
 		}
 		out.println();
+	}
+
+	/**
+	 * 변경 후 한 번의 실행이 가장 오래 걸린 SQL 상위 10. 원문 그림 4의 넷째 탭이고, 열도 그 표처럼 실행 횟수, 실행 비율, 평균, 최대다(#131).
+	 * 비율은 그쪽 파일의 전체 문장에서 그 모양이 차지하는 몫이다.
+	 */
+	private static void slowest(PrintWriter out, TraceComparison c) {
+		out.printf("## 변경 후 실행 시간이 가장 긴 SQL 상위 10%n%n");
+		List<TraceComparison.Row> rows = c.slowestAfter(10);
+		if (rows.isEmpty()) {
+			out.printf("없다.%n%n");
+			return;
+		}
+		long totalBefore = c.totalBefore().count(), totalAfter = c.totalAfter().count();
+		out.printf("한 번의 실행이 가장 오래 걸린 순서다. 비율은 그쪽 전체 문장 가운데 그 모양의 몫이다.%n%n");
+		out.printf("| SQL 모양 | 횟수 (전 → 후) | 비율 (전 → 후) | 평균 (전 → 후) | 최대 (전 → 후) |%n|---|---|---|---|---|%n");
+		for (TraceComparison.Row r : rows) {
+			TraceComparison.Side b = r.before(), a = r.after();
+			out.printf("| `%s` | %,d → %,d | %s → %s | %s → %s | %s → %s |%n", cell(r.shape()), b.count(), a.count(),
+					share(b.count(), totalBefore), share(a.count(), totalAfter),
+					b.count() == 0 ? "-" : ms(b.meanMicros()), ms(a.meanMicros()),
+					b.count() == 0 ? "-" : ms(b.maxMicros()), ms(a.maxMicros()));
+		}
+		out.println();
+	}
+
+	private static String share(long count, long total) {
+		return total == 0 ? "-" : String.format("%.2f%%", 100.0 * count / total);
 	}
 
 	private static void metrics(PrintWriter out, RunRecord before, RunRecord after) {
