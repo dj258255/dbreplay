@@ -249,6 +249,25 @@ class EvaluationTest {
 		assertEquals(WaterLevel.Verdict.SURPLUS, read.replica().level(0.3, 0.5).verdict());
 	}
 
+	/**
+	 * 종 DB만의 건강 구간을 적으면 종 DB의 판정은 그 구간으로 나오고 주 DB의 구간은 그대로다. 적지 않은 예전 파일에는 그 칸이 없다.
+	 * 원문 그림 11의 주 DB 0~80%, 종 DB 30~50%로 본다(#129).
+	 */
+	@Test
+	void judgesTheReplicaWithItsOwnBandWhenOneIsGiven() throws IOException {
+		Evaluation.Replica own = new Evaluation.Replica(traffic(80, 20), 20_000, 12_000, null, 0.3, 0.5);
+		Evaluation primaryWide = new Evaluation("2026-10-01T00:00:00Z", 30, PROFILE, ALARMS, "transaction", traffic(80, 20),
+				5.0, "OVERLOADED", 20_000, 12_000, 0.0, 0.8, null, null, own);
+		ObjectMapper json = new ObjectMapper();
+
+		Evaluation read = json.readValue(json.writeValueAsString(primaryWide), Evaluation.class);
+
+		assertEquals(primaryWide, read);
+		assertEquals(WaterLevel.Verdict.HEALTHY, read.level().verdict(), "주 DB 60%는 0~80% 안이다");
+		assertEquals(WaterLevel.Verdict.SHORT, read.replica().level(read.low(), read.high()).verdict(), "종 DB 60%는 30~50%를 넘는다");
+		assertFalse(json.writeValueAsString(new Evaluation.Replica(traffic(80, 20), 20_000, 2_000)).contains("low"));
+	}
+
 	/** 종 DB를 함께 틀지 않은 평가는 JSON에 replica 이름이 없다. */
 	@Test
 	void omitsTheReplicaWhenThereIsNone() throws IOException {

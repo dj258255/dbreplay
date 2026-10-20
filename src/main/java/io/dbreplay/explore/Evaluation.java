@@ -58,18 +58,30 @@ public record Evaluation(
 	 * @param currentQps 수위를 낼 때 쓴 종 DB의 지금의 초당 문장 수
 	 * @param confirmed  탐색을 멈춘 알람이 종 DB의 지표에 건 것이었으면 true(종 DB의 상한이 알람으로 확인됨), 아니면 false.
 	 *                   이 칸이 생기기 전(#80)의 평가 파일에는 없다
+	 * @param low        종 DB만의 건강 구간의 아래 끝. 따로 주지 않았으면 없고, 그때는 주 DB의 것을 쓴다(#129)
+	 * @param high       종 DB만의 건강 구간의 위 끝. 위와 같다
 	 */
 	public record Replica(TrafficModel traffic, double ceilingQps, double currentQps,
-			@JsonInclude(JsonInclude.Include.NON_NULL) Boolean confirmed) {
+			@JsonInclude(JsonInclude.Include.NON_NULL) Boolean confirmed,
+			@JsonInclude(JsonInclude.Include.NON_NULL) Double low,
+			@JsonInclude(JsonInclude.Include.NON_NULL) Double high) {
 
 		/** 확인 여부를 적지 않은 예전 모양. */
 		public Replica(TrafficModel traffic, double ceilingQps, double currentQps) {
 			this(traffic, ceilingQps, currentQps, null);
 		}
 
-		/** 이 종 DB의 수위. 건강 구간은 주 DB와 같은 것을 쓴다. */
-		public WaterLevel level(double low, double high) {
-			return new WaterLevel(currentQps, ceilingQps, low, high);
+		/** 건강 구간을 따로 적지 않은 모양. */
+		public Replica(TrafficModel traffic, double ceilingQps, double currentQps, Boolean confirmed) {
+			this(traffic, ceilingQps, currentQps, confirmed, null, null);
+		}
+
+		/**
+		 * 이 종 DB의 수위. 종 DB만의 건강 구간을 적었으면 그것을, 아니면 받은 구간(주 DB의 것)을 쓴다.
+		 * 원문 그림 11은 주 DB 0~80%, 종 DB 30~50%처럼 역할마다 구간을 다르게 둔다(#129).
+		 */
+		public WaterLevel level(double primaryLow, double primaryHigh) {
+			return new WaterLevel(currentQps, ceilingQps, low == null ? primaryLow : low, high == null ? primaryHigh : high);
 		}
 	}
 

@@ -111,6 +111,8 @@ public final class Main {
 			                   [--current-qps <지금의 초당 문장 수>] [--current-read-qps <읽기>] [--current-write-qps <쓰기>]
 			                   [--current-replica-qps <종 DB의 지금의 초당 문장 수>]
 			                   [--level-low 0.3] [--level-high 0.5]
+			                   [--primary-level-low <주 DB>] [--primary-level-high <주 DB>]
+			                   [--replica-level-low <종 DB>] [--replica-level-high <종 DB>]
 			                   [--read-nodes <읽기를 받는 노드 수>] [--min-read-nodes 1] [--max-read-nodes <한도>]
 			                   [--zones <존>=<노드 수>,... [--min-per-zone 1]] [--max-write-scale <주 DB를 키울 수 있는 배수>]
 			                   [--scale-command <명령> --apply-scale yes [--scale-verify-command <명령>]
@@ -642,8 +644,8 @@ public final class Main {
 		double ceilingQps = recordedQps * ceilingSpeed;
 		double currentQps = number(options,
 				readsOnly(options) ? "--current-read-qps" : writesOnly(options) ? "--current-write-qps" : "--current-qps", recordedQps);
-		WaterLevel level = new WaterLevel(currentQps, ceilingQps,
-				number(options, "--level-low", 0.30), number(options, "--level-high", 0.50));
+		Band primaryBand = band(options, "--primary-level-");
+		WaterLevel level = new WaterLevel(currentQps, ceilingQps, primaryBand.low(), primaryBand.high());
 		printLevel(level, recordedQps);
 		if (range != null) {
 			// 최솟값으로 판정한 수위와 최댓값으로 본 수위가 갈리는지 알려 준다. 갈리면 판정을 하나로 말할 수 없다
@@ -671,12 +673,16 @@ public final class Main {
 			double currentReplicaQps = number(options, "--current-replica-qps", replicaTraffic.qps());
 			System.out.printf("종 DB에 함께 튼 트래픽: 녹화 구간의 초당 문장 수 %.0f, 상한 배속에서 %.0f%n",
 					replicaTraffic.qps(), replicaCeilingQps);
-			System.out.println(replicaLevelLine(currentReplicaQps, replicaCeilingQps, level.low(), level.high()));
+			Band replicaBand = band(options, "--replica-level-");
+			System.out.println(replicaLevelLine(currentReplicaQps, replicaCeilingQps, replicaBand.low(), replicaBand.high()));
 			replicaConfirmed = replicaCeilingConfirmed(results);
 			System.out.println(replicaConfirmed ? "  종 DB의 상한은 종 DB의 알람으로 확인됐다"
 					: "  종 DB의 상한은 주 DB가 버틴 배속을 곱한 어림값이다. 탐색을 멈춘 알람이 종 DB의 것이 아니다");
-			replicaLevel = new WaterLevel(currentReplicaQps, replicaCeilingQps, level.low(), level.high());
-			replica = new Evaluation.Replica(replicaTraffic, replicaCeilingQps, currentReplicaQps, replicaConfirmed);
+			replicaLevel = new WaterLevel(currentReplicaQps, replicaCeilingQps, replicaBand.low(), replicaBand.high());
+			// 종 DB만의 구간을 주었을 때만 평가 파일에 남긴다. 안 주었으면 예전처럼 주 DB의 구간을 함께 쓴다
+			boolean own = options.containsKey("--replica-level-low") || options.containsKey("--replica-level-high");
+			replica = new Evaluation.Replica(replicaTraffic, replicaCeilingQps, currentReplicaQps, replicaConfirmed,
+					own ? replicaBand.low() : null, own ? replicaBand.high() : null);
 		}
 		ScaleAdvice advice = printReadWrite(options, traffic, ceilingSpeed, level, replicaLevel);
 
@@ -868,6 +874,20 @@ public final class Main {
 			case HEALTHY -> "적정";
 			case SHORT -> "부족";
 		};
+	}
+
+	record Band(double low, double high) {
+	}
+
+	/**
+	 * 한 역할의 건강 구간. 그 역할의 옵션(--primary-level-low, --replica-level-high 등)이 있으면 그것을, 없으면 두 역할에 함께
+	 * 쓰는 --level-low/--level-high를, 그것도 없으면 본문의 기본 30~50%를 쓴다. 원문 그림 11은 주 DB 0~80%, 종 DB 30~50%를
+	 * 보여 주지만 본문이 기본값을 30~50%로 적어 기본은 본문을 따른다(#129).
+	 */
+	static Band band(Map<String, String> options, String prefix) {
+		double low = number(options, "--level-low", 0.30);
+		double high = number(options, "--level-high", 0.50);
+		return new Band(number(options, prefix + "low", low), number(options, prefix + "high", high));
 	}
 
 	/** check --current-qps: 평가 파일의 상한은 그대로 두고 지금의 초당 문장 수로 수위를 다시 계산한 줄. */
@@ -1630,8 +1650,9 @@ public final class Main {
 			System.out.printf("  종 DB: 상한 초당 %.0f, 수위 %.0f%%%n", replica.ceilingQps(),
 					replica.level(evaluation.low(), evaluation.high()).level() * 100);
 			if (options.containsKey("--current-replica-qps")) {
+				WaterLevel own = replica.level(evaluation.low(), evaluation.high());
 				System.out.println(replicaLevelLine(number(options, "--current-replica-qps", 0), replica.ceilingQps(),
-						evaluation.low(), evaluation.high()));
+						own.low(), own.high()));
 			}
 		}
 		// 되풀이한 평가면 위의 상한이 범위의 최솟값이라는 것을 밝힌다. 한 번 돌린 평가면 지금과 같다

@@ -139,6 +139,16 @@ class MainTest {
 		assertEquals(List.of(), Main.singleRunNote(5));
 	}
 
+	/** 역할의 옵션이 있으면 그것을, 없으면 함께 쓰는 --level-*을, 그것도 없으면 30~50%를 쓴다 (#129). */
+	@Test
+	void picksTheHealthyBandPerRole() {
+		assertEquals(new Main.Band(0.30, 0.50), Main.band(Map.of(), "--primary-level-"));
+		assertEquals(new Main.Band(0.20, 0.60), Main.band(Map.of("--level-low", "0.2", "--level-high", "0.6"), "--replica-level-"));
+		Map<String, String> figure11 = Map.of("--primary-level-low", "0", "--primary-level-high", "0.8");
+		assertEquals(new Main.Band(0.0, 0.80), Main.band(figure11, "--primary-level-"));
+		assertEquals(new Main.Band(0.30, 0.50), Main.band(figure11, "--replica-level-"));
+	}
+
 	/** 2배속에서 시작해 첫 라운드부터 못 버티면 1배와 2배 사이는 모른다. "녹화한 부하보다 낮다"고 하면 틀린다 (#128). */
 	@Test
 	void aFailedFirstRoundAboveOneSpeedDoesNotClaimTheRecordedLoadFails() {
