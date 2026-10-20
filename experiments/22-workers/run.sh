@@ -11,6 +11,9 @@ SB="docker run --rm --network $NET dbreplay-exp01-sysbench sysbench oltp_read_wr
 RUN="docker run --rm --network $NET -v $ROOT/build/install/dbreplay:/app:ro -v $HERE:/exp -e DBREPLAY_PASSWORD=replay dbreplay-exp-runner"
 URL="jdbc:mysql://mysql84:3306/sbtest?sslMode=DISABLED&allowPublicKeyRetrieval=true"
 PAIRS=${PAIRS:-5}; O=${OUT:-out}   # #115의 두 번째 실행은 OUT=out/shared-timer
+# 탐색에 더 줄 옵션. #128에서 기본 시작 배속과 정밀도가 바뀌어, 앞의 실행과 같은 규칙으로 돌리려면
+# EXTRA="--start-speed 1 --precision 0.1"을 준다(#144)
+EXTRA=${EXTRA:-}
 
 mkdir -p $O; rm -f $O/times.txt $O/w*-*.txt
 [ -n "${SKIP_BUILD:-}" ] || (cd "$ROOT" && ./gradlew -q installDist)
@@ -45,7 +48,7 @@ while [ "$i" -le "$PAIRS" ]; do
   for w in 1 4; do
     name="w$w-$i"; t0=$(date +%s)
     $RUN /app/bin/dbreplay explore --trace /exp/$O/prod.trace.jsonl --url "$URL" --user root --reset-command true \
-      --only reads --workers "$w" --alarm-metric "active_sessions>=32" --max-speed 64 </dev/null > "$O/$name.txt" 2>&1 || true
+      --only reads --workers "$w" --alarm-metric "active_sessions>=32" --max-speed 64 $EXTRA </dev/null > "$O/$name.txt" 2>&1 || true
     echo "$name $t0 $(date +%s)" >> $O/times.txt
     echo "--- $name: $(grep -E '^상한' "$O/$name.txt" || echo '값 없음')"
   done
