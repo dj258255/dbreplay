@@ -94,6 +94,7 @@
 | 긴 녹화에서 피크 구간을 찾아 잘라 낸다 (#130) | 초당 10문장인 10초를 찾고, 잘라 낸 파일에 구간 앞에서 시작한 트랜잭션의 문장이 없다. 실험 22의 트래픽(30초)에서 15초 창은 초당 4,076문장(전체 평균 3,942)이었고 잘라 낸 61,125줄 가운데 걸친 트랜잭션의 문장 16개를 뺐다 | `PeakWindowTest`, 실험 22의 트래픽 파일로 한 번(2026-10-20) | 단위 테스트, 실제 파일 한 번 |
 | 재생기가 매초 자기 상태를 남긴다 (#127) | 2초 넘게 틀면 상태가 둘 이상 오고 마지막 상태의 끝난 수가 요약과 같다. 건너뛴 트랜잭션 제어는 넘긴 수에 들지 않는다. 실제 MySQL 16배속에서 2초째에 넘긴 82,446개 가운데 23,133개만 나간 것이 보였다 | `ReplayerTest.reportsProgressEverySecondAndALastStateThatMatchesTheSummary`, `MainTest.writesProgressLinesUnderOneHeader`, 실험 24 (`out/progress/`) | 단위 테스트, 실제 DB 한 번(배터리) |
 | 미리 연 연결을 첫 레코드에 데이터베이스가 없어도 쓴다 (#141) | 첫 줄이 데이터베이스 없는 SET GLOBAL인 트래픽을 데이터베이스를 바꿀 수 있는 대상에 틀면 미리 연 4개로 끝난다(고치기 전 5개). 못 바꾸는 대상은 데이터베이스를 아는 첫 레코드에서 그 데이터베이스로 4개를 더 연다 | `ReplayerTest.prewarmedConnectionsServeStatementsEvenWhenTheFirstRecordHasNoDatabase` | 단위 테스트(고치기 전 실패를 봤다) |
+| 미리 여는 연결 수 (#126) | 미리 여는 수만큼 시작 전에 열고 상한을 넘으면 상한까지만 연다. 실제 MySQL 16배속에서 16, 64, 256개의 늦은 비율 중앙값 14.8%, 10.6%, 11.4%로 판정하지 못했다. #141 전의 첫 측정은 셋 다 96% 남짓이었다 | `ReplayerTest.opensTheWarmConnectionsBeforeTheFirstStatement`, 실험 26 | 단위 테스트, 측정마다 한 번(값마다 세 번, 배터리) |
 
 ## 확인하지 못한 것
 
