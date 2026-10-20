@@ -64,6 +64,23 @@ class MarkdownReportTest {
 		assertTrue(md.contains("| 수위 | 11% | 29% |"));
 	}
 
+	/**
+	 * 원문 그림 4의 넷째 탭. 한 번의 실행이 가장 오래 걸린 모양이 첫 줄에 오고, 비율의 합은 100%다(#131).
+	 * 변경 후의 SELECT는 400µs, INSERT는 50µs이고 둘이 100번씩이라 비율은 50%씩이다.
+	 */
+	@Test
+	void listsTheSlowestStatementsAfterTheChangeWithShareAndMax() throws IOException {
+		String md = report(null, null, null, null);
+
+		int section = md.indexOf("## 변경 후 실행 시간이 가장 긴 SQL 상위 10");
+		assertTrue(section >= 0, md);
+		String table = md.substring(section);
+		int select = table.indexOf("| `SELECT c FROM t WHERE id BETWEEN ? AND ?` | 100 → 100 | 50.00% → 50.00% | 0.100ms → 0.400ms |");
+		int insert = table.indexOf("| `INSERT INTO t \\| u VALUES (?)` | 100 → 100 | 50.00% → 50.00% |");
+		assertTrue(select > 0, table);
+		assertTrue(insert > select, "오래 걸린 SELECT가 먼저다");
+	}
+
 	@Test
 	void leavesOutTheSectionsItHasNoDataFor() throws IOException {
 		String md = report(null, null, null, null);
