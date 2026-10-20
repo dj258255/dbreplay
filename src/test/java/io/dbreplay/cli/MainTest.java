@@ -29,6 +29,7 @@ import io.dbreplay.explore.ScaleRun;
 import io.dbreplay.explore.TrafficModel;
 import io.dbreplay.explore.WaterLevel;
 import io.dbreplay.explore.ZonePlan;
+import io.dbreplay.replay.ProgressListener;
 
 class MainTest {
 
@@ -164,6 +165,24 @@ class MainTest {
 	void rejectsANonPositiveGrowth() {
 		assertThrows(IllegalArgumentException.class, () -> Main.checkQpsOptions(Map.of("--growth", "0")));
 		assertThrows(IllegalArgumentException.class, () -> Main.checkQpsOptions(Map.of("--growth", "-1")));
+	}
+
+	/** --progress 파일은 머리줄 하나와 상태마다 한 줄이다. 시작할 때 예전 줄을 비운다 (#127). */
+	@Test
+	void writesProgressLinesUnderOneHeader(@TempDir Path dir) throws Exception {
+		Path file = dir.resolve("progress.tsv");
+		Files.writeString(file, "예전 실행의 줄\n");
+		Map<String, String> options = Map.of("--progress", file.toString());
+
+		Main.clearProgress(options);
+		ProgressListener listener = Main.progressFile(options, "8.00");
+		listener.accept(new ProgressListener.Progress(0, 1.0, 120, 100, 90, 3, 1, 16, 37.4, false));
+		listener.accept(new ProgressListener.Progress(0, 2.4, 200, 200, 200, 5, 1, 18, -1, true));
+
+		List<String> lines = Files.readAllLines(file);
+		assertEquals(List.of(Main.PROGRESS_HEADER, "8.00\t0\t1.0\t120\t100\t90\t10\t20\t3\t1\t16\t37",
+				"8.00\t0\t끝 2.4\t200\t200\t200\t0\t0\t5\t1\t18\t-"), lines);
+		assertNull(Main.progressFile(Map.of(), "-"));
 	}
 
 	/** 1분 아래는 초로 적는다 (#130). */

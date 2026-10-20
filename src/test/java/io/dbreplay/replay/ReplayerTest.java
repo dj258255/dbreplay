@@ -122,6 +122,33 @@ class ReplayerTest {
 				+ summary.elapsedMicros());
 	}
 
+	/**
+	 * 2초 넘게 틀면 1초마다의 상태가 둘 이상 오고, 끝난 뒤의 마지막 상태는 요약과 맞는다(#127). 건너뛴 트랜잭션 제어는 넘긴 수에 들지 않는다.
+	 */
+	@Test
+	void reportsProgressEverySecondAndALastStateThatMatchesTheSummary() throws IOException {
+		FakeTarget target = new FakeTarget();
+		List<ProgressListener.Progress> seen = Collections.synchronizedList(new ArrayList<>());
+		List<TraceRecord> records = new ArrayList<>();
+		for (int i = 0; i <= 25; i++) {
+			records.add(statement("A", i * 100L, "s" + i));
+		}
+		records.add(statement("A", 2_550, "COMMIT"));
+
+		ReplaySummary summary = Replayer.run(trace(records.toArray(TraceRecord[]::new)), target, r -> { }, BY_STATEMENT, seen::add);
+
+		List<ProgressListener.Progress> beats = seen.stream().filter(p -> !p.last()).toList();
+		List<ProgressListener.Progress> last = seen.stream().filter(ProgressListener.Progress::last).toList();
+		assertTrue(beats.size() >= 2, "1초마다의 상태가 둘 이상 와야 한다: " + seen);
+		assertEquals(1, last.size());
+		ProgressListener.Progress end = last.getFirst();
+		assertEquals(summary.statements(), end.done());
+		assertEquals(26, end.dispatched(), "COMMIT은 문장 단위에서 건너뛴다");
+		assertEquals(0, end.running());
+		assertEquals(0, end.waiting());
+		assertTrue(beats.getFirst().done() < end.done(), "도중의 상태는 끝보다 적게 끝났어야 한다");
+	}
+
 	@Test
 	void replaysEachSessionInOrderOnItsOwnConnection() throws IOException {
 		FakeTarget target = new FakeTarget();
