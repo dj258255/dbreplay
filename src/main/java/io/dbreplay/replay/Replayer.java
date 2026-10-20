@@ -74,6 +74,18 @@ public final class Replayer {
 			return new Options(speed, Unit.STATEMENT, maxConnections, warmConnections, lookaheadMicros, lateThresholdMicros, true);
 		}
 
+		/**
+		 * 시작하기 전에 열어 둘 연결 수. 원문 그림 3의 재생 에이전트는 재생 전에 DB마다 연결을 미리 다 연다(#126).
+		 * 연결 상한보다 크면 상한으로 줄인다.
+		 */
+		public Options withWarmConnections(int warmConnections) {
+			if (warmConnections < 0) {
+				throw new IllegalArgumentException("미리 여는 연결 수는 0 이상이어야 한다: " + warmConnections);
+			}
+			return new Options(speed, unit, maxConnections, Math.min(warmConnections, maxConnections), lookaheadMicros,
+					lateThresholdMicros, readsOnly);
+		}
+
 		public Options withMaxConnections(int maxConnections) {
 			return new Options(speed, unit, maxConnections, Math.min(warmConnections, maxConnections), lookaheadMicros,
 					lateThresholdMicros, readsOnly);
