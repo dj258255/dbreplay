@@ -52,9 +52,22 @@ class ExplorerTest {
 		return Explorer.explore(speed -> round(speed, 0), judge, options, r -> { });
 	}
 
+	/**
+	 * 원문 그림 5와 9의 라운드 순서다. 8과 6과 5.5에서 알람이 울리고 5와 5.25는 버텨 5.25에서 끝난다. 기본값(시작 2, 정밀도 5%)이
+	 * 이 순서를 그대로 내야 한다(#128).
+	 */
+	@Test
+	void defaultsReproduceTheRoundsInTheArticleFigure() throws Exception {
+		Explorer.Result result = explore(alarmAbove(5.3), Explorer.Options.defaults());
+
+		assertEquals(List.of(2.0, 4.0, 8.0, 6.0, 5.0, 5.5, 5.25), speeds(result));
+		assertEquals(5.25, result.ceilingSpeed());
+		assertEquals(RoundJudge.State.OVERLOADED, result.stoppedBy());
+	}
+
 	@Test
 	void doublesUntilAnAlarmFiresThenHalvesTheGap() throws Exception {
-		Explorer.Result result = explore(alarmAbove(5.3), Explorer.Options.defaults());
+		Explorer.Result result = explore(alarmAbove(5.3), new Explorer.Options(1, 64, 0.1, 12));
 
 		assertEquals(List.of(1.0, 2.0, 4.0, 8.0, 6.0, 5.0, 5.5), speeds(result));
 		assertEquals(5.0, result.ceilingSpeed());
@@ -76,7 +89,7 @@ class ExplorerTest {
 	void reportsNoCeilingWhenTheFirstRoundAlarms() throws Exception {
 		Explorer.Result result = explore(alarmAbove(0.5), Explorer.Options.defaults());
 
-		assertEquals(List.of(1.0), speeds(result));
+		assertEquals(List.of(2.0), speeds(result));
 		assertEquals(0.0, result.ceilingSpeed());
 	}
 
@@ -93,7 +106,7 @@ class ExplorerTest {
 	void treatsADistortedRoundAsUnknownNotAsHeld() throws Exception {
 		RoundJudge judge = alarmAbove(1_000);
 		Explorer.Result result = Explorer.explore(speed -> round(speed, speed >= 8 ? 400 : 10), judge,
-				Explorer.Options.defaults(), r -> { });
+				new Explorer.Options(1, 64, 0.1, 12), r -> { });
 
 		assertEquals(RoundJudge.State.DISTORTED, result.rounds().get(3).verdict().state());
 		assertEquals(RoundJudge.State.DISTORTED, result.stoppedBy());

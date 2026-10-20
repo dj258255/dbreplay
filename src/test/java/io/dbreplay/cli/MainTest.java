@@ -139,6 +139,15 @@ class MainTest {
 		assertEquals(List.of(), Main.singleRunNote(5));
 	}
 
+	/** 2배속에서 시작해 첫 라운드부터 못 버티면 1배와 2배 사이는 모른다. "녹화한 부하보다 낮다"고 하면 틀린다 (#128). */
+	@Test
+	void aFailedFirstRoundAboveOneSpeedDoesNotClaimTheRecordedLoadFails() {
+		assertTrue(Main.firstRoundFailed(1).endsWith("녹화한 부하보다 낮다"));
+		String two = Main.firstRoundFailed(2);
+		assertTrue(two.contains("녹화한 부하의 2.00배보다 낮다"));
+		assertTrue(two.contains("--start-speed 1"));
+	}
+
 	/** 중앙값이 0이면 퍼짐을 0%로 찍지 않는다. 실험 17에서 [5.5, 19, 0, 0, 0]이 "퍼짐 0%"로 나왔다 (#91). */
 	@Test
 	void doesNotCallItZeroSpreadWhenTheMedianIsZero() {
