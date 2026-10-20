@@ -217,11 +217,19 @@ public final class Replayer {
 				Dispatcher dispatcher = options.unit() == Unit.SESSION
 						? new SessionDispatcher(executor)
 						: new UnitDispatcher(executor);
+				// 슬로우 로그의 첫 줄은 녹화를 켠 SET GLOBAL이라 데이터베이스가 없다. 데이터베이스마다 연결을 따로 모으는
+				// 대상(PostgreSQL)이면 그 칸의 연결은 다른 문장이 쓰지 못하므로, 데이터베이스를 아는 첫 레코드에서 한 번 더 연다(#141)
+				boolean prewarmForDb = false;
 				for (TraceRecord r; (r = trace.next()) != null; seq++) {
+					if (seq == 0 && options.unit() != Unit.SESSION) {
+						pool.prewarm(r.db(), options.warmConnections());
+						prewarmForDb = r.db() == null && !target.switchesDatabase();
+					}
+					else if (prewarmForDb && r.db() != null) {
+						pool.prewarm(r.db(), options.warmConnections());
+						prewarmForDb = false;
+					}
 					if (seq == 0) {
-						if (options.unit() != Unit.SESSION) {
-							pool.prewarm(r.db(), options.warmConnections());
-						}
 						baseMicros = fixedBaseMicros > 0 ? Math.min(fixedBaseMicros, r.startMicros()) : r.startMicros();
 						originNanos = System.nanoTime() + lookaheadNanos;
 					}

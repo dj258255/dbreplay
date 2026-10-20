@@ -36,6 +36,12 @@ class ReplayerTest {
 		final AtomicInteger opened = new AtomicInteger();
 		final AtomicInteger closed = new AtomicInteger();
 		boolean refuseConnections;
+		boolean switchesDatabase;
+
+		@Override
+		public boolean switchesDatabase() {
+			return switchesDatabase;
+		}
 
 		@Override
 		public TargetSession open(String db) throws Exception {
@@ -147,6 +153,33 @@ class ReplayerTest {
 		assertEquals(0, end.running());
 		assertEquals(0, end.waiting());
 		assertTrue(beats.getFirst().done() < end.done(), "도중의 상태는 끝보다 적게 끝났어야 한다");
+	}
+
+	/**
+	 * 슬로우 로그의 첫 줄은 녹화를 켠 SET GLOBAL이라 데이터베이스가 없다. 그 칸에 미리 열면 나머지 문장이 쓰지 못해 도중에 다 새로 열었다
+	 * (#126의 첫 측정, #141). 데이터베이스를 바꿀 수 있는 대상(MySQL)은 칸이 하나라 미리 연 연결로 끝나고, 못 바꾸는 대상(PostgreSQL)은
+	 * 데이터베이스를 아는 첫 레코드에서 그 데이터베이스로 한 번 더 미리 연다.
+	 */
+	@Test
+	void prewarmedConnectionsServeStatementsEvenWhenTheFirstRecordHasNoDatabase() throws IOException {
+		List<TraceRecord> records = new ArrayList<>();
+		records.add(new TraceRecord("0", 0, 100, "SET GLOBAL slow_query_log=ON", null, 0, 0L, null, null));
+		for (int i = 1; i <= 10; i++) {
+			records.add(new TraceRecord("A", i * 20_000L, 100, "SELECT " + i, "shop", 0, 0L, null, null));
+		}
+		TraceRecord[] trace = records.toArray(TraceRecord[]::new);
+		Replayer.Options warm4 = new Replayer.Options(1, Replayer.Unit.STATEMENT, 500, 4, 200_000, 50_000, false);
+
+		FakeTarget mysql = new FakeTarget();
+		mysql.switchesDatabase = true;
+		Replayer.run(trace(trace), mysql, r -> { }, warm4);
+		assertEquals(4, mysql.opened.get(), "미리 연 넷으로 끝나야 한다. 도중에 새로 열면 칸이 갈린 것이다");
+		assertEquals(10, mysql.executed.size());
+
+		FakeTarget postgres = new FakeTarget();
+		Replayer.run(trace(trace), postgres, r -> { }, warm4);
+		assertEquals(List.of("null", "null", "null", "null", "shop", "shop", "shop", "shop"), postgres.openedWith);
+		assertEquals(10, postgres.executed.size());
 	}
 
 	@Test
