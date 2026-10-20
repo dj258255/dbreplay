@@ -2,6 +2,7 @@ package io.dbreplay.replay;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.lang.management.ManagementFactory;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -93,7 +94,11 @@ public final class Replayer {
 	private final SessionPool pool;
 	private final long fixedBaseMicros;
 	private final SpinTimer sharedTimer;
+	private final ProgressListener progress;
+	private final int part;
 
+	private final LongAdder dispatched = new LongAdder();
+	private final LongAdder sent = new LongAdder();
 	private final LongAdder statements = new LongAdder();
 	private final LongAdder errors = new LongAdder();
 	private final LongAdder origErrors = new LongAdder();
@@ -108,18 +113,31 @@ public final class Replayer {
 	private long originNanos;
 	private SpinTimer timer;
 
-	/** @param sharedTimer 다른 재생기와 함께 쓰는 타이머. null이면 이 재생기가 제 것을 띄운다 */
-	private Replayer(Target target, ResultSink sink, Options options, long fixedBaseMicros, SpinTimer sharedTimer) {
+	/**
+	 * @param sharedTimer 다른 재생기와 함께 쓰는 타이머. null이면 이 재생기가 제 것을 띄운다
+	 * @param progress    1초마다 상태를 받을 곳. null이면 세지 않는다
+	 * @param part        나눠 튼 조각의 번호. 상태에 붙는다
+	 */
+	private Replayer(Target target, ResultSink sink, Options options, long fixedBaseMicros, SpinTimer sharedTimer,
+			ProgressListener progress, int part) {
 		this.target = target;
 		this.sink = sink;
 		this.options = options;
 		this.pool = new SessionPool(target, options.maxConnections());
 		this.fixedBaseMicros = fixedBaseMicros;
 		this.sharedTimer = sharedTimer;
+		this.progress = progress;
+		this.part = part;
 	}
 
 	public static ReplaySummary run(TraceReader trace, Target target, ResultSink sink, Options options) throws IOException {
-		return new Replayer(target, sink, options, 0, null).run(trace);
+		return new Replayer(target, sink, options, 0, null, null, 0).run(trace);
+	}
+
+	/** 1초마다 상태를 progress에 넘기며 튼다(#127). */
+	public static ReplaySummary run(TraceReader trace, Target target, ResultSink sink, Options options, ProgressListener progress)
+			throws IOException {
+		return new Replayer(target, sink, options, 0, null, progress, 0).run(trace);
 	}
 
 	/**
@@ -130,7 +148,13 @@ public final class Replayer {
 	 */
 	public static ReplaySummary run(TraceReader trace, Target target, ResultSink sink, Options options, long baseMicros)
 			throws IOException {
-		return new Replayer(target, sink, options, baseMicros, null).run(trace);
+		return new Replayer(target, sink, options, baseMicros, null, null, 0).run(trace);
+	}
+
+	/** 기준 시각을 정해 두고, 1초마다 상태를 progress에 넘기며 튼다. progress가 null이면 위와 같다(#127). */
+	public static ReplaySummary run(TraceReader trace, Target target, ResultSink sink, Options options, long baseMicros,
+			ProgressListener progress) throws IOException {
+		return new Replayer(target, sink, options, baseMicros, null, progress, 0).run(trace);
 	}
 
 	/**
@@ -143,13 +167,21 @@ public final class Replayer {
 	 */
 	public static ReplaySummary runTogether(List<TraceReader> traces, Target target, Options options, long baseMicros)
 			throws IOException {
+		return runTogether(traces, target, options, baseMicros, null);
+	}
+
+	/** 조각마다 1초마다의 상태를 조각 번호와 함께 progress에 넘긴다(#127). */
+	public static ReplaySummary runTogether(List<TraceReader> traces, Target target, Options options, long baseMicros,
+			ProgressListener progress) throws IOException {
 		List<ReplaySummary> summaries = new ArrayList<>();
 		try (SpinTimer shared = new SpinTimer()) {
 			List<CompletableFuture<ReplaySummary>> parts = new ArrayList<>();
-			for (TraceReader trace : traces) {
+			for (int i = 0; i < traces.size(); i++) {
+				TraceReader trace = traces.get(i);
+				int part = i;
 				parts.add(CompletableFuture.supplyAsync(() -> {
 					try {
-						return new Replayer(target, r -> { }, options, baseMicros, shared).run(trace);
+						return new Replayer(target, r -> { }, options, baseMicros, shared, progress, part).run(trace);
 					}
 					catch (IOException e) {
 						throw new UncheckedIOException(e);
@@ -177,6 +209,7 @@ public final class Replayer {
 		long baseMicros = 0;
 		long lastStartMicros = 0;
 
+		Monitor monitor = progress == null ? null : new Monitor();
 		// 함께 쓰는 타이머는 띄운 쪽(runTogether)이 닫는다. 자원이 null이면 try는 닫지 않는다
 		try (SpinTimer own = sharedTimer == null ? new SpinTimer() : null) {
 			timer = sharedTimer == null ? own : sharedTimer;
@@ -202,11 +235,19 @@ public final class Replayer {
 						skipped++;
 						continue;
 					}
+					if (!r.endsSession()) {
+						dispatched.increment();
+					}
 					dispatcher.accept(new Item(seq, r, planNanos));
 				}
 				dispatcher.finish();
 			}
 			pool.closeAll();
+		}
+		finally {
+			if (monitor != null) {
+				monitor.stop();
+			}
 		}
 
 		long elapsedMicros = statements.sum() == 0 ? 0 : (lastDoneNanos.get() - originNanos) / 1_000;
@@ -253,6 +294,65 @@ public final class Replayer {
 		String second = words.length > 1 ? words[1] : "";
 		return Set.of("COMMIT", "END", "ABORT", "ROLLBACK").contains(words[0])
 				&& !second.equals("TO") && !second.equals("PREPARED");
+	}
+
+	/**
+	 * 1초마다 상태를 progress에 넘기는 스레드. 재생기가 밀리는 순간을 재생이 끝난 뒤의 요약으로는 볼 수 없어서 둔다(#127).
+	 * CPU는 이 프로세스 전체의 것이다. 나눠 튼 재생기들은 같은 값을 본다.
+	 */
+	private final class Monitor {
+
+		private final long startNanos = System.nanoTime();
+		private final Thread thread;
+		private volatile boolean running = true;
+		private long lastCpuNanos = processCpuNanos();
+		private long lastWallNanos = startNanos;
+
+		Monitor() {
+			thread = Thread.ofPlatform().name("dbreplay-progress").daemon().start(() -> {
+				while (running) {
+					try {
+						Thread.sleep(1_000);
+					}
+					catch (InterruptedException e) {
+						return;
+					}
+					if (running) {
+						emit(false);
+					}
+				}
+			});
+		}
+
+		void stop() {
+			running = false;
+			thread.interrupt();
+			try {
+				thread.join();
+			}
+			catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+			}
+			emit(true);
+		}
+
+		private synchronized void emit(boolean last) {
+			long now = System.nanoTime();
+			long cpu = processCpuNanos();
+			double cpuPercent = cpu < 0 || lastCpuNanos < 0 || now == lastWallNanos ? -1
+					: 100.0 * (cpu - lastCpuNanos) / (now - lastWallNanos) / Runtime.getRuntime().availableProcessors();
+			lastCpuNanos = cpu;
+			lastWallNanos = now;
+			long connections = options.unit() == Unit.SESSION ? sessionsOpened.get() : pool.opened();
+			progress.accept(new ProgressListener.Progress(part, (now - startNanos) / 1e9, dispatched.sum(), sent.sum(),
+					statements.sum(), late.sum() - lateBusy.sum(), errors.sum(), connections, cpuPercent, last));
+		}
+	}
+
+	/** 이 프로세스가 쓴 CPU 시간. 알 수 없는 JVM이면 -1. */
+	private static long processCpuNanos() {
+		return ManagementFactory.getOperatingSystemMXBean() instanceof com.sun.management.OperatingSystemMXBean os
+				? os.getProcessCpuTime() : -1;
 	}
 
 	/** 트래픽 파일의 줄을 순서대로 받아 실행 스레드에 나눠 준다. 한 스레드만 부른다. */
@@ -330,6 +430,7 @@ public final class Replayer {
 						return;
 					}
 					long sentNanos = System.nanoTime();
+					sent.increment();
 					int error = execute(session, item.record());
 					freeAtNanos = System.nanoTime();
 					report(item, sentNanos, freeAtNanos, busy, error);
@@ -371,6 +472,7 @@ public final class Replayer {
 			if (options.unit() == Unit.STATEMENT) {
 				if (sessionState || TRANSACTION_CONTROL.contains(words[0])) {
 					skipped++; // 문장마다 연결이 달라서 세션 설정과 트랜잭션 제어는 뜻이 없다
+					dispatched.decrement();
 				}
 				else {
 					executor.execute(() -> runAlone(item));
@@ -382,6 +484,7 @@ public final class Replayer {
 				close(r.session());
 				if (sessionState) {
 					skipped++; // 돌려 쓰는 연결에 남의 세션 설정이 남으면 안 된다
+					dispatched.decrement();
 				}
 				else {
 					executor.execute(() -> runAlone(item));
@@ -422,6 +525,7 @@ public final class Replayer {
 			String db = item.record().db();
 			TargetSession session = pool.acquire(db);
 			long sentNanos = System.nanoTime();
+			sent.increment();
 			int error = execute(session, item.record());
 			long doneNanos = System.nanoTime();
 			if (session != null) {
@@ -464,6 +568,7 @@ public final class Replayer {
 					boolean busy = freeAtNanos > item.planNanos();
 					timer.sleepUntil(item.planNanos());
 					long sentNanos = System.nanoTime();
+					sent.increment();
 					int error = execute(session, item.record());
 					freeAtNanos = System.nanoTime();
 					report(item, sentNanos, freeAtNanos, busy, error);

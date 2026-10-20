@@ -10,6 +10,7 @@ import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -56,6 +57,7 @@ import io.dbreplay.postgres.CsvLogConverter;
 import io.dbreplay.postgres.PostgresCapture;
 import io.dbreplay.replay.JdbcTarget;
 import io.dbreplay.replay.ReplaySummary;
+import io.dbreplay.replay.ProgressListener;
 import io.dbreplay.replay.Replayer;
 import io.dbreplay.replay.ResultWriter;
 import io.dbreplay.replay.TraceSelection;
@@ -93,6 +95,9 @@ public final class Main {
 			                   [--speed 1] [--unit transaction|statement|session] [--max-connections 500]
 			                   [--only reads] [--out <결과 파일>] [--run-out <재생 기록 파일>] [--metrics on] [지표 옵션]
 			                   [--profile-command <명령>] [주종 옵션] [--shard <i>/<N> [--start-at <에포크 밀리초>]]
+			                   [--progress <상태 파일>]
+			                   --progress를 주면 재생하는 동안 1초마다 재생기의 상태(넘긴·보낸·끝난 문장, 늦은 문장, 오류, 연결, CPU)를
+			                   그 파일에 한 줄씩 쓴다. explore에 주면 줄 앞에 라운드의 배속이 붙는다(원문 그림 7의 매초 통계)
 			                   --shard는 원본의 연결 번호로 N개로 나눈 것 가운데 i번째만 튼다. 장비 여러 대가 나눠 틀 때
 			                   장비마다 같은 --start-at을 준다. 시각의 기준은 전체 트래픽의 첫 문장이다
 
@@ -371,9 +376,11 @@ public final class Main {
 			// 장비 여러 대가 나눠 틀 때는 같은 시각에 시작하고, 전체 트래픽의 첫 문장을 같은 기준으로 삼는다(#81)
 			waitUntil(options.get("--start-at"));
 			ReplicaRun replicaRun = ReplicaRun.start(options, replayOptions.speed());
+			clearProgress(options);
+			ProgressListener progress = progressFile(options, "-");
 			s = options.containsKey("--shard")
-					? Replayer.run(trace, target, newErrors, replayOptions, firstStartMicros(required(options, "--trace"), r -> true))
-					: Replayer.run(trace, target, newErrors, replayOptions);
+					? Replayer.run(trace, target, newErrors, replayOptions, firstStartMicros(required(options, "--trace"), r -> true), progress)
+					: Replayer.run(trace, target, newErrors, replayOptions, progress);
 			replicaSummary = replicaRun == null ? null : replicaRun.join();
 			metrics = sampler.stop();
 			failures = sampler.failures();
@@ -586,6 +593,7 @@ public final class Main {
 		// 탐색은 몇 분이 걸린다. 잘못 준 값은 시작하기 전에 거른다
 		checkScaleOptions(options);
 		int repeat = repeat(options);
+		clearProgress(options);
 		JdbcTarget target = target(options);
 		String tracePath = required(options, "--trace");
 		Sandbox sandbox = options.containsKey("--snapshot") ? sandbox(target, options) : null;
@@ -776,7 +784,8 @@ public final class Main {
 			Map<String, double[]> metrics;
 			try (MetricSampler sampler = sampler(target, options)) {
 				ReplicaRun replicaRun = ReplicaRun.start(options, speed);
-				s = replayInShards(tracePath, selection, target, replayOptions(options, speed), workers);
+				s = replayInShards(tracePath, selection, target, replayOptions(options, speed), workers,
+						progressFile(options, String.format("%.2f", speed)));
 				replicaSummary = replicaRun == null ? null : replicaRun.join();
 				metrics = sampler.stop();
 				// 라운드 도중에 지표를 읽다 실패했으면 여기서 멈춘다. 그 뒤의 값이 없어 알람이 못 본 것을 버틴 것으로 읽게 된다
@@ -1418,10 +1427,10 @@ public final class Main {
 	 * 장비를 넘어 나누려면 장비마다 replay --shard를 같은 --start-at으로 돌린다.
 	 */
 	private static ReplaySummary replayInShards(String tracePath, Predicate<TraceRecord> selection, JdbcTarget target,
-			Replayer.Options replayOptions, int workers) throws Exception {
+			Replayer.Options replayOptions, int workers, ProgressListener progress) throws Exception {
 		if (workers == 1) {
 			try (TraceReader trace = openTrace(tracePath, selection)) {
-				return Replayer.run(trace, target, r -> { }, replayOptions);
+				return Replayer.run(trace, target, r -> { }, replayOptions, progress);
 			}
 		}
 		long base = firstStartMicros(tracePath, selection);
@@ -1430,12 +1439,61 @@ public final class Main {
 			for (int i = 0; i < workers; i++) {
 				traces.add(openTrace(tracePath, selection.and(TraceSelection.shard(i, workers))));
 			}
-			return Replayer.runTogether(traces, target, replayOptions, base);
+			return Replayer.runTogether(traces, target, replayOptions, base, progress);
 		}
 		finally {
 			for (TraceReader trace : traces) {
 				trace.close();
 			}
+		}
+	}
+
+	static final String PROGRESS_HEADER = "라운드\t조각\t초\t넘김\t보냄\t끝남\t실행중\t대기\t늦음\t오류\t연결\tCPU%";
+
+	/**
+	 * --progress의 한 줄. 탭으로 나눈다. 실행중은 보냈지만 안 끝난 문장, 대기는 넘겼지만 아직 안 보낸 문장이다.
+	 * 마지막 줄(재생이 끝난 뒤)은 초 앞에 "끝"을 붙인다(#127).
+	 */
+	static String progressLine(String round, ProgressListener.Progress p) {
+		return String.join("\t", round, String.valueOf(p.part()), (p.last() ? "끝 " : "") + String.format("%.1f", p.seconds()),
+				String.valueOf(p.dispatched()), String.valueOf(p.sent()), String.valueOf(p.done()), String.valueOf(p.running()),
+				String.valueOf(p.waiting()), String.valueOf(p.late()), String.valueOf(p.errors()), String.valueOf(p.connections()),
+				p.cpuPercent() < 0 ? "-" : String.format("%.0f", p.cpuPercent()));
+	}
+
+	/**
+	 * --progress를 줬으면 그 파일에 줄을 덧붙이는 곳. 없으면 null. 머리줄은 파일이 없거나 비었을 때 한 번 쓴다.
+	 * 1초에 한 줄이라 줄마다 열고 닫는다. explore는 라운드마다 이것을 새로 만들고 같은 파일에 잇는다.
+	 * 예전 실행의 줄과 섞이지 않게 replay와 explore는 시작할 때 {@link #clearProgress}로 비운다.
+	 */
+	static ProgressListener progressFile(Map<String, String> options, String round) throws IOException {
+		String name = options.get("--progress");
+		if (name == null) {
+			return null;
+		}
+		Path path = Path.of(name);
+		synchronized (Main.class) {
+			if (!Files.exists(path) || Files.size(path) == 0) {
+				Files.writeString(path, PROGRESS_HEADER + "\n", StandardCharsets.UTF_8);
+			}
+		}
+		return p -> {
+			synchronized (Main.class) {
+				try {
+					Files.writeString(path, progressLine(round, p) + "\n", StandardCharsets.UTF_8, StandardOpenOption.CREATE,
+							StandardOpenOption.APPEND);
+				}
+				catch (IOException e) {
+					// 상태를 못 써도 재생은 계속한다. 상태는 보조 기록이다
+					System.err.println("--progress 파일에 쓰지 못했다: " + e.getMessage());
+				}
+			}
+		};
+	}
+
+	static void clearProgress(Map<String, String> options) throws IOException {
+		if (options.containsKey("--progress")) {
+			Files.deleteIfExists(Path.of(options.get("--progress")));
 		}
 	}
 
