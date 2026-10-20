@@ -24,6 +24,8 @@ v0.3.0으로 묶는다. 원문 대조에서 남은 "없음"과 "부분"을 메�
 - 확장의 확인과 되돌리기(#86). `--scale-verify-command`가 실패하면 `--scale-rollback-command`로 되돌린다. 불린 명령은 `--scale-log`에 지문으로 남는다.
 - 등록 규칙과 상주 평가(#87). 트래픽 모양이 안정적이고(`--register-max-distance`) QPS가 충분한(`--register-min-qps`) 대상만 평가한다. `manage --every <분>`은 떠 있으면서 주기마다 훑는다.
 - 샌드박스 띄우기(#84). `sandbox-create --like <운영>`이 같은 판의 도커 컨테이너를 띄우고 운영의 파라미터를 옮긴다. `sandbox-diff`, `sandbox-drop`.
+- 역할별 건강 구간(#129). `explore --primary-level-low/high`, `--replica-level-low/high`. 원문 그림 11은 주 DB 0~80%, 종 DB 30~50%를 쓴다.
+  기본은 본문의 30~50%를 두 역할에 함께 쓴다. 종 DB만의 구간은 평가 파일에 남아 `check`, 리포트, 화면이 그것으로 판정한다.
 - 화면과 HTTP API(#88). `serve --dir <작업 폴더>`가 평가와 리포트를 보여 주고, `--targets`에 등록한 대상 이름으로만 재생을 맡는다. API는 토큰을 요구한다.
 
 ### 바뀐 것

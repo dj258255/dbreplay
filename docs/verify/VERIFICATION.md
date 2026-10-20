@@ -88,6 +88,7 @@
 | 풀이 동시에 여는 연결을 4개까지로 묶는다 (#121) | 자리가 찼으면 새로 열지 않고 돌아온 연결을 받는다. 못 열면 그 단위가 null을 받고 자리를 돌려놓는다. 실제 DB에서 16배속의 늦은 비율 중앙값 32.1% → 17.8%, 연결 여는 시간 중앙값 14~123ms → 2~8ms. explore 읽기 상한은 16~20배속(중앙값 19)으로 오르지 않았다 | `SessionPoolTest`, 실험 24 (`out/limited-opens/`), 실험 22 (`out/limited-opens/`) | 배속마다 세 번, explore 5쌍, 한 번 돌림 |
 | 읽기만 24배속에서 CPU가 다 차는가 (#123) | 장비 전체 58~76%(중앙값 73%), MySQL 4.8~5.4코어, 재생기 4.8~5.1코어. 두 컨테이너의 합(중앙값 84%)이 장비 전체보다 커 어느 한쪽이 틀렸다. 판정하지 못한다 | 실험 25 | 배속마다 다섯 번, 한 번 돌림 (배터리) |
 | 탐색의 기본값이 원문 그림의 라운드 순서를 낸다 (#128) | 시작 2, 정밀도 5%로 알람이 5.3배 위에서 울리면 2, 4, 8, 6, 5, 5.5, 5.25를 돌고 5.25에서 끝난다. 2배속부터 못 버티면 "녹화한 부하보다 낮다"고 하지 않는다 | `ExplorerTest.defaultsReproduceTheRoundsInTheArticleFigure`, `MainTest.aFailedFirstRoundAboveOneSpeedDoesNotClaimTheRecordedLoadFails` | 단위 테스트 |
+| 건강 구간을 주 DB와 종 DB에 따로 준다 (#129) | 역할의 옵션 → 함께 쓰는 `--level-*` → 30~50% 순으로 고른다. 종 DB만의 구간은 평가 파일에 남고 `check`, 리포트, 화면이 그것으로 판정한다. 주 DB 0~80%, 종 DB 30~50%에서 60%는 주 DB 적정, 종 DB 부족 | `MainTest.picksTheHealthyBandPerRole`, `EvaluationTest.judgesTheReplicaWithItsOwnBandWhenOneIsGiven` | 단위 테스트 |
 
 ## 확인하지 못한 것
 
