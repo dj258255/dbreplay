@@ -123,6 +123,9 @@ public final class Main {
 			                   [--trace <지금의 트래픽 파일>] [--max-traffic-distance 0.2]
 			                   [--current-qps <지금의 초당 문장 수>] [--current-replica-qps <종 DB>] [--profile-command <명령>] [explore에 줬던 알람 옵션]
 			                   [--measure-url <운영 JDBC URL> [--measure-user <계정>] [--measure-seconds 60]]
+			                   [--growth <배수> [--read-nodes <읽기를 받는 노드 수>]]
+			                   --growth를 주면 기준 QPS(잰 값, --current-qps, 평가 때의 값 순)에 그 배수를 곱한 수위와 권고를 낸다.
+			                   "행사 때 지금의 2배"를 미리 보는 데 쓴다(원문 6.1절의 사례, 그림 10의 휴일 용량 계산).
 			                   --measure-url을 주면 운영 DB에서 그 시간 동안 초당 문장 수를 재서 수위를 다시 계산한다.
 			                   암호는 DBREPLAY_MEASURE_PASSWORD로 준다(없으면 --password와 같다). PostgreSQL은 pg_stat_statements가 있어야 한다
 
@@ -138,7 +141,7 @@ public final class Main {
 			  dbreplay sandbox-drop --name <컨테이너 이름>
 
 			  dbreplay manage  --targets <대상 목록.json> [--force yes] [--max-traffic-distance 0.2]
-			                   [--every <분>] [--register-max-distance 0.2] [--register-min-qps 0]
+			                   [--every <분>] [--register-max-distance 0.2] [--register-min-qps 0] [--growth <배수>]
 			                   --every를 주면 떠 있으면서 그 주기마다 훑는다. 멈추라는 신호를 받으면 하던 대상을 끝내고 멈춘다.
 			                   대상에 traces(최근 트래픽 파일들)를 적고 --register-*를 주면 모양이 안정적이고 부하가 있는 대상만 평가한다.
 			                   등록한 대상을 훑어, 평가한 적이 없거나 만료됐거나 무효인 것만 다시 평가하고 수위를 한 표로 낸다.
@@ -1188,6 +1191,56 @@ public final class Main {
 				throw new IllegalArgumentException(name + "에는 0 이상의 수를 준다");
 			}
 		}
+		double growth = number(options, "--growth", 1);
+		if (!(growth > 0) || Double.isInfinite(growth)) {
+			throw new IllegalArgumentException("--growth에는 0보다 큰 수를 준다");
+		}
+	}
+
+	/**
+	 * check --growth: 기준 QPS에 증가 비율을 곱해 그때의 수위를 낸다. 원문 6.1절의 사례("8월 2일 트래픽의 2배")와 그림 10의
+	 * 휴일 용량 계산이다(#132). 상한은 평가 파일의 것을 그대로 쓴다. 읽기와 쓰기는 녹화의 비율로 함께 는다고 본다.
+	 *
+	 * @param baseQps    주 DB의 기준 초당 문장 수
+	 * @param baseFrom   그 값을 어디서 가져왔는지. 출력에 그대로 싣는다
+	 * @param replicaQps 종 DB의 기준 초당 문장 수. 종 DB를 함께 평가하지 않았으면 무시한다
+	 * @param readNodes  읽기를 받는 노드 수. null이면 노드 권고를 내지 않는다
+	 */
+	static List<String> growthLines(Evaluation e, double baseQps, String baseFrom, double replicaQps, double growth,
+			Integer readNodes) {
+		List<String> lines = new ArrayList<>();
+		lines.add(String.format("증가 비율 %.2f배일 때 (기준 초당 %.0f문장, %s):", growth, baseQps, baseFrom));
+		WaterLevel primary = new WaterLevel(baseQps * growth, e.ceilingQps(), e.low(), e.high());
+		lines.add(String.format("  주 DB: 초당 %.0f, 수위 %.0f%% (건강 구간 %.0f~%.0f%%) → %s%s", primary.currentQps(), primary.level() * 100,
+				primary.low() * 100, primary.high() * 100, verdictName(primary.verdict()), capacityNote(primary)));
+		WaterLevel replica = null;
+		if (e.replica() != null) {
+			WaterLevel band = e.replica().level(e.low(), e.high());
+			replica = new WaterLevel(replicaQps * growth, e.replica().ceilingQps(), band.low(), band.high());
+			lines.add(String.format("  종 DB: 초당 %.0f, 수위 %.0f%% (건강 구간 %.0f~%.0f%%) → %s%s", replica.currentQps(), replica.level() * 100,
+					replica.low() * 100, replica.high() * 100, verdictName(replica.verdict()), capacityNote(replica)));
+		}
+		TrafficModel t = e.traffic();
+		if (readNodes == null || t == null || t.reads() + t.writes() == 0 || t.qps() == 0) {
+			return lines;
+		}
+		// 기준 QPS를 녹화의 읽기·쓰기 비율로 나눈다. 상한은 상한 배속을 녹화의 읽기·쓰기 QPS에 곱한 것이다(explore와 같다)
+		double scale = baseQps * growth / t.qps();
+		WaterLevel read = new WaterLevel(t.readQps() * scale, t.readQps() * e.ceilingSpeed(), e.low(), e.high());
+		WaterLevel write = new WaterLevel(t.writeQps() * scale, t.writeQps() * e.ceilingSpeed(), e.low(), e.high());
+		ScaleAdvice advice = ScaleAdvice.of(readLevelForAdvice(replica, read), write, readNodes, 1, Integer.MAX_VALUE);
+		if (replica != null) {
+			lines.add("  읽기 노드의 권고는 종 DB의 수위로 계산했다");
+		}
+		lines.addAll(scaleAdviceLines(advice));
+		return lines;
+	}
+
+	private static String capacityNote(WaterLevel level) {
+		return switch (level.verdict()) {
+			case SHORT -> String.format(". 용량이 지금의 %.2f배 필요하다", level.capacityFactor());
+			case SURPLUS, HEALTHY -> "";
+		};
 	}
 
 	private static int nodes(Map<String, String> options, String name, int fallback) {
@@ -1204,22 +1257,29 @@ public final class Main {
 	}
 
 	private static void printScaleAdvice(ScaleAdvice advice) {
-		System.out.printf("%n확장·축소 권고 (읽기 상한이 노드 수에 비례한다는 가정이다. 확인된 것이 아니다)%n");
+		System.out.println();
+		scaleAdviceLines(advice).forEach(System.out::println);
+	}
+
+	static List<String> scaleAdviceLines(ScaleAdvice advice) {
+		List<String> lines = new ArrayList<>();
+		lines.add("확장·축소 권고 (읽기 상한이 노드 수에 비례한다는 가정이다. 확인된 것이 아니다)");
 		if (advice.readNodeChange() == 0) {
-			System.out.printf("  읽기: 노드 %d개를 그대로 둔다%n", advice.readNodes());
+			lines.add(String.format("  읽기: 노드 %d개를 그대로 둔다", advice.readNodes()));
 		}
 		else {
-			System.out.printf("  읽기: 노드 %d개 → %d개 (%s)%n", advice.readNodes(), advice.recommendedReadNodes(),
-					advice.readNodeChange() > 0 ? advice.readNodeChange() + "개 늘린다" : -advice.readNodeChange() + "개 줄일 수 있다");
+			lines.add(String.format("  읽기: 노드 %d개 → %d개 (%s)", advice.readNodes(), advice.recommendedReadNodes(),
+					advice.readNodeChange() > 0 ? advice.readNodeChange() + "개 늘린다" : -advice.readNodeChange() + "개 줄일 수 있다"));
 		}
-		switch (advice.writeVerdict()) {
-			case SHORT -> System.out.printf("  쓰기: 주 DB의 용량이 지금의 %.2f배 필요하다. 노드를 늘려서는 풀리지 않는다%n", advice.writeCapacityFactor());
-			case SURPLUS -> System.out.printf("  쓰기: 주 DB의 용량을 지금의 %.2f배까지 줄여도 된다%n", advice.writeCapacityFactor());
-			case HEALTHY -> System.out.println("  쓰기: 그대로 둔다");
-		}
+		lines.add(switch (advice.writeVerdict()) {
+			case SHORT -> String.format("  쓰기: 주 DB의 용량이 지금의 %.2f배 필요하다. 노드를 늘려서는 풀리지 않는다", advice.writeCapacityFactor());
+			case SURPLUS -> String.format("  쓰기: 주 DB의 용량을 지금의 %.2f배까지 줄여도 된다", advice.writeCapacityFactor());
+			case HEALTHY -> "  쓰기: 그대로 둔다";
+		});
 		if (advice.capped()) {
-			System.out.println("  계산한 노드 수가 한도를 넘어 한도로 잘랐다. 상한이나 지금의 QPS를 다시 확인한다");
+			lines.add("  계산한 노드 수가 한도를 넘어 한도로 잘랐다. 상한이나 지금의 QPS를 다시 확인한다");
 		}
+		return lines;
 	}
 
 	/** 확장·축소 명령이 실패했다. 실행됐다고 믿고 다음 일을 하면 안 되므로 예외로 올린다. */
@@ -1467,6 +1527,8 @@ public final class Main {
 	}
 
 	private static void manage(Map<String, String> options) throws Exception {
+		// 잘못 준 증가 비율은 대상을 훑기 전에 거른다
+		checkQpsOptions(options);
 		if (!options.containsKey("--every")) {
 			if (manageOnce(options)) {
 				System.exit(1);
@@ -1571,6 +1633,11 @@ public final class Main {
 			actions.put(t.name(), action);
 		}
 
+		// 행사 때를 미리 본다. 평가 때의 QPS에 증가 비율을 곱한 수위다(#132)
+		double growth = number(options, "--growth", 1);
+		if (options.containsKey("--growth")) {
+			System.out.printf("%n아래 수위는 평가 때의 초당 문장 수에 증가 비율 %.2f배를 곱한 것이다%n", growth);
+		}
 		System.out.printf("%n%-20s %-12s %8s %12s %6s %-6s  %s%n", "대상", "이번에 한 일", "상한", "상한(문장/초)", "수위", "판정", "평가한 시각");
 		for (ManagedTargets.Target t : managed.targets()) {
 			String did = switch (actions.get(t.name())) {
@@ -1590,8 +1657,9 @@ public final class Main {
 			CeilingRange range = e.ceilingRange();
 			String rangeSuffix = range == null ? ""
 					: String.format(" (범위 %.2f~%.2f, %d번)", range.min(), range.max(), range.count());
+			WaterLevel shown = new WaterLevel(e.currentQps() * growth, e.ceilingQps(), e.low(), e.high());
 			System.out.printf("%-20s %-12s %8.2f %12.0f %5.0f%% %-6s  %s%n", t.name(), did, e.ceilingSpeed(), e.ceilingQps(),
-					e.level().level() * 100, switch (e.level().verdict()) {
+					shown.level() * 100, switch (shown.verdict()) {
 						case SURPLUS -> "과잉";
 						case HEALTHY -> "적정";
 						case SHORT -> "부족";
@@ -1638,11 +1706,19 @@ public final class Main {
 					evaluation.low(), evaluation.high()));
 		}
 		// 운영 DB에서 직접 잰다. 글의 수위는 운영 QPS ÷ 상한이다(원문 대조 51, #82)
+		double baseQps = evaluation.currentQps();
+		String baseFrom = "평가 때의 값";
+		if (options.containsKey("--current-qps")) {
+			baseQps = number(options, "--current-qps", 0);
+			baseFrom = "--current-qps";
+		}
 		if (options.containsKey("--measure-url")) {
 			long seconds = (long) number(options, "--measure-seconds", 60);
 			double measured = measureQps(measureTarget(options), seconds);
 			System.out.printf("  운영 DB에서 %d초 동안 잰 초당 문장 수: %.0f%n", seconds, measured);
 			System.out.println(currentQpsLine(evaluation.ceilingQps(), measured, evaluation.low(), evaluation.high()));
+			baseQps = measured;
+			baseFrom = "운영 DB에서 잰 값";
 		}
 		// 종 DB를 함께 틀어 평가했으면 그 수위도 보여 준다. --current-replica-qps를 주면 다시 계산한다
 		Evaluation.Replica replica = evaluation.replica();
@@ -1660,6 +1736,12 @@ public final class Main {
 		if (range != null) {
 			System.out.printf("  되풀이한 탐색 %d번의 상한: 최소 %.2f, 중앙값 %.2f, 최대 %.2f배속. 위의 상한은 가장 낮은 값이다%n",
 					range.count(), range.min(), range.median(), range.max());
+		}
+		if (options.containsKey("--growth")) {
+			double replicaQps = replica == null ? 0 : number(options, "--current-replica-qps", replica.currentQps());
+			Integer readNodes = options.containsKey("--read-nodes") || options.containsKey("--zones") ? readNodes(options) : null;
+			growthLines(evaluation, baseQps, baseFrom, replicaQps, number(options, "--growth", 1), readNodes)
+					.forEach(System.out::println);
 		}
 		if (reasons.isEmpty()) {
 			System.out.println("유효하다");

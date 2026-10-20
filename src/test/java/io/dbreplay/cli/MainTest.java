@@ -139,6 +139,33 @@ class MainTest {
 		assertEquals(List.of(), Main.singleRunNote(5));
 	}
 
+	/**
+	 * 같은 평가에 증가 비율 2를 주면 수위가 정확히 두 배가 되고, 판정과 노드 권고가 그 수위로 나온다. 원문 6.1절의 "8월 2일 트래픽의
+	 * 2배"다(#132). 읽기 80%, 상한 5배속, 기준 초당 1,000이면 지금 수위 20%(과잉), 2배면 40%(적정)다.
+	 */
+	@Test
+	void growthMultipliesTheBaseQpsBeforeJudging() {
+		TrafficModel traffic = new TrafficModel(1_000, 1_000_000, Map.of(), 800, 200);
+		Evaluation e = new Evaluation("2026-10-01T00:00:00Z", 30, Map.of(), Map.of(), "transaction", traffic,
+				5.0, "OVERLOADED", 5_000, 1_000, 0.3, 0.5, null, null, null);
+
+		List<String> once = Main.growthLines(e, 1_000, "평가 때의 값", 0, 1, null);
+		List<String> twice = Main.growthLines(e, 1_000, "평가 때의 값", 0, 2, null);
+		List<String> fourTimes = Main.growthLines(e, 1_000, "평가 때의 값", 0, 4, 2);
+
+		assertTrue(once.get(1).contains("수위 20%") && once.get(1).contains("과잉"), once.get(1));
+		assertTrue(twice.get(1).contains("초당 2000") && twice.get(1).contains("수위 40%") && twice.get(1).contains("적정"), twice.get(1));
+		assertTrue(fourTimes.get(1).contains("수위 80%") && fourTimes.get(1).contains("부족"), fourTimes.get(1));
+		assertTrue(fourTimes.contains("  읽기: 노드 2개 → 4개 (2개 늘린다)"), String.join("\n", fourTimes));
+	}
+
+	/** 증가 비율은 0보다 커야 한다. */
+	@Test
+	void rejectsANonPositiveGrowth() {
+		assertThrows(IllegalArgumentException.class, () -> Main.checkQpsOptions(Map.of("--growth", "0")));
+		assertThrows(IllegalArgumentException.class, () -> Main.checkQpsOptions(Map.of("--growth", "-1")));
+	}
+
 	/** 역할의 옵션이 있으면 그것을, 없으면 함께 쓰는 --level-*을, 그것도 없으면 30~50%를 쓴다 (#129). */
 	@Test
 	void picksTheHealthyBandPerRole() {
